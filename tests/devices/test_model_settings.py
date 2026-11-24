@@ -1627,6 +1627,24 @@ def test_a_value_that_contains_itself_is_refused() -> None:
             _object_setting().validate(value)
 
 
+def test_an_object_text_nested_past_the_parse_limit_is_refused() -> None:
+    """The nesting bound holds before parsing, whatever the interpreter's recursion limit."""
+    deep = '{"a":' * 65 + "1" + "}" * 65
+    setting = _object_setting()
+    with pytest.raises(ValueError, match="light_setting: expected a JSON object"):
+        setting.validate(deep)
+    assert model_settings.decode_object(deep) is None
+    assert model_settings.decode_object(base64.b64encode(deep.encode()).decode()) is None
+    report = '{"mode_0":{"quality":3},"x":' + "[" * 64 + "]" * 64 + "}"
+    shallow = '{"mode_0":{"quality":3},"x":' + "[" * 63 + "]" * 63 + "}"
+    assert (
+        model_settings._view_quality(base64.b64encode(shallow.encode()).decode(), None, {}) == "3"
+    )
+    assert (
+        model_settings._view_quality(base64.b64encode(report.encode()).decode(), None, {}) is None
+    )
+
+
 def test_a_very_deep_object_text_is_refused_on_write_and_unread_on_read() -> None:
     deep = '{"a":' * 100_000 + "1" + "}" * 100_000
     setting = _object_setting()

@@ -237,8 +237,17 @@ def test_payload_masks_a_location_in_a_nested_object() -> None:
         base64.b64encode(b"7").decode(),
         base64.b64encode(b"\xff{}").decode(),
         base64.b64encode(b"[" * 100_000 + b"]" * 100_000).decode(),
+        base64.b64encode(b"[" * 65 + b"]" * 65).decode(),
     ],
-    ids=["unpadded", "blank", "bad-padding", "not-a-container", "not-utf8", "too-deep"],
+    ids=[
+        "unpadded",
+        "blank",
+        "bad-padding",
+        "not-a-container",
+        "not-utf8",
+        "too-deep",
+        "past-limit",
+    ],
 )
 def test_only_padded_base64_of_a_json_container_is_decoded(text: str) -> None:
     assert json_in_base64(text) is None
@@ -358,3 +367,8 @@ def test_hexdump_stars_secrets() -> None:
 
     set_secret_logging(True)
     assert "2a 2a 2a 2a 2a" not in str(HexDump(data1))
+
+
+def test_a_deeply_nested_json_text_is_logged_as_text() -> None:
+    deep = "[" * 100_000 + "]" * 100_000
+    assert str(Payload({"value": deep}))

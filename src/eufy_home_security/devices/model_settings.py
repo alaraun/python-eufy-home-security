@@ -33,7 +33,7 @@ from typing import Any, Final, cast
 from .._logging import redact_serial
 from ..exceptions import ModelDataError, UnsupportedError
 from ..models import PARAM_BATTERY
-from ..p2p._json import json_int
+from ..p2p._json import json_int, parse_json
 from ..p2p.mode_actions import ACTION_FLAGS
 from .conditions import Groups, groups_of
 from .labels import setting_name
@@ -795,8 +795,8 @@ def _object_value(key: str, value: object) -> JsonObject:
     value."""
     if isinstance(value, str):
         try:
-            value = json.loads(value, parse_constant=_no_constant)
-        except (ValueError, RecursionError):
+            value = parse_json(value)
+        except ValueError:
             raise ValueError(f"{key}: expected a JSON object, got {reprlib.repr(value)}") from None
     if not isinstance(value, Mapping):
         raise ValueError(f"{key}: expected a JSON object, got {reprlib.repr(value)}")
@@ -804,10 +804,6 @@ def _object_value(key: str, value: object) -> JsonObject:
         raise ValueError(f"{key}: an empty object sets no member")
     plain: JsonObject = _plain_json(value, key)
     return plain
-
-
-def _no_constant(name: str) -> Any:
-    raise ValueError(f"{name} is not JSON")
 
 
 def _compact_json(x: Any) -> str:
@@ -849,8 +845,8 @@ def decode_object(raw: str) -> JsonObject | None:
         except (binascii.Error, UnicodeDecodeError):
             return None
     try:
-        found = json.loads(text, parse_constant=_no_constant)
-    except (ValueError, RecursionError):
+        found = parse_json(text)
+    except ValueError:
         return None
     return found if isinstance(found, dict) else None
 
@@ -945,7 +941,9 @@ def _view_quality(raw: str, by: int | str | None, block: Mapping[int, str | None
     """
     text = raw.strip()
     try:
-        report = json.loads(base64.b64decode(text + "=" * (-len(text) % 4), validate=True))
+        report = parse_json(
+            base64.b64decode(text + "=" * (-len(text) % 4), validate=True).decode("utf-8")
+        )
     except (ValueError, binascii.Error):
         return None
     if not isinstance(report, dict):

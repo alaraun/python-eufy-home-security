@@ -31,6 +31,7 @@ from collections.abc import Mapping
 from typing import Final
 
 from .models import IDENTIFYING_PARAMS
+from .p2p._json import parse_json
 
 PACKAGE_LOGGER: Final = logging.getLogger("eufy_home_security")
 PACKAGE_LOGGER.addHandler(logging.NullHandler())
@@ -268,7 +269,7 @@ def _masked(data: object, clear: bool) -> object:
         stripped = data.strip()
         if stripped[:1] in ("{", "[") and stripped[-1:] in ("}", "]"):
             try:
-                decoded = json.loads(stripped)
+                decoded = parse_json(stripped)
             except ValueError:
                 decoded = None
             if isinstance(decoded, dict | list):
@@ -283,8 +284,8 @@ def json_in_base64(text: str) -> dict[str, object] | list[object] | None:
     """The JSON object or array ``text`` holds as base64 of its JSON text (standard
     alphabet, padded, no blanks); None for any other text."""
     try:
-        decoded = json.loads(base64.b64decode(text, validate=True).decode("utf-8"))
-    except (ValueError, RecursionError):  # bad base64, not UTF-8, not JSON, too deep
+        decoded = parse_json(base64.b64decode(text, validate=True).decode("utf-8"))
+    except ValueError:  # bad base64, not UTF-8, not JSON, too deep
         return None
     return decoded if isinstance(decoded, dict | list) else None
 

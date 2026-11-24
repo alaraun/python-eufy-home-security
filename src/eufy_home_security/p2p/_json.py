@@ -72,6 +72,19 @@ def raw_decode_json(text: str) -> tuple[Any, int]:
         raise ValueError("JSON nested too deep to parse") from None
 
 
+def parse_json(text: str) -> Any:
+    """``text`` as one strict JSON document, JSON whitespace around it allowed.
+
+    Raises :class:`ValueError` for invalid JSON, NaN/Infinity, trailing data or nesting
+    deeper than :data:`MAX_JSON_DEPTH`, whatever the interpreter's own recursion limit.
+    """
+    stripped = text.strip(" \t\n\r")
+    obj, end = raw_decode_json(stripped)
+    if end != len(stripped):
+        raise ValueError("trailing data after the JSON document")
+    return obj
+
+
 def loads_json(text: str | bytes) -> Any:
     """Parse one JSON document strictly; any failure raises :class:`ProtocolError`.
 
