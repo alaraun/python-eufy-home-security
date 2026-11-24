@@ -42,7 +42,8 @@ PN = "T9ZZ7"  # a product code named nowhere in the library
 # snooze: 1271 with the owner id from the message's user_id; its read takes a stored
 # {snooze_time: end, startTime: start} as the duration end - start. chirp: a scalar that
 # only a native screen sends (1408, no request case). ring: 1013 with the owner id, a frame
-# that carries none.
+# that carries none. doze (1961) reads its stored end against the clock, so the read depends
+# on the absolute start; nap (1962) reads no 30 min choice from its stored span.
 HANDLER = """
 function parse(s) { return JSON.parse(s.slice(0, s.lastIndexOf("EOF;"))); }
 const DUR = { "0": 1800, "1": 3600, "-1": 0 };
@@ -61,6 +62,11 @@ module.exports.controlDevice = function (s) {
     const d = DUR[String(v)];
     p2p = { cmd: 1272, params: { pause_time: d },
             update: { needUpdate: true, cmd: 1272, paramValue: b64('{"pause_time":' + d + "}") } };
+  } else if (ident === "doze" || ident === "nap") {
+    const cmd = ident === "doze" ? 1961 : 1962;
+    const d = DUR[String(v)], name = ident + "_time";
+    p2p = { cmd, params: { [name]: d },
+            update: { needUpdate: true, cmd, paramValue: b64('{"' + name + '":' + d + "}") } };
   } else if (ident === "chirp") {
     p2p = { cmd: 1408, params: { on: v ? 1 : 0 },
             update: { needUpdate: true, cmd: 1408, paramValue: v ? "1" : "0" } };
@@ -91,6 +97,17 @@ module.exports.deviceStatus = function (s) {
         out.pause = k !== undefined ? Number(k) : -1;
       } catch (e) { out.pause = -1; }
     }
+    if (p.param_type === 1961 || p.param_type === 1962) {
+      const doze = p.param_type === 1961;
+      const name = doze ? "doze" : "nap";
+      try {
+        const t = JSON.parse(Buffer.from(p.param_value, "base64").toString());
+        const a = t[name + "_time"] - (doze ? Math.floor(Date.now() / 1000) : t.startTime);
+        const table = doze ? DUR : { "1": 3600, "-1": 0 };
+        const k = Object.keys(table).find((x) => table[x] === a);
+        out[name] = k !== undefined ? Number(k) : -1;
+      } catch (e) { out[name] = -1; }
+    }
     if (p.param_type === 1408) out.chirp = p.param_value === "1";
     if (p.param_type === 1013) out.ring = Number(p.param_value);
   }
@@ -98,35 +115,22 @@ module.exports.deviceStatus = function (s) {
 };
 """
 
+
+def _duration_enum(ident: str) -> dict[str, Any]:
+    choices = [
+        {"value": "0", "desc": "30min"},
+        {"value": "1", "desc": "1hour"},
+        {"value": "-1", "desc": "close", "isDefault": 1},
+    ]
+    return {
+        "identifier": ident,
+        "access_mode": "RW",
+        "data_type": {"type": "enum", "specs": {"eunmList": choices}},
+    }
+
+
 PROPS = [
-    {
-        "identifier": "snooze",
-        "access_mode": "RW",
-        "data_type": {
-            "type": "enum",
-            "specs": {
-                "eunmList": [
-                    {"value": "0", "desc": "30min"},
-                    {"value": "1", "desc": "1hour"},
-                    {"value": "-1", "desc": "close", "isDefault": 1},
-                ]
-            },
-        },
-    },
-    {
-        "identifier": "pause",
-        "access_mode": "RW",
-        "data_type": {
-            "type": "enum",
-            "specs": {
-                "eunmList": [
-                    {"value": "0", "desc": "30min"},
-                    {"value": "1", "desc": "1hour"},
-                    {"value": "-1", "desc": "close", "isDefault": 1},
-                ]
-            },
-        },
-    },
+    *(_duration_enum(ident) for ident in ("snooze", "pause", "doze", "nap")),
     {"identifier": "chirp", "access_mode": "RW", "data_type": {"type": "bool"}},
     {
         "identifier": "ring",
@@ -141,7 +145,10 @@ def _routes() -> Any:
     doc["executor"]["cases"] |= {
         "1271": {"msgType": 6, "reader": "json"},
         "1013": {"msgType": 10, "reader": "int", "field": "value"},
+        "1961": {"msgType": 6, "reader": "json"},
+        "1962": {"msgType": 6, "reader": "json"},
     }
+    doc["native"]["forms"]["json_text"]["cmds"] += [1961, 1962]
     doc["screens"]["senders"] = {"1408": [{"msgType": 10}]}
     return routing.parse(doc)
 
@@ -206,6 +213,47 @@ def test_a_timed_value_stored_as_end_and_start_reads_as_its_duration(
     assert setting.decode(_stored(start, start)) == -1
     assert setting.decode(_stored(start + 1234, start)) is None
     assert setting.decode("") == -1
+
+
+@pytest.mark.parametrize("ident", ["doze", "nap"])
+def test_a_span_read_only_where_every_probe_reads_back(native: dict[str, Any], ident: str) -> None:
+    """A handler that reads a stored span against the clock (doze: right only at one
+    start) or reads one choice's span as another (nap: no 30 min) gets no span read."""
+    assert gen_models._stored_spans(native[ident]) is not None
+    assert "span" not in native[ident]["read"]
+
+
+def test_two_choices_stored_as_one_span_get_no_span_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two choices whose writes store the same duration cannot be told apart by a span,
+    even when the handler reads every probe back as the choice asked."""
+    entry = {
+        "kind": "enum",
+        "values": [0, 1, -1],
+        "read": {"param": 1271, "map": {}},
+        "write": {
+            "cmd": 1271,
+            "update": {
+                "cmd": 1271,
+                "paramValue": {
+                    "$map": {
+                        "0": _b64_text('{"snooze_time":1800}'),
+                        "1": _b64_text('{"snooze_time":1800}'),
+                        "-1": _b64_text('{"snooze_time":0}'),
+                    }
+                },
+            },
+        },
+    }
+    asked = [v for v in (0, 1, -1) for _ in gen_models.SPAN_EPOCHS]
+
+    def read_back(_pn: str, _handler: Path, requests: list[Any], *_: Any) -> list[Any]:
+        assert len(requests) == len(asked)
+        return [{"data": {"p2p": {"snooze": v}}} for v in asked]
+
+    monkeypatch.setattr(gen_models, "run_driver", read_back)
+    settings = {"snooze": entry}
+    gen_models.span_reads(PN, Path("unused.js"), settings, gen_models.codec.CHILD, {})
+    assert "span" not in entry["read"]
 
 
 @pytest.mark.parametrize(("settings_ui", "chirp"), [("native", "rw"), ("rn", "ro")])
