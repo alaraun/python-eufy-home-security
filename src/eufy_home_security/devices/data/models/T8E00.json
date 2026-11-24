@@ -766,7 +766,20 @@
      "eyJzbm9vemVfdGltZSI6NzIwMH0=": 2,
      "eyJzbm9vemVfdGltZSI6OTAwfQ==": 5
     },
-    "param": 1271
+    "param": 1271,
+    "span": {
+     "map": {
+      "0": -1,
+      "1800": 0,
+      "21600": 3,
+      "3600": 1,
+      "43200": 4,
+      "7200": 2,
+      "900": 5
+     },
+     "member": "snooze_time",
+     "start": "startTime"
+    }
    },
    "role": "setting",
    "section": "notifications",
@@ -783,6 +796,7 @@
    "write": {
     "cmd": 1271,
     "params": {
+     "account_id": "$account_id",
      "snooze_time": {
       "$map": {
        "-1": 0,
@@ -1735,8 +1749,7 @@
    }
   },
   "notification_interval_time": {
-   "access": "rw",
-   "control": "select",
+   "access": "ro",
    "default": 0,
    "kind": "enum",
    "labels": {
@@ -1747,6 +1760,7 @@
     "4": "4 min",
     "5": "5 min"
    },
+   "note": "the eufy app sends nothing for this write",
    "read": {
     "map": {
      "": 0,
@@ -1769,36 +1783,7 @@
     3,
     4,
     5
-   ],
-   "write": {
-    "cmd": 9258,
-    "params": {
-     "interval": {
-      "$map": {
-       "0": 0,
-       "1": 60,
-       "2": 120,
-       "3": 180,
-       "4": 240,
-       "5": 300
-      }
-     }
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 9258,
-     "paramValue": {
-      "$map": {
-       "0": "0",
-       "1": "60",
-       "2": "120",
-       "3": "180",
-       "4": "240",
-       "5": "300"
-      }
-     }
-    }
-   }
+   ]
   },
   "notification_interval_time_for_sensor": {
    "access": "ro",

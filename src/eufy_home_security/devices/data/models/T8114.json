@@ -846,7 +846,19 @@
      "eyJzbm9vemVfdGltZSI6NDMyMDB9": 4,
      "eyJzbm9vemVfdGltZSI6NzIwMH0=": 2
     },
-    "param": 1271
+    "param": 1271,
+    "span": {
+     "map": {
+      "0": -1,
+      "1800": 0,
+      "21600": 3,
+      "3600": 1,
+      "43200": 4,
+      "7200": 2
+     },
+     "member": "snooze_time",
+     "start": "startTime"
+    }
    },
    "role": "setting",
    "section": "notifications",
@@ -862,6 +874,7 @@
    "write": {
     "cmd": 1271,
     "params": {
+     "account_id": "$account_id",
      "snooze_time": {
       "$map": {
        "0": 1800,

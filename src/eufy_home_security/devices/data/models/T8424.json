@@ -109,23 +109,130 @@
    }
   },
   "ambient_light_schedule_config": {
-   "access": "ro",
-   "kind": "string",
+   "access": "rw",
+   "control": "object",
+   "kind": "object",
    "page": "AmbientLight",
-   "read": null,
-   "role": "diagnostic",
+   "read": {
+    "map": null,
+    "param": 1404
+   },
+   "role": "setting",
    "section": "picture",
    "shown": "page",
-   "structured": true
+   "structured": true,
+   "write": {
+    "cmd": 1404,
+    "params": {
+     "account_id": "$account_id",
+     "schedules": {
+      "loop": {
+       "$each": [
+        "$v.schedules.loop:json",
+        {
+         "cross_day": "$v.cross_day:int",
+         "enable": "$v.enable:int",
+         "end_h": "$v.end_h:int",
+         "end_m": "$v.end_m:int",
+         "interval": {
+          "$or": [
+           "$v.interval:int",
+           0
+          ]
+         },
+         "start_h": "$v.start_h:int",
+         "start_m": "$v.start_m:int",
+         "week": {
+          "$each": [
+           "$v.week:json",
+           {
+            "day": "$v.day:int"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1404,
+     "paramValue": "$v:b64json"
+    }
+   }
   },
   "ambient_light_schedule_sunset_to_sunrise": {
-   "access": "ro",
-   "kind": "string",
+   "access": "rw",
+   "control": "object",
+   "kind": "object",
    "page": "AmbientLight",
-   "read": null,
-   "role": "status",
+   "read": {
+    "map": null,
+    "members": {
+     "enable": {
+      "as": "flag",
+      "param": 1414
+     },
+     "lat": {
+      "member": "lat",
+      "param": 1415
+     },
+     "lng": {
+      "member": "lng",
+      "param": 1415
+     },
+     "sun_rise": {
+      "member": "sun_rise",
+      "param": 1415
+     },
+     "sun_set": {
+      "member": "sun_set",
+      "param": 1415
+     }
+    },
+    "param": 1414
+   },
+   "role": "setting",
    "section": "picture",
-   "shown": "page"
+   "shown": "page",
+   "structured": true,
+   "write": {
+    "cmd": 1414,
+    "params": {
+     "msgType": 16,
+     "mValue": "$v.enable:flag",
+     "mValueStr": {
+      "$format": [
+       "{\"lat\": \"%s\",\"lng\": \"%s\"}",
+       "$v.lat:str",
+       "$v.lng:str"
+      ]
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1414,
+     "paramValue": {
+      "$format": [
+       "%s",
+       "$v.enable:flag"
+      ]
+     }
+    },
+    "extUpdates": [
+     {
+      "cmd": 1415,
+      "paramValue": {
+       "$jsontext": {
+        "sn": "$device_sn",
+        "lat": "$v.lat:str",
+        "lng": "$v.lng:str"
+       }
+      }
+     }
+    ]
+   }
   },
   "arming_cust_mode_config": {
    "access": "ro",
@@ -611,7 +718,19 @@
      "eyJzbm9vemVfdGltZSI6NDMyMDB9": 4,
      "eyJzbm9vemVfdGltZSI6NzIwMH0=": 2
     },
-    "param": 1271
+    "param": 1271,
+    "span": {
+     "map": {
+      "0": -1,
+      "1800": 0,
+      "21600": 3,
+      "3600": 1,
+      "43200": 4,
+      "7200": 2
+     },
+     "member": "snooze_time",
+     "start": "startTime"
+    }
    },
    "role": "setting",
    "section": "notifications",
@@ -627,6 +746,7 @@
    "write": {
     "cmd": 1271,
     "params": {
+     "account_id": "$account_id",
      "snooze_time": {
       "$map": {
        "-1": 0,

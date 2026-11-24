@@ -1891,7 +1891,7 @@ rw 18 / ro 77
 
 ### Settings of T7100 PoE Camera
 
-rw 34 / ro 66
+rw 33 / ro 67
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -1966,7 +1966,7 @@ rw 34 / ro 66
 | `motion_tracking_switch` | bool | - | - | no | - | - |
 | `nightvision_type` | enum | 7, 6, 0 | - | yes | select | 0=Disable, 6=Infrared auto, 7=Spotlight auto |
 | `nightvision_type_new` | enum | 100, 102, 103 | - | yes | select | 100=Off, 102=Infrared, 103=Spotlights |
-| `notification_interval_time` | enum | 0, 1, 2, 3, 4, 5 | - | yes | select | 0=0 min, 1=1 min, 2=2 min, 3=3 min, 4=4 min, 5=5 min |
+| `notification_interval_time` | enum | 0, 1, 2, 3, 4, 5 | - | no | - | 0=0 min, 1=1 min, 2=2 min, 3=3 min, 4=4 min, 5=5 min |
 | `notification_interval_time_for_sensor` | string | - | - | no | - | - |
 | `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
 | `playback_play_speed` | enum | 0, 1, 2, 3 | - | no | - | 0=2x, 1=4x, 2=8x, 3=16x |
@@ -2788,7 +2788,7 @@ rw 20 / ro 80
 
 ### Settings of T8110 eufyCam C35
 
-rw 38 / ro 86
+rw 37 / ro 87
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2904,7 +2904,7 @@ rw 38 / ro 86
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | range | 1..100 step 1 | - | yes | slider | - |
 | `spotlight_brightness_level` | range | 1..100 step 1 | - | yes | slider | - |
-| `spotlight_schedule_config` | string | - | - | yes | text | - |
+| `spotlight_schedule_config` | string | - | - | no | - | - |
 | `spotlight_switch` | bool | - | - | yes | switch | - |
 | `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
 | `switching_notification` | flags | any of 0, 1, 2 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing |
@@ -2919,7 +2919,7 @@ rw 38 / ro 86
 
 ### Settings of T8110E
 
-rw 38 / ro 77
+rw 37 / ro 78
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -3026,7 +3026,7 @@ rw 38 / ro 77
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | range | 1..100 step 1 | - | yes | slider | - |
 | `spotlight_brightness_level` | range | 1..100 step 1 | - | yes | slider | - |
-| `spotlight_schedule_config` | string | - | - | yes | text | - |
+| `spotlight_schedule_config` | string | - | - | no | - | - |
 | `spotlight_switch` | bool | - | - | yes | switch | - |
 | `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
 | `switching_notification` | flags | any of 0, 1, 2 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing |
@@ -3421,7 +3421,7 @@ rw 27 / ro 60
 
 ### Settings of T8115 eufyCam C38
 
-rw 39 / ro 82
+rw 38 / ro 83
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -3533,7 +3533,7 @@ rw 39 / ro 82
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | range | 1..100 step 1 | - | yes | slider | - |
 | `spotlight_brightness_level` | range | 1..100 step 1 | - | yes | slider | - |
-| `spotlight_schedule_config` | string | - | - | yes | text | - |
+| `spotlight_schedule_config` | string | - | - | no | - | - |
 | `spotlight_switch` | bool | - | - | yes | switch | - |
 | `spotlight_switch_status_relate` | bool | - | - | no | - | - |
 | `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
@@ -3549,7 +3549,7 @@ rw 39 / ro 82
 
 ### Settings of T8119 eufyCam C33
 
-rw 37 / ro 81
+rw 36 / ro 82
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -3658,7 +3658,7 @@ rw 37 / ro 81
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | range | 1..100 step 1 | - | yes | slider | - |
 | `spotlight_brightness_level` | range | 1..100 step 1 | - | yes | slider | - |
-| `spotlight_schedule_config` | string | - | - | yes | text | - |
+| `spotlight_schedule_config` | string | - | - | no | - | - |
 | `spotlight_switch` | bool | - | - | yes | switch | - |
 | `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
 | `switching_notification` | flags | any of 0, 1 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app |
@@ -4723,7 +4723,7 @@ rw 36 / ro 82
 
 ### Settings of T814X eufyCam C37
 
-rw 40 / ro 89
+rw 39 / ro 90
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -4843,7 +4843,7 @@ rw 40 / ro 89
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | range | 1..100 step 1 | - | yes | slider | - |
 | `spotlight_brightness_level` | range | 1..100 step 1 | - | yes | slider | - |
-| `spotlight_schedule_config` | string | - | - | yes | text | - |
+| `spotlight_schedule_config` | string | - | - | no | - | - |
 | `spotlight_switch` | bool | - | - | yes | switch | - |
 | `spotlight_switch_status_relate` | bool | - | - | no | - | - |
 | `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
@@ -4859,7 +4859,7 @@ rw 40 / ro 89
 
 ### Settings of T814XS
 
-rw 40 / ro 90
+rw 39 / ro 91
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -4980,7 +4980,7 @@ rw 40 / ro 90
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | range | 1..100 step 1 | - | yes | slider | - |
 | `spotlight_brightness_level` | range | 1..100 step 1 | - | yes | slider | - |
-| `spotlight_schedule_config` | string | - | - | yes | text | - |
+| `spotlight_schedule_config` | string | - | - | no | - | - |
 | `spotlight_switch` | bool | - | - | yes | switch | - |
 | `spotlight_switch_status_relate` | bool | - | - | no | - | - |
 | `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
@@ -6631,7 +6631,7 @@ rw 47 / ro 110
 
 ### Settings of T817L eufyCam C31
 
-rw 53 / ro 94
+rw 52 / ro 95
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -6769,7 +6769,7 @@ rw 53 / ro 94
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | range | 1..100 step 1 | - | yes | slider | - |
 | `spotlight_brightness_level` | range | 0..100 step 1 | - | yes | slider | - |
-| `spotlight_schedule_config` | string | - | - | yes | text | - |
+| `spotlight_schedule_config` | string | - | - | no | - | - |
 | `spotlight_switch` | bool | - | - | yes | switch | - |
 | `spotlight_switch_status_relate` | bool | - | - | no | - | - |
 | `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
@@ -10599,15 +10599,15 @@ rw 41 / ro 80
 
 ### Settings of T8420 Floodlight Cam 1080p
 
-rw 27 / ro 61
+rw 29 / ro 59
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
 | `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=0, panNum=1, polyNum=4, positionNum=0, sideNum=4, zoneHeight=1080, zoneWidth=1920 |
 | `ai_empower` | other | - | - | no | - | - |
 | `ambient_light_brightness` | range | 22..100 step 1 | - | yes | slider | - |
-| `ambient_light_schedule_config` | string | - | - | no | - | - |
-| `ambient_light_schedule_sunset_to_sunrise` | string | - | - | no | - | - |
+| `ambient_light_schedule_config` | object | - | - | yes | object | - |
+| `ambient_light_schedule_sunset_to_sunrise` | object | - | - | yes | object | - |
 | `arming_cust_mode_config` | string | - | - | no | - | - |
 | `arming_modedetail_alarm_rules` | string | - | - | no | - | - |
 | `arming_modedetail_devices_rules` | string | - | - | no | - | - |
@@ -10694,15 +10694,15 @@ rw 27 / ro 61
 
 ### Settings of T8420X
 
-rw 30 / ro 52
+rw 32 / ro 50
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
 | `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=0, panNum=1, polyNum=2, positionNum=0, sideNum=6, zoneHeight=432, zoneWidth=768 |
 | `ai_empower` | other | - | - | no | - | - |
 | `ambient_light_brightness` | range | 22..100 step 1 | - | yes | slider | - |
-| `ambient_light_schedule_config` | string | - | - | no | - | - |
-| `ambient_light_schedule_sunset_to_sunrise` | string | - | - | no | - | - |
+| `ambient_light_schedule_config` | object | - | - | yes | object | - |
+| `ambient_light_schedule_sunset_to_sunrise` | object | - | - | yes | object | - |
 | `arming_cust_mode_config` | string | - | - | no | - | - |
 | `arming_modedetail_alarm_rules` | string | - | - | no | - | - |
 | `arming_modedetail_devices_rules` | string | - | - | no | - | - |
@@ -10783,15 +10783,15 @@ rw 30 / ro 52
 
 ### Settings of T8422 Floodlight Cam E
 
-rw 30 / ro 55
+rw 32 / ro 53
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
 | `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=0, panNum=1, polyNum=2, positionNum=0, sideNum=6, zoneHeight=432, zoneWidth=768 |
 | `ai_empower` | other | - | - | no | - | - |
 | `ambient_light_brightness` | range | 22..100 step 1 | - | yes | slider | - |
-| `ambient_light_schedule_config` | string | - | - | no | - | - |
-| `ambient_light_schedule_sunset_to_sunrise` | string | - | - | no | - | - |
+| `ambient_light_schedule_config` | object | - | - | yes | object | - |
+| `ambient_light_schedule_sunset_to_sunrise` | object | - | - | yes | object | - |
 | `arming_cust_mode_config` | string | - | - | no | - | - |
 | `arming_modedetail_alarm_rules` | string | - | - | no | - | - |
 | `arming_modedetail_devices_rules` | string | - | - | no | - | - |
@@ -10875,7 +10875,7 @@ rw 30 / ro 55
 
 ### Settings of T8423 Floodlight Cam 2 Pro
 
-rw 41 / ro 68
+rw 43 / ro 66
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -10884,8 +10884,8 @@ rw 41 / ro 68
 | `ai_tracking_status` | bool | - | - | yes | switch | - |
 | `ambient_light_brightness` | range | 0..100 step 1 | - | yes | slider | - |
 | `ambient_light_color_temperature` | range | 0..100 step 1 | - | yes | slider | - |
-| `ambient_light_schedule_config` | string | - | - | no | - | - |
-| `ambient_light_schedule_sunset_to_sunrise` | string | - | - | no | - | - |
+| `ambient_light_schedule_config` | object | - | - | yes | object | - |
+| `ambient_light_schedule_sunset_to_sunrise` | object | - | - | yes | object | - |
 | `arming_cust_mode_config` | string | - | - | no | - | - |
 | `arming_modedetail_alarm_rules` | string | - | - | no | - | - |
 | `arming_modedetail_devices_rules` | string | - | - | no | - | - |
@@ -10991,15 +10991,15 @@ rw 41 / ro 68
 
 ### Settings of T8424 Floodlight Cam 2K
 
-rw 30 / ro 55
+rw 32 / ro 53
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
 | `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=0, panNum=1, polyNum=2, positionNum=0, sideNum=6, zoneHeight=432, zoneWidth=768 |
 | `ai_empower` | other | - | - | no | - | - |
 | `ambient_light_brightness` | range | 22..100 step 1 | - | yes | slider | - |
-| `ambient_light_schedule_config` | string | - | - | no | - | - |
-| `ambient_light_schedule_sunset_to_sunrise` | string | - | - | no | - | - |
+| `ambient_light_schedule_config` | object | - | - | yes | object | - |
+| `ambient_light_schedule_sunset_to_sunrise` | object | - | - | yes | object | - |
 | `arming_cust_mode_config` | string | - | - | no | - | - |
 | `arming_modedetail_alarm_rules` | string | - | - | no | - | - |
 | `arming_modedetail_devices_rules` | string | - | - | no | - | - |
@@ -14242,7 +14242,7 @@ rw 0 / ro 2
 
 ### Settings of T8E00 PoE Cam S4
 
-rw 37 / ro 70
+rw 36 / ro 71
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -14325,7 +14325,7 @@ rw 37 / ro 70
 | `nightvision_supply_light_mode` | enum | 1, 0, 2, 3 | - | yes | select | 0=Off, 1=Off (infrared), 2=Spotlight, 3=Infrared |
 | `nightvision_type` | enum | 11, 7, 6 | - | yes | select | 11=Standard, 6=Infrared auto, 7=Spotlight auto |
 | `nightvision_type_new` | enum | 102, 103, 104 | - | yes | select | 102=Infrared, 103=Spotlights, 104=Standard |
-| `notification_interval_time` | enum | 0, 1, 2, 3, 4, 5 | - | yes | select | 0=0 min, 1=1 min, 2=2 min, 3=3 min, 4=4 min, 5=5 min |
+| `notification_interval_time` | enum | 0, 1, 2, 3, 4, 5 | - | no | - | 0=0 min, 1=1 min, 2=2 min, 3=3 min, 4=4 min, 5=5 min |
 | `notification_interval_time_for_sensor` | string | - | - | no | - | - |
 | `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
 | `playback_play_speed` | enum | 0, 1, 2, 3 | - | no | - | 0=2x, 1=4x, 2=8x, 3=16x |
@@ -14356,7 +14356,7 @@ rw 37 / ro 70
 
 ### Settings of T8E00E
 
-rw 36 / ro 68
+rw 35 / ro 69
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -14437,7 +14437,7 @@ rw 36 / ro 68
 | `nightvision_supply_light_mode` | enum | 1, 0, 2, 3 | - | yes | select | 0=Off, 1=Off (infrared), 2=Spotlight, 3=Infrared |
 | `nightvision_type` | enum | 11, 7, 6 | - | yes | select | 11=Standard, 6=Infrared auto, 7=Spotlight auto |
 | `nightvision_type_new` | enum | 102, 103, 104 | - | yes | select | 102=Infrared, 103=Spotlights, 104=Standard |
-| `notification_interval_time` | enum | 0, 1, 2, 3, 4, 5 | - | yes | select | 0=0 min, 1=1 min, 2=2 min, 3=3 min, 4=4 min, 5=5 min |
+| `notification_interval_time` | enum | 0, 1, 2, 3, 4, 5 | - | no | - | 0=0 min, 1=1 min, 2=2 min, 3=3 min, 4=4 min, 5=5 min |
 | `notification_interval_time_for_sensor` | string | - | - | no | - | - |
 | `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
 | `playback_play_speed` | enum | 0, 1, 2, 3 | - | no | - | 0=2x, 1=4x, 2=8x, 3=16x |
@@ -15010,7 +15010,7 @@ rw 19 / ro 92
 
 ### Settings of T8P00 PoE Cam E40
 
-rw 32 / ro 60
+rw 31 / ro 61
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -15081,7 +15081,7 @@ rw 32 / ro 60
 | `nightvision_supply_light_mode` | enum | 0, 1, 2, 3 | - | yes | select | 0=Off (infrared), 1=Off, 2=Spotlight, 3=Infrared |
 | `nightvision_type` | enum | 11, 7, 6 | - | yes | select | 11=Standard, 6=Infrared auto, 7=Spotlight auto |
 | `nightvision_type_new` | enum | 102, 103, 104 | - | yes | select | 102=Infrared, 103=Spotlights, 104=Standard |
-| `notification_interval_time` | enum | 0, 1, 2, 3, 4, 5 | - | yes | select | 0=0 min, 1=1 min, 2=2 min, 3=3 min, 4=4 min, 5=5 min |
+| `notification_interval_time` | enum | 0, 1, 2, 3, 4, 5 | - | no | - | 0=0 min, 1=1 min, 2=2 min, 3=3 min, 4=4 min, 5=5 min |
 | `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
 | `playback_play_speed` | enum | 0, 1, 2, 3 | - | no | - | 0=2x, 1=4x, 2=8x, 3=16x |
 | `player_model_config` | string | - | - | no | - | - |
@@ -15109,7 +15109,7 @@ rw 32 / ro 60
 
 ### Settings of T8P10 PoE Cam E41
 
-rw 32 / ro 63
+rw 31 / ro 64
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -15182,7 +15182,7 @@ rw 32 / ro 63
 | `nightvision_supply_light_mode` | enum | 0, 1, 2, 3 | - | yes | select | 0=Off (infrared), 1=Off, 2=Spotlight, 3=Infrared |
 | `nightvision_type` | enum | 11, 7, 6 | - | yes | select | 11=Standard, 6=Infrared auto, 7=Spotlight auto |
 | `nightvision_type_new` | enum | 102, 103, 104 | - | yes | select | 102=Infrared, 103=Spotlights, 104=Standard |
-| `notification_interval_time` | enum | 0, 1, 2, 3, 4, 5 | - | yes | select | 0=0 min, 1=1 min, 2=2 min, 3=3 min, 4=4 min, 5=5 min |
+| `notification_interval_time` | enum | 0, 1, 2, 3, 4, 5 | - | no | - | 0=0 min, 1=1 min, 2=2 min, 3=3 min, 4=4 min, 5=5 min |
 | `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
 | `playback_play_speed` | enum | 0, 1, 2, 3 | - | no | - | 0=2x, 1=4x, 2=8x, 3=16x |
 | `player_model_config` | string | - | - | no | - | - |
