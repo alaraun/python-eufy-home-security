@@ -1073,9 +1073,9 @@ A closed session (`async_close`) never reconnects on its own — build a new
     structured values hold the house's location (a floodlight's dusk-to-dawn `lat` and
     `lng`): pass the decoded value through `redact_location(value)` (exported from the
     package root) before it becomes an attribute. It returns a copy without the members
-    whose key is in `LOCATION_KEYS` or ends in `address`/`addr` (the keys the logs mask
-    as location, matched the same way, at any depth); parse a JSON text first, since a
-    string comes back as it is.
+    whose key is in `LOCATION_KEYS` or has `address` or `addr` as its last word
+    (`home_address`, `routerAddr`), at any depth: the keys the logs mask as location,
+    matched the same way. Parse a JSON text first: a string comes back as it is.
   - `applies_when`: see [`applies_when`](#applies_when).
   - Values are the vendor's: int for an enum or a range (a few enums have str values),
     bool for a bool, str for a string, a `dict` (the JSON object the device stores) for
