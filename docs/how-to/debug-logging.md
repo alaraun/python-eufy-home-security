@@ -65,7 +65,9 @@ The rules:
 
 - A logged JSON body (a cloud request or response, a P2P command or notification, a
   push) is masked by key: `SENSITIVE_KEY_PARTS` for secrets and `IDENTIFYING_KEYS`
-  for identifiers (`_logging.py`), with case, `_` and `-` ignored. A string that holds
+  for identifiers (`_logging.py`), with case, `_` and `-` ignored. Its house-location
+  keys are the public `LOCATION_KEYS` (plus keys ending in `address` or `addr`), which
+  `redact_location` drops from a value shown outside the logs. A string that holds
   a JSON object, or base64 of one (a stored light setting with the house's coordinates),
   is decoded and masked the same way. Any serial, 40-hex account id or
   e-mail address or station media path (`/zx/…`) left inside a string is redacted too.

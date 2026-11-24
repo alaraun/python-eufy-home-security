@@ -67,10 +67,17 @@ def test_devices_exports_the_per_model_settings_api() -> None:
 
 
 def test_redaction_helpers_are_exported() -> None:
-    from eufy_home_security import redact, redact_serial  # noqa: PLC0415
+    from eufy_home_security import (  # noqa: PLC0415
+        LOCATION_KEYS,
+        redact,
+        redact_location,
+        redact_serial,
+    )
 
     assert redact_serial is eufy_home_security._logging.redact_serial
     assert redact is eufy_home_security._logging.redact
+    assert redact_location is eufy_home_security._logging.redact_location
+    assert LOCATION_KEYS is eufy_home_security._logging.LOCATION_KEYS
 
 
 def test_the_card_constants_are_exported_from_the_root() -> None:

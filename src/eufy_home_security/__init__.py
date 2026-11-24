@@ -8,7 +8,14 @@ from . import _logging as _logging  # installs the NullHandler and wire-logger d
 from ._lazy import lazy_exports
 
 if TYPE_CHECKING:
-    from ._logging import redact, redact_serial, set_secret_logging, set_wire_logging
+    from ._logging import (
+        LOCATION_KEYS,
+        redact,
+        redact_location,
+        redact_serial,
+        set_secret_logging,
+        set_wire_logging,
+    )
     from .client import EufySecurity, ModelStatus, SkippedDevice
     from .cloud.arming import (
         ArmingActivation,
@@ -204,7 +211,15 @@ if TYPE_CHECKING:
 # not load aiohttp, the cloud client or the push stack until something needs them.
 _EXPORTS: dict[str, str] = {
     **dict.fromkeys(
-        ("redact", "redact_serial", "set_secret_logging", "set_wire_logging"), "_logging"
+        (
+            "LOCATION_KEYS",
+            "redact",
+            "redact_location",
+            "redact_serial",
+            "set_secret_logging",
+            "set_wire_logging",
+        ),
+        "_logging",
     ),
     **dict.fromkeys(("EufySecurity", "ModelStatus", "SkippedDevice"), "client"),
     **dict.fromkeys(("DetectionDelivery", "DetectionDeliveryReport"), "detection_delivery"),
@@ -449,6 +464,7 @@ __all__ = [
     "IMAGE_SOURCES",
     "JPEG_CONTENT_TYPE",
     "LAN_DISCOVERY_TIMEOUT",
+    "LOCATION_KEYS",
     "MAX_PRESET_SLOTS",
     "MAX_ZOOM",
     "MIN_STATION_SESSIONS",
@@ -643,6 +659,7 @@ __all__ = [
     "guard_mode_label",
     "picture_codec",
     "redact",
+    "redact_location",
     "redact_serial",
     "set_secret_logging",
     "set_wire_logging",

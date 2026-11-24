@@ -31,7 +31,7 @@ from collections.abc import Mapping
 from typing import Final
 
 from .models import IDENTIFYING_PARAMS
-from .p2p._json import parse_json
+from .p2p._json import MAX_JSON_DEPTH, parse_json
 
 PACKAGE_LOGGER: Final = logging.getLogger("eufy_home_security")
 PACKAGE_LOGGER.addHandler(logging.NullHandler())
@@ -137,9 +137,21 @@ SENSITIVE_KEY_PARTS: Final = (
 )
 
 
+#: Keys whose values locate the house (its address and coordinates; ``longtitude`` as
+#: eufy spells it), compared like :data:`IDENTIFYING_KEYS`, which holds them too. A key
+#: whose last word is in :data:`LOCATION_KEY_SUFFIXES` locates the house as well.
+LOCATION_KEYS: Final = frozenset(
+    {"address", "houseaddress", "location", "latitude", "longitude", "longtitude", "lat",
+     "lng", "lon"}
+)  # fmt: skip
+
+#: Last words of a key that locate the house whatever the prefix (``home_address``,
+#: ``router_addr``), split as for :data:`IDENTIFYING_KEY_SUFFIXES`, which holds them too.
+LOCATION_KEY_SUFFIXES: Final = frozenset({"address", "addr"})
+
 #: Keys whose values identify the account, a person, a device or the house, compared
 #: with case, ``_`` and ``-`` ignored (``device_sn``, ``mValueStrSub``, ``app-conn``).
-IDENTIFYING_KEYS: Final = frozenset(
+IDENTIFYING_KEYS: Final = LOCATION_KEYS | frozenset(
     {
         # account and people
         "account", "accountid", "userid", "uid", "shortuserid", "adminuserid",
@@ -154,9 +166,6 @@ IDENTIFYING_KEYS: Final = frozenset(
         "name", "devicename", "stationname", "devicealiasname", "homename", "roomname",
         "houseid", "homeid", "roomid", "mac", "btmac", "wifimac", "ssid", "wifissid",
         "appconn", "p2pconn", "ip", "ipaddr", "macaddr", "bssid", "localip", "androidid", "fid", "housename",
-        # the house's location
-        "address", "houseaddress", "location", "latitude", "longitude", "longtitude", "lat",
-        "lng", "lon",
         # media on the station's disk
         "file", "filepath", "path", "thumbpath", "storagepath", "croppath", "videopath",
         "coverpath", "cloudpath", "crophb3path", "cropcloudpath", "snapshotcloud", "mp4cloud",
@@ -167,8 +176,8 @@ IDENTIFYING_KEYS: Final = frozenset(
 #: Last words of a key that identify its value whatever the prefix (``ap_ssid``,
 #: ``ap_ip``, ``apMac``, ``hub_sn``, ``router_addr``); words split at ``_``, ``-`` and
 #: a case change (``apMac``, ``APMac``). Not ``name``: ``table_name`` and ``app-name`` name no one.
-IDENTIFYING_KEY_SUFFIXES: Final = frozenset(
-    {"ssid", "bssid", "ip", "ipv4", "ipv6", "mac", "sn", "addr", "address", "did"}
+IDENTIFYING_KEY_SUFFIXES: Final = LOCATION_KEY_SUFFIXES | frozenset(
+    {"ssid", "bssid", "ip", "ipv4", "ipv6", "mac", "sn", "did"}
 )
 _KEY_WORDS = re.compile(r"[_\-]+|(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
@@ -307,11 +316,17 @@ def _credential(key: str) -> bool:
     return any(part in lowered for part in CREDENTIAL_KEY_PARTS)
 
 
-def _identifying(key: str) -> bool:
-    if key.lower().replace("_", "").replace("-", "") in IDENTIFYING_KEYS:
+def _key_in(key: str, keys: frozenset[str], suffixes: frozenset[str]) -> bool:
+    """Whether ``key`` (case, ``_`` and ``-`` ignored) is one of ``keys``, or its last
+    word (:data:`_KEY_WORDS`) one of ``suffixes``."""
+    if key.lower().replace("_", "").replace("-", "") in keys:
         return True
     words = [word for word in _KEY_WORDS.split(key) if word]
-    return bool(words) and words[-1].lower() in IDENTIFYING_KEY_SUFFIXES
+    return bool(words) and words[-1].lower() in suffixes
+
+
+def _identifying(key: str) -> bool:
+    return _key_in(key, IDENTIFYING_KEYS, IDENTIFYING_KEY_SUFFIXES)
 
 
 class Payload:
@@ -421,6 +436,37 @@ def redact(value: object, visible: int = 4) -> str:
     if len(text) <= visible * 2:
         return "*" * len(text)
     return f"***{text[-visible:]}"
+
+
+def redact_location(value: object) -> object:
+    """A copy of the JSON-like ``value`` without the members that locate the house.
+
+    Mappings, lists and tuples are copied at any depth (a mapping as a ``dict``), leaving
+    out every member whose key is a location key: one of :data:`LOCATION_KEYS`, or one
+    whose last word is in :data:`LOCATION_KEY_SUFFIXES`, matched as the logs match
+    identifying keys. A key that is no string is kept; scalars, a JSON text included,
+    come back as they are (parse a text first). Containers nested deeper than
+    :data:`~.p2p._json.MAX_JSON_DEPTH` come back empty, so a deep or cyclic value never
+    raises. ``value`` is never changed.
+    """
+    return _without_location(value, 1)
+
+
+def _without_location(value: object, depth: int) -> object:
+    if isinstance(value, Mapping):
+        if depth > MAX_JSON_DEPTH:
+            return {}
+        return {
+            key: _without_location(member, depth + 1)
+            for key, member in value.items()
+            if not (isinstance(key, str) and _key_in(key, LOCATION_KEYS, LOCATION_KEY_SUFFIXES))
+        }
+    if isinstance(value, list | tuple):
+        if depth > MAX_JSON_DEPTH:
+            return () if isinstance(value, tuple) else []
+        items = [_without_location(item, depth + 1) for item in value]
+        return tuple(items) if isinstance(value, tuple) else items
+    return value
 
 
 def redact_serial(serial: str | None) -> str:

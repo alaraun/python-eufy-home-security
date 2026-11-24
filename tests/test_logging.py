@@ -10,6 +10,10 @@ from collections.abc import Iterator
 import pytest
 
 from eufy_home_security._logging import (
+    IDENTIFYING_KEY_SUFFIXES,
+    IDENTIFYING_KEYS,
+    LOCATION_KEY_SUFFIXES,
+    LOCATION_KEYS,
     Address,
     Credential,
     HexDump,
@@ -20,12 +24,15 @@ from eufy_home_security._logging import (
     _hidden_bytes,
     json_in_base64,
     redact,
+    redact_location,
     redact_serial,
     scrub,
     set_secret_logging,
     set_wire_logging,
     wire_logger,
 )
+from eufy_home_security.devices.model_settings import settings_of
+from eufy_home_security.p2p._json import MAX_JSON_DEPTH
 
 
 def test_secrets_render_redacted_until_secret_logging_is_on() -> None:
@@ -372,3 +379,123 @@ def test_hexdump_stars_secrets() -> None:
 def test_a_deeply_nested_json_text_is_logged_as_text() -> None:
     deep = "[" * 100_000 + "]" * 100_000
     assert str(Payload({"value": deep}))
+
+
+def test_the_location_keys_are_the_identifying_keys_that_locate_the_house() -> None:
+    """The house-location keys and last words; the logs mask each of them too."""
+    assert {
+        "address", "houseaddress", "location", "latitude", "longitude", "longtitude", "lat",
+        "lng", "lon",
+    } == LOCATION_KEYS  # fmt: skip
+    assert {"address", "addr"} == LOCATION_KEY_SUFFIXES
+    assert LOCATION_KEYS <= IDENTIFYING_KEYS
+    assert LOCATION_KEY_SUFFIXES <= IDENTIFYING_KEY_SUFFIXES
+
+
+def test_redact_location_drops_location_members_at_any_depth() -> None:
+    value = {
+        "enable": 1,
+        "lat": "1.5",
+        "light": {"sunset2rise": {"latitude": 1.5, "longtitude": "2.5", "on": True}},
+        "places": [{"lng": -2.25, "name": "Porch"}, ({"address": "Main St 1", "s": 3},)],
+    }
+    assert redact_location(value) == {
+        "enable": 1,
+        "light": {"sunset2rise": {"on": True}},
+        "places": [{"name": "Porch"}, ({"s": 3},)],
+    }
+
+
+@pytest.mark.parametrize(
+    "key",
+    ["Lat", "LAT", "lng", "lon", "Longtitude", "location", "house_address", "houseAddress",
+     "home-address", "router_addr", "routerAddr", "ADDRESS"],
+)  # fmt: skip
+def test_redact_location_matches_keys_as_the_logs_do(key: str) -> None:
+    """Case, ``_`` and ``-`` ignored for whole keys; a last word ``address``/``addr``."""
+    assert redact_location({key: "1.5", "enable": 1}) == {"enable": 1}
+
+
+@pytest.mark.parametrize(
+    "key",
+    ["name", "path", "s", "sn", "ip", "mac", "table_name", "address_book", "relation",
+     "sun_set", "flat"],
+)  # fmt: skip
+def test_redact_location_keeps_members_that_locate_nothing(key: str) -> None:
+    """Other identifying keys and keys merely containing a location word stay."""
+    assert redact_location({key: "x"}) == {key: "x"}
+
+
+def test_redact_location_returns_a_copy_and_leaves_its_input_alone() -> None:
+    inner = {"lat": 1.5, "on": 1}
+    value = {"a": inner, "b": [inner], "c": (inner,)}
+    before = json.dumps(value)
+    result = redact_location(value)
+    assert json.dumps(value) == before
+    assert result == {"a": {"on": 1}, "b": [{"on": 1}], "c": ({"on": 1},)}
+    assert isinstance(result, dict)
+    assert result is not value
+    assert result["a"] is not inner
+    plain = {"b": [1], "c": {"d": 2}}
+    copied = redact_location(plain)
+    assert isinstance(copied, dict)
+    assert copied == plain
+    assert copied is not plain
+    assert copied["b"] is not plain["b"]
+    assert copied["c"] is not plain["c"]
+
+
+def test_redact_location_keeps_scalars_and_non_string_keys() -> None:
+    """Scalars come back as they are, a JSON text included (parse it first); a key that
+    is no string is kept."""
+    for scalar in ("1.5", '{"lat": "1.5"}', 3, 2.5, True, None, b"lat"):
+        assert redact_location(scalar) == scalar
+    assert redact_location({1: "a", ("lat",): "b", None: "c", "lat": "d"}) == {
+        1: "a", ("lat",): "b", None: "c",
+    }  # fmt: skip
+
+
+def _nested(depth: int, wrap: type[list[object]] | type[tuple[object, ...]] = list) -> object:
+    """A location object at nesting level ``depth``, inside ``wrap`` containers (the
+    outermost is level 1)."""
+    value: object = {"lat": 1.5, "on": 1}
+    for _ in range(depth - 1):
+        value = wrap([value])
+    return value
+
+
+def _innermost(value: object) -> object:
+    while isinstance(value, list | tuple) and value:
+        value = value[0]
+    return value
+
+
+def test_redact_location_is_bounded_in_depth() -> None:
+    """Containers as deep as a parsed JSON value may nest are redacted; deeper ones come
+    back empty, so a deep or cyclic value never raises."""
+    assert _innermost(redact_location(_nested(MAX_JSON_DEPTH))) == {"on": 1}
+    assert _innermost(redact_location(_nested(MAX_JSON_DEPTH + 1))) == {}
+    assert _innermost(redact_location(_nested(MAX_JSON_DEPTH + 2))) == []
+    assert _innermost(redact_location(_nested(MAX_JSON_DEPTH + 2, tuple))) == ()
+    assert _innermost(redact_location(_nested(100_000))) == []
+    cycle: list[object] = []
+    cycle.append(cycle)
+    assert _innermost(redact_location(cycle)) == []
+    loop: dict[str, object] = {"lat": 1.5}
+    loop["self"] = loop
+    out = redact_location(loop)
+    for _ in range(MAX_JSON_DEPTH):
+        assert isinstance(out, dict)
+        assert out.keys() == {"self"}
+        out = out["self"]
+    assert out == {}
+
+
+def test_a_floodlight_s_dusk_to_dawn_value_loses_its_location() -> None:
+    """The decoded dusk-to-dawn object keeps its switch and sun times, not lat/lng."""
+    dusk = settings_of("T8420")["ambient_light_schedule_sunset_to_sunrise"]
+    stored = '{"lat": "1.5", "lng": "2.5", "sun_rise": "06:10", "sun_set": "18:20"}'
+    value = dusk.decode("1", {1415: stored})
+    assert isinstance(value, dict)
+    assert {"lat", "lng"} <= value.keys()
+    assert redact_location(value) == {"enable": 1, "sun_rise": "06:10", "sun_set": "18:20"}

@@ -1069,7 +1069,13 @@ A closed session (`async_close`) never reconnects on its own — build a new
     light schedule keeps control `TEXT`: still no text entity; an `OBJECT`, such as a
     light's combined motion-light settings, has control `OBJECT`: still no entity of its
     own). Put it into an attribute of a related entity, or create no entity for it; it is
-    known before the first read. A state is also limited to 255 characters.
+    known before the first read. A state is also limited to 255 characters. Some
+    structured values hold the house's location (a floodlight's dusk-to-dawn `lat` and
+    `lng`): pass the decoded value through `redact_location(value)` (exported from the
+    package root) before it becomes an attribute. It returns a copy without the members
+    whose key is in `LOCATION_KEYS` or ends in `address`/`addr` (the keys the logs mask
+    as location, matched the same way, at any depth); parse a JSON text first, since a
+    string comes back as it is.
   - `applies_when`: see [`applies_when`](#applies_when).
   - Values are the vendor's: int for an enum or a range (a few enums have str values),
     bool for a bool, str for a string, a `dict` (the JSON object the device stores) for
@@ -1520,7 +1526,7 @@ is the control to build, decided by the library from the vendor's codec; map it 
 | `box` | `RANGE` (more than 200 steps) | `number`, `NumberMode.BOX` | the number |
 | `toggles` | `FLAGS` | one `switch` per member in `setting.flags`, named `setting.flag_label(member)` | on = `member in setting.decode_flags(raw)[0]`; write with `station.async_set_flag(key, member, on)` |
 | `text` | `STRING` | `text` | the string |
-| `object` | `OBJECT` | none of its own (a service or a related entity's attribute) | `setting.decode(raw)` is the object the device stores (a `dict` with snake_case members, as the model's handler stores it; a schedule's days are a bitmask); write the whole object back with one member changed: `station.async_set_setting(key, {**current, "enable": 1})`. An empty object, or one nested deeper than 32 levels, is refused (`ValueError`). The motion-light and ambient-light objects can carry the house's coordinates (`latitude`, `longtitude`), and a floodlight's dusk-to-dawn object (`ambient_light_schedule_sunset_to_sunrise`: `{enable, lat, lng}` written, `sun_rise` and `sun_set` added on read) is them (`lat`, `lng`): leave those members out of states and attributes; the logs mask them |
+| `object` | `OBJECT` | none of its own (a service or a related entity's attribute) | `setting.decode(raw)` is the object the device stores (a `dict` with snake_case members, as the model's handler stores it; a schedule's days are a bitmask); write the whole object back with one member changed: `station.async_set_setting(key, {**current, "enable": 1})`. An empty object, or one nested deeper than 32 levels, is refused (`ValueError`). The motion-light and ambient-light objects can carry the house's coordinates (`latitude`, `longtitude`), and a floodlight's dusk-to-dawn object (`ambient_light_schedule_sunset_to_sunrise`: `{enable, lat, lng}` written, `sun_rise` and `sun_set` added on read) is them (`lat`, `lng`): leave those members out of states and attributes (`redact_location(value)`); the logs mask them |
 
 Follow `control` for durations too: the app draws the clip length and the retrigger
 interval as sliders; `unit` (seconds) still sets the device class. `OTHER` settings have
@@ -3420,7 +3426,8 @@ async def async_get_config_entry_diagnostics(hass, entry):
   whether each is present) and with redacted serials.
 - `StationState.cloud_param_ids` names the station parameters read from the cloud's copy
   (ids only: their values can hold mode names and schedules).
-- Put any other serial through `redact_serial` (exported from the package root).
+- Put any other serial through `redact_serial` (exported from the package root), and a
+  setting's structured value through `redact_location`.
 - A non-empty `unclassified_sections` in the summary means the library is newer than the
   integration; it lists names only and is safe to show.
 - Add `eufy.skipped_devices` (`SkippedDevice(device_sn_redacted, reason)`: `bad_serial`,
