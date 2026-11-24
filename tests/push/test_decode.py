@@ -524,6 +524,37 @@ def test_the_picture_url_is_the_first_item_of_the_pic_url_list(
     assert decode_push(msg, now_ms=lambda: NOW_MS).pic_url == expected
 
 
+@pytest.mark.parametrize("field", ["doorbell", "payload"])
+@pytest.mark.parametrize(
+    "event_time",
+    [str(NOW_MS // 1000 - 2), str(NOW_MS - 2_000)],  # seconds, then ms
+    ids=["s", "ms"],
+)
+def test_a_create_time_that_is_no_ms_time_falls_back_to_the_event_time(
+    field: str, event_time: str
+) -> None:
+    body = _press(create_time=NOW_MS // 1000 - 5, event_time=event_time)  # seconds
+    event = decode_push({"type": "5", field: json.dumps(body)}, now_ms=lambda: NOW_MS)
+    assert event.event_time_ms == NOW_MS - 2_000
+    assert event.rejected_fields == frozenset()
+
+
+def test_a_create_time_that_is_no_ms_time_without_an_event_time_is_rejected() -> None:
+    body = _press(create_time=NOW_MS // 1000 - 5)
+    del body["event_time"]
+    event = decode_push({"type": "5", "doorbell": json.dumps(body)}, now_ms=lambda: NOW_MS)
+    assert event.event_time_ms is None
+    assert event.rejected_fields == {"event_time_ms"}
+
+
+def test_an_inner_time_ahead_of_the_clock_is_rejected_not_replaced() -> None:
+    """Only a value that is no epoch in ms falls back; one that is too far ahead stays."""
+    body = _press(create_time=NOW_MS + 3_600_000)
+    event = decode_push({"type": "5", "doorbell": json.dumps(body)}, now_ms=lambda: NOW_MS)
+    assert event.event_time_ms is None
+    assert event.rejected_fields == {"event_time_ms"}
+
+
 def _deep(depth: int) -> str:
     """A press whose extra field nests ``depth`` objects deep."""
     nested = '{"x":' * depth + "1" + "}" * depth

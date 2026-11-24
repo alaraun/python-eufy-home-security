@@ -391,6 +391,11 @@ def _utc_ms(ms: int) -> datetime:
     return datetime.fromtimestamp(ms / 1000, UTC)
 
 
+def is_event_time_ms(value_ms: int) -> bool:
+    """Whether an epoch-ms value lies in the plausible event-time range."""
+    return EVENT_TIME_MIN_MS <= value_ms < EVENT_TIME_MAX_MS
+
+
 def is_station_media_path(value: object, suffix: str) -> TypeGuard[str]:
     """Whether ``value`` is a plausible station media path ending in ``suffix``.
 
@@ -573,7 +578,7 @@ class PushFieldReader:
         """
         if value_ms is None:
             return None
-        if not EVENT_TIME_MIN_MS <= value_ms < EVENT_TIME_MAX_MS:
+        if not is_event_time_ms(value_ms):
             self.rejected.add("event_time_ms")
             return None
         now = self._now_ms()

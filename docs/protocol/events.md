@@ -72,7 +72,7 @@ The inner object is the same object the backend relays over FCM (long-key form):
 
 | field | use |
 |---|---|
-| `trigger_time` / `create_time` | **epoch milliseconds**. Use `trigger_time` as the event time, not arrival time. Both decoders take `SecurityEvent.event_time_ms` from them (`trigger_time`, else `create_time`). |
+| `trigger_time` / `create_time` | **epoch milliseconds**. Use `trigger_time` as the event time, not arrival time. Both decoders take `SecurityEvent.event_time_ms` from them (`trigger_time`, else `create_time`; for a value outside the millisecond range the cloud decoder takes `event_time`, see *Which time* under [De-duplication across channels](#de-duplication-across-channels)). |
 | `unique_id` | a per-occurrence id, identical on the P2P and the FCM copy: `SecurityEvent.unique_id` (printable ASCII, at most 64 characters) and the de-duplication key |
 | `record_id` | the occurrence's event-database row (`SecurityEvent.record_id`; `0` = none): binds the attached records |
 | `device_sn`, `name`, `channel` | the camera. Trust these top-level fields for the event itself. |
@@ -581,7 +581,7 @@ The app uses FCM as its only push transport **[app]**. A headless client registe
 | `type` | **device** type, not event type. ≥ 10100 = account-level server push (device removed, invitation, alarm notify). These decode raw-only: no fields are lifted. A message with a `doorbell` body is a video doorbell's push (device type 5) whatever its `type`, never a server push **[app]**. |
 | `event_type` | detection, same 31xx enum as local |
 | `station_sn`, `device_sn` | |
-| `event_time`, `push_time`, `server_receive_time` | epoch, **seconds or milliseconds**: multiply by 1000 when < 10¹⁰. Every captured `event_time` was seconds (10 digits). The time checks above run after this conversion. |
+| `event_time`, `push_time`, `server_receive_time` | epoch, **seconds or milliseconds**: multiply by 1000 when < 10¹⁰ (10 digits or fewer). Every captured `event_time` was seconds (10 digits). The time checks above run after this conversion. |
 | `message_id`, `trace_id`, `push_type`, `event_level`, `title`, `content`, `origin`, `push_control` | metadata and pre-rendered text |
 
 **Inner payload.** Newer firmware uses the long names of the local payload. Older
@@ -654,7 +654,10 @@ byte-identical and carries
 `create_time`/`trigger_time` in ms plus a per-event `unique_id`, `record_id` and
 `session_id`. The cloud decoder therefore takes `event_time_ms` from the inner
 `trigger_time`/`create_time` when present, and the outer `event_time` only otherwise
-(arming and alarm pushes carry no inner time).
+(arming and alarm pushes carry no inner time). An inner time outside the plausible
+millisecond range (a `doorbell` body's `create_time` has no declared unit) yields to the
+outer or inner `event_time` when the push has one; that one is seconds or milliseconds
+by its length (more than 10 digits = ms) **[app]**.
 
 **Attached records.** A copy's `thumb_path`/`crop_path` come only from records bound by
 `record_id` ([Binding the attached records](#binding-the-attached-records)).

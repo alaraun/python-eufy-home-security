@@ -39,6 +39,7 @@ from ..events import (
     SecurityEvent,
     coerce_int,
     coerce_str,
+    is_event_time_ms,
     wall_ms,
 )
 from ..p2p._json import parse_json
@@ -157,8 +158,10 @@ def decode_push(data: Mapping[str, Any], *, now_ms: Callable[[], int] = wall_ms)
     ``push_id`` is the outer ``span_id``. The event time is the inner payload's
     ``trigger_time``/``create_time`` (ms) when it has one — the time the P2P copy
     carries, where the outer ``event_time`` is about 3 s later — else the outer (or
-    short-key ``t``) time, converted to ms before it is validated (FCM times are
-    seconds). The inner object is the body of :func:`body_field`. Everything else stays
+    inner, short key ``t``) ``event_time``, converted to ms before it is validated (more
+    than 10 digits is ms, else seconds). An inner time outside the plausible ms range (a
+    seconds ``create_time``) yields to that ``event_time`` when there is one. The inner
+    object is the body of :func:`body_field`. Everything else stays
     in ``raw`` (the message as received; :func:`decode_payload` re-derives the inner
     object). A server push (``type`` ≥ :data:`SERVER_PUSH_MIN_TYPE`) lifts only
     ``push_id``; a push with a ``doorbell`` body is never one.
@@ -176,12 +179,12 @@ def decode_push(data: Mapping[str, Any], *, now_ms: Callable[[], int] = wall_ms)
         for name in ("channel", "msg_type", "event_type"):
             if common[name] is None:
                 common[name] = coerce_int(data.get(name))
-        inner_ms = reader.payload_time(inner)
-        event_time_ms = reader.event_time(
-            inner_ms
-            if inner_ms is not None
-            else _ms(_first(data.get("event_time"), inner.get("event_time")))
-        )
+        time_ms = reader.payload_time(inner)
+        event_ms = _ms(_first(data.get("event_time"), inner.get("event_time")))
+        # An inner time that is no epoch in ms (a seconds create_time) yields to event_time.
+        if time_ms is None or (event_ms is not None and not is_event_time_ms(time_ms)):
+            time_ms = event_ms
+        event_time_ms = reader.event_time(time_ms)
         guard_mode = reader.guard_mode(inner)
         video_path = reader.path("video_path", inner.get("file_path"), RECORDING_SUFFIX)
         return SecurityEvent(
