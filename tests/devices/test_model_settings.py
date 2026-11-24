@@ -362,12 +362,214 @@ def test_sub_1350_path_carries_the_channel() -> None:
     assert wire.value is None
 
 
-def test_direct_path() -> None:
-    wire = _setting("T8170", "device_snooze_time").encode(5, ALONE)
-    assert wire.path is WritePath.DIRECT
-    assert wire.cmd == 1271
-    assert wire.params == {"snooze_time": 900}
-    assert wire.value is None
+def test_a_snooze_time_is_written_as_the_app_s_json_text_frame() -> None:
+    """1271 is a JSON-text frame of its own type: the body is the handler's params as compact
+    JSON, with no account id."""
+    wire = _setting("T8170", "device_snooze_time").encode(0, ALONE)
+    assert wire.path is WritePath.JSON_FRAME
+    assert (wire.cmd, wire.params, wire.value) == (1271, {"snooze_time": 1800}, None)
+    assert model_settings.json_frame_text(wire, "OWNER") == b'{"snooze_time":1800}'
+
+
+SCHEDULE_ENTRY = {
+    "cross_day": "$v.cross_day:json", "enable": "$v.enable:json", "end_h": "$v.end_h:json",
+    "end_m": "$v.end_m:json", "interval": {"$or": ["$v.interval:json", 0]},
+    "start_h": "$v.start_h:json",
+    "start_m": "$v.start_m:json", "week": "$v.week:json",
+}  # fmt: skip
+
+
+def test_a_json_frame_fills_the_owner_id_where_the_template_names_it() -> None:
+    """The light schedule as the floodlight screen sends it: ``{account_id, schedules:
+    {loop}}``, the entries as given, ``once`` left out."""
+    template = {
+        "cmd": 1404,
+        "params": {
+            "account_id": "$account_id",
+            "schedules": {"loop": {"$each": ["$v.schedules.loop:json", SCHEDULE_ENTRY]}},
+        },
+        "update": {"needUpdate": True, "cmd": 1404, "paramValue": "$v:b64json"},
+    }
+    entry = {  # as the handler reports it: no interval
+        "start_h": 18, "start_m": 30, "end_h": 6, "end_m": 0, "cross_day": 1,
+        "enable": 1, "week": [{"day": 1}, {"day": 3}],
+    }  # fmt: skip
+    value = {"schedules": {"loop": [entry], "once": []}}
+    recipe = model_settings._render(
+        template, value, channel=0, device_sn="T0000ALONESN0001", station_sn="", params={}
+    )
+    wire = model_settings._classify(template, recipe)
+    assert wire.path is WritePath.JSON_FRAME
+    assert model_settings.json_frame_text(wire, "OWNER") == (
+        b'{"account_id":"OWNER","schedules":{"loop":[{"cross_day":1,"enable":1,"end_h":6,'
+        b'"end_m":0,"interval":0,"start_h":18,"start_m":30,"week":[{"day":1},{"day":3}]}]}}'
+    )
+    assert wire.params is not None
+    assert wire.params["account_id"] == "$account_id"  # filled only at send time
+    timed = {**entry, "interval": 30}
+    recipe = model_settings._render(
+        template, {"schedules": {"loop": [timed]}},
+        channel=0, device_sn="T0000ALONESN0001", station_sn="", params={},
+    )  # fmt: skip
+    assert recipe["params"]["schedules"]["loop"][0]["interval"] == 30
+    weekless = {k: v for k, v in entry.items() if k != "week"}
+    with pytest.raises(ValueError, match="no member 'week'"):
+        model_settings._render(
+            template, {"schedules": {"loop": [weekless]}},
+            channel=0, device_sn="T0000ALONESN0001", station_sn="", params={},
+        )  # fmt: skip
+    with pytest.raises(ValueError, match="not a list of objects"):
+        model_settings._render(
+            template, {"schedules": {"loop": [1]}},
+            channel=0, device_sn="T0000ALONESN0001", station_sn="", params={},
+        )  # fmt: skip
+
+
+def test_a_channel_value_command_goes_out_as_its_scalar() -> None:
+    """1013 (night vision) is the eight-byte channel + value frame: the scalar path."""
+    recipe = {"cmd": 1013, "params": {"value": 1, "channel": 3}}
+    wire = model_settings._classify(recipe, recipe)
+    assert (wire.path, wire.cmd, wire.value) == (WritePath.ECB, 1013, 1)
+
+
+def test_a_recipe_s_mvalue_overrides_the_command_s_field() -> None:
+    """As the app's request builder: ``mValue`` in the params replaces the value it read."""
+    recipe = {
+        "cmd": 1507,
+        "params": {"msgType": 10, "mValue": 3, "mValueStr": "", "mValueStrSub": " "},
+    }
+    wire = model_settings._classify(recipe, recipe)
+    assert (wire.path, wire.cmd, wire.value) == (WritePath.ECB, 1507, 3)
+    flagged = {"cmd": 1403, "params": {"switch": True, "mValue": "0"}}
+    assert model_settings._classify(flagged, flagged).value == 0
+
+
+DUSK_TO_DAWN = {
+    "cmd": 1414,
+    "params": {
+        "msgType": 16,
+        "mValue": "$v.enable:flag",
+        "mValueStr": {"$format": ['{"lat": "%s","lng": "%s"}', "$v.lat:str", "$v.lng:str"]},
+    },
+    "update": {
+        "needUpdate": True,
+        "cmd": 1414,
+        "paramValue": {"$format": ["%s", "$v.enable:flag"]},
+    },
+    "extUpdates": [
+        {
+            "cmd": 1415,
+            "paramValue": {
+                "$jsontext": {"sn": "$device_sn", "lat": "$v.lat:str", "lng": "$v.lng:str"}
+            },
+        }
+    ],
+}
+
+
+@pytest.mark.parametrize(
+    ("enable", "number"), [(1, 1), (True, 1), ("1", 1), ("true", 1), (0, 0), (False, 0), (2, 0)]
+)
+def test_dusk_to_dawn_is_a_string_frame_with_the_switch_as_its_number(
+    enable: object, number: int
+) -> None:
+    value = {"enable": enable, "lat": "59.437", "lng": 24.7536}
+    recipe = model_settings._render(
+        DUSK_TO_DAWN, value, channel=0, device_sn="T0000ALONESN0001", station_sn="", params={}
+    )
+    wire = model_settings._classify(DUSK_TO_DAWN, recipe)
+    assert wire.path is WritePath.STRING
+    assert (wire.cmd, wire.number) == (1414, number)
+    assert wire.text == '{"lat": "59.437","lng": "24.7536"}'
+    assert wire.updates == (
+        (1414, str(number)),
+        (1415, '{"sn":"T0000ALONESN0001","lat":"59.437","lng":"24.7536"}'),
+    )
+
+
+@pytest.mark.parametrize("value", [{"enable": 1, "lat": "1"}, {"lat": "1", "lng": "2"}])
+def test_dusk_to_dawn_needs_every_member_it_sends(value: dict[str, object]) -> None:
+    with pytest.raises(ValueError, match="no member"):
+        model_settings._render(
+            DUSK_TO_DAWN, value, channel=0, device_sn="T0000ALONESN0001", station_sn="", params={}
+        )
+
+
+@pytest.mark.parametrize("cmd", [9258, 1350])
+def test_a_command_with_no_frame_form_is_not_sent(cmd: int) -> None:
+    """9258 has no frame form; a 1350 without its sub-command is no transfer."""
+    recipe = {"cmd": cmd, "params": {"interval": 60}}
+    with pytest.raises(ValueError, match=f"{cmd}"):
+        model_settings._classify(recipe, recipe)
+    assert model_settings._refusal(recipe) == f"no frame the eufy app sends for command {cmd}"
+
+
+FLOODLIGHTS = ("T8420", "T8420X", "T8422", "T8423", "T8424")
+
+
+@pytest.mark.parametrize("code", FLOODLIGHTS)
+def test_a_floodlight_s_schedule_and_dusk_to_dawn_go_out_as_its_light_screen_sends_them(
+    code: str,
+) -> None:
+    """The bundled writes: the schedule as a JSON-text frame with the owner id and the
+    entries in the screen's member order, no once list; dusk to dawn as a string frame
+    whose number is the switch; its read assembled from 1414 and 1415."""
+    settings = settings_of(code)
+    schedule = settings["ambient_light_schedule_config"]
+    entry = {"start_h": 18, "start_m": 30, "end_h": 6, "end_m": 0, "cross_day": 1,
+             "enable": 1, "week": [{"day": 1}]}  # fmt: skip
+    wire = schedule.encode({"schedules": {"loop": [entry], "once": []}}, CHILD)
+    assert (wire.path, wire.cmd) == (WritePath.JSON_FRAME, 1404)
+    assert model_settings.json_frame_text(wire, "OWNER") == (
+        b'{"account_id":"OWNER","schedules":{"loop":[{"cross_day":1,"enable":1,"end_h":6,'
+        b'"end_m":0,"interval":0,"start_h":18,"start_m":30,"week":[{"day":1}]}]}}'
+    )
+    dusk = settings["ambient_light_schedule_sunset_to_sunrise"]
+    wire = dusk.encode({"enable": 1, "lat": "59.437", "lng": "24.7536"}, CHILD)
+    assert (wire.path, wire.cmd, wire.number) == (WritePath.STRING, 1414, 1)
+    assert wire.text == '{"lat": "59.437","lng": "24.7536"}'
+    block = dict(wire.updates)
+    assert block[1414] == "1"
+    assert dusk.decode(block[1414], block) == {
+        "enable": 1, "lat": "59.437", "lng": "24.7536", "sun_rise": "", "sun_set": ""
+    }  # fmt: skip
+
+
+def test_an_object_read_assembles_its_members_from_several_parameters(data_root: Path) -> None:
+    read = {
+        "param": 1414,
+        "map": None,
+        "members": {
+            "enable": {"param": 1414, "as": "flag"},
+            "lat": {"param": 1415, "member": "lat"},
+            "sun_set": {"param": 1415, "member": "sun_set"},
+        },
+    }
+    entry = {**GOOD_ENTRY, "kind": "object", "structured": True, "read": read}
+    _write_model(data_root, {"dusk": entry})
+    setting = settings_of("T0001")["dusk"]
+    block = {1414: "1", 1415: '{"sn":"T0000ALONESN0001","lat":"1.5","lng":"2.5"}'}
+    assert setting.decode("1", block) == {"enable": 1, "lat": "1.5", "sun_set": ""}
+    assert setting.decode("true", {1415: "not json"}) == {"enable": 1, "lat": "", "sun_set": ""}
+    assert setting.decode("0", None) == {"enable": 0, "lat": "", "sun_set": ""}
+    assert setting.decode(None, block) is None
+
+
+@pytest.mark.parametrize(
+    "members",
+    [
+        {"enable": {"param": 1414, "as": "int"}},
+        {"lat": {"param": "1415", "member": "lat"}},
+        {"lat": {"param": 1415}},
+        [],
+    ],
+)
+def test_a_malformed_member_read_is_refused(data_root: Path, members: object) -> None:
+    read = {"param": 1414, "map": None, "members": members}
+    entry = {**GOOD_ENTRY, "kind": "object", "structured": True, "read": read}
+    _write_model(data_root, {"dusk": entry})
+    with pytest.raises(ModelDataError):
+        settings_of("T0001")
 
 
 def test_a_time_zone_is_written_as_the_app_s_string_frame() -> None:
@@ -485,20 +687,24 @@ def test_the_command_s_field_wins_over_a_differing_field(open_: object, sent: in
 
 
 @pytest.mark.parametrize(
-    ("cmd", "body", "path", "value"),
+    ("cmd", "body", "value"),
     [
-        (1230, {"value": 7}, WritePath.ECB, 7),  # the command's field (volume) is absent
-        (1230, {"value": 7, "mode": 2}, WritePath.DIRECT, None),
-        (1017, {"a": True, "b": 1}, WritePath.ECB, 1),  # an ECB command with no known field
-        (1017, {"a": 4, "b": 5}, WritePath.DIRECT, None),
+        (1230, {"value": 7}, 7),  # the command's field (volume) is absent
+        (1230, {"value": 7, "mode": 2}, None),
+        (1017, {"a": True, "b": 1}, 1),  # an ECB command with no known field
+        (1017, {"a": 4, "b": 5}, None),
     ],
 )
 def test_a_body_without_the_command_s_field_must_hold_one_value(
-    cmd: int, body: dict[str, object], path: WritePath, value: int | None
+    cmd: int, body: dict[str, object], value: int | None
 ) -> None:
     recipe = {"cmd": cmd, "params": body}
+    if value is None:
+        with pytest.raises(ValueError, match=f"{cmd}"):
+            model_settings._classify(recipe, recipe)
+        return
     wire = model_settings._classify(recipe, recipe)
-    assert (wire.path, wire.value) == (path, value)
+    assert (wire.path, wire.value) == (WritePath.ECB, value)
 
 
 def test_bool_ecb_value_is_zero_or_one() -> None:
@@ -905,7 +1111,8 @@ def test_storage_types_carry_the_apps_two_choices_on_every_model() -> None:
 
 def test_app_domains_fill_settings_the_td_leaves_open() -> None:
     """Ring volume, response delay, time format and recording type get the app's domain;
-    the T8110 family's light schedule is a structured value."""
+    the T8110 family's light schedule is a structured value, read-only: the eufy app sends
+    nothing for its write."""
     volume = settings_of("T8220")["device_chime_hb_ring_volume"]
     assert (volume.kind, volume.minimum, volume.maximum) == (SettingKind.RANGE, 1, 26)
     delay = settings_of("T8217")["device_response_timeout_delay_time"]
@@ -916,7 +1123,8 @@ def test_app_domains_fill_settings_the_td_leaves_open() -> None:
     assert dict(recording.labels) == {2: "Event-based", 3: "Continuous"}
     schedule = settings_of("T8110")["spotlight_schedule_config"]
     assert schedule.structured
-    assert schedule.writable
+    assert not schedule.writable
+    assert schedule.note == "the eufy app sends nothing for this write"
 
 
 def test_the_recording_type_reads_any_other_value_as_continuous() -> None:

@@ -171,6 +171,7 @@ def test_is_ecb_scalar() -> None:
     assert messages.is_ecb_scalar(1250)  # value cmd
     assert messages.is_ecb_scalar(1224)  # station cmd
     assert messages.is_ecb_scalar(1210)  # channel-value cmd
+    assert messages.is_ecb_scalar(1013)  # channel-value cmd without an account
     assert not messages.is_ecb_scalar(1167)  # a delay: default handler, not a scalar
 
 
@@ -185,6 +186,7 @@ def test_ecb_value_fields_snapshot() -> None:
     table = {cmd: (spec.name, spec.flag) for cmd, spec in messages.ECB_VALUE_FIELDS.items()}
     assert table == {
         1011: ("enable", True),
+        1013: ("value", False),
         1015: ("value", False),
         1035: ("switch", True),
         1045: ("ledStatus", False),
@@ -298,6 +300,63 @@ def test_encode_ecb_scalar_frame_body_layout_follows_the_handler() -> None:
     # a station command forces channel 255
     station = messages.encode_ecb_scalar_frame(SYNTHETIC.static_key, 1253, 1, "OWNERID", channel=0)
     assert station[12] == 255
+
+
+def test_the_native_frame_forms_by_command() -> None:
+    """The eufy app's send handler picks a frame form by the command id. An edit is deliberate:
+    the private routing input checks these sets against the app at every regeneration."""
+    assert {1013, 1202, 1205, 1206} == messages.CHANNEL_VALUE_CMDS
+    assert {
+        1060, 1204, 1254, 1255, 1256, 1258, 1259, 1260, 1261, 1262, 1264, 1271, 1350, 1404,
+    } == messages.JSON_TEXT_CMDS  # fmt: skip
+    assert {1204, 1271} == messages.JSON_TEXT_CALLER_CHANNEL_CMDS
+    assert {1025, 1132, 1215, 1216, 1217, 1414} == messages.STRING_CMDS
+    forms = (
+        messages.ECB_VALUE_CMDS,
+        messages.ECB_STATION_CMDS,
+        messages.ECB_CHANNEL_VALUE_CMDS,
+        messages.CHANNEL_VALUE_CMDS,
+        messages.JSON_TEXT_CMDS,
+        messages.STRING_CMDS,
+    )
+    assert sum(len(f) for f in forms) == len(frozenset().union(*forms))  # disjoint
+
+
+def test_a_channel_value_frame_carries_channel_and_value_without_an_account() -> None:
+    frame = messages.encode_ecb_scalar_frame(
+        SYNTHETIC.static_key, 1013, 1, "OWNERID", channel=3, seq=5
+    )
+    assert struct.unpack_from("<H", frame, 4)[0] == 1013
+    assert struct.unpack_from("<I", frame, 6)[0] == 16  # 8 bytes, padded to one block
+    assert frame[10:14] == bytes([FrameCipher.ECB, 5, 3, 0x01])
+    body = crypto.ecb_decrypt(SYNTHETIC.static_key, frame[16:])
+    assert body == struct.pack("<II", 3, 1) + bytes(8)
+    clear = messages.encode_ecb_scalar_frame(
+        SYNTHETIC.static_key, 1013, 2, "OWNERID", channel=0, encryption=crypto.FRAME_PLAIN
+    )
+    assert struct.unpack_from("<I", clear, 6)[0] == 8
+    assert clear[16:] == struct.pack("<II", 0, 2)
+
+
+def test_a_string_command_body_carries_its_number_in_the_first_word() -> None:
+    body = messages.string_command_body(
+        '{"lat": "1.5","lng": "2.5"}', "OWNERID", channel=0, number=1
+    )
+    assert body[:5] == bytes([1, 0, 0, 0, 0])
+    assert messages.string_command_number(body) == 1
+    assert messages.decode_string_command_body(body) == (
+        0,
+        '{"lat": "1.5","lng": "2.5"}',
+        "OWNERID",
+    )
+    assert messages.string_command_body("x", "OWNERID", channel=2, number=0xFFFF)[:2] == b"\xff\xff"
+    assert messages.string_command_number(messages.string_command_body("x", "A", channel=0)) == 0
+
+
+@pytest.mark.parametrize("number", [-1, 0x10000])
+def test_a_string_command_number_outside_a_u16_is_refused(number: int) -> None:
+    with pytest.raises(ValueError, match="number"):
+        messages.string_command_body("x", "OWNERID", channel=0, number=number)
 
 
 def test_encode_ecb_scalar_frame_rejects_non_scalar_and_bad_caller_input() -> None:
@@ -544,7 +603,8 @@ def test_ecb_scalar_frame_round_trips_the_value(cmd: int, value: int, channel: i
         SYNTHETIC.static_key, cmd, value, SYNTHETIC.account_id, channel=channel
     )
     body = crypto.ecb_decrypt(SYNTHETIC.static_key, frame[16:])
-    off = 4 if cmd in messages.ECB_CHANNEL_VALUE_CMDS else 0
+    channel_first = cmd in messages.ECB_CHANNEL_VALUE_CMDS or cmd in messages.CHANNEL_VALUE_CMDS
+    off = 4 if channel_first else 0
     assert struct.unpack_from("<I", body, off)[0] == value
 
 

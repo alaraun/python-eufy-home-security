@@ -301,6 +301,48 @@ async def test_a_write_takes_the_view_mode_the_device_reports(
     assert last["payload"] == {"quality": 3, "mode": 12, "primary_view": 0}
 
 
+async def test_a_snooze_write_is_the_json_text_frame_on_the_device_s_channel(
+    paired_t8170: Station, fake: FakeStation
+) -> None:
+    """1271 goes out as the eufy app sends it: a JSON-text frame of its own type, the
+    device's channel in the header, no account id in the body."""
+    await paired_t8170.async_set_setting("device_snooze_time", 0, device_sn=_T8170_SN)
+    assert fake.json_frames_received[-1] == (1271, 1, b'{"snooze_time":1800}')
+    assert all(r["cmd"] != 1271 for r in fake.received)
+
+
+async def test_a_floodlight_s_light_writes_go_out_in_its_screen_s_frames(
+    fake: FakeStation,
+) -> None:
+    """A T8420 on channel 1: night vision as the eight-byte channel + value frame, the
+    schedule as a JSON-text frame on header channel 255 with the owner id, dusk to dawn
+    as a string frame whose number is the switch."""
+    serial = "T8420P0000000000"
+    st = await _child_station(fake, dataclasses.replace(CAMERA_CH1, device_sn=serial))
+    try:
+        await st.async_set_setting("nightvision_type", True, device_sn=serial)
+        assert fake.ecb_received[-1] == (1013, 1, 1)
+        assert fake.ecb_bodies[-1][:8] == bytes([1, 0, 0, 0, 1, 0, 0, 0])
+        entry = {"cross_day": 0, "enable": 1, "end_h": 8, "end_m": 0, "start_h": 7,
+                 "start_m": 0, "week": [{"day": 2}]}  # fmt: skip
+        value = {"schedules": {"loop": [entry]}}
+        await st.async_set_setting("ambient_light_schedule_config", value, device_sn=serial)
+        ftype, header, body = fake.json_frames_received[-1]
+        assert (ftype, header) == (1404, 0xFF)
+        assert json.loads(body) == {
+            "account_id": fake.account_id,
+            "schedules": {"loop": [{**entry, "interval": 0}]},
+        }
+        dusk = {"enable": 1, "lat": "1.5", "lng": "2.5"}
+        await st.async_set_setting(
+            "ambient_light_schedule_sunset_to_sunrise", dusk, device_sn=serial
+        )
+        assert fake.string_commands_received[-1] == (1414, 1, '{"lat": "1.5","lng": "2.5"}')
+        assert fake.string_numbers[-1] == 1
+    finally:
+        await st.async_close()
+
+
 async def test_a_write_reads_a_view_mode_the_session_lacks(
     paired_t8170: Station, fake: FakeStation
 ) -> None:

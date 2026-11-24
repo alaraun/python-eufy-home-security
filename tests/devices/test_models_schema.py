@@ -30,11 +30,14 @@ CODES: list[str] = INDEX["codes"]
 
 KINDS = {"enum", "bool", "range", "string", "other", "flags", "object"}
 WRITE_KEYS = ("write", "write_table")
-SCALAR_SLOTS = {"$v", "$v:str", "$v:int", "$channel", "$device_sn", "$station_sn"}
+SCALAR_SLOTS = {"$v", "$v:str", "$v:int", "$channel", "$device_sn", "$station_sn", "$account_id"}
 PARAM_SLOT = re.compile(r"\$param:\d+:(int|str)")
 CONTEXTS = {"standalone"} | {c.value for c in ConnectType if c is not ConnectType.SINGLE}
 OBJECT_SLOTS = {"$map", "$affine"}
-VALUE_OBJECT_SLOT = re.compile(r"\$v(\.[A-Za-z0-9_]+)*:(json|b64json)")  # an object value's forms
+VALUE_OBJECT_SLOT = re.compile(  # an object value's forms; text and switch of a member only
+    r"\$v(\.[A-Za-z0-9_]+)*:(json|b64json)|\$v(\.[A-Za-z0-9_]+)+:(str|flag)"
+)
+DERIVED_SLOTS = {"$format", "$jsontext", "$each", "$or"}  # built from an object value's slots
 RO_NOTES = {
     "no handler write path",
     "handler ignores the value",
@@ -51,6 +54,7 @@ OBJECT_NOTES = {
     "handler rejects some of the app's objects",
 }
 ROUND_TRIP_NOTE = "round trip does not return the written value"
+NOT_SENT_NOTE = "the eufy app sends nothing for this write"  # appended: no frame the app sends
 STATUS_NOTE = "status the eufy app only reads"  # ro with its read kept
 SETTING_KEYS = {
     "kind",
@@ -144,6 +148,24 @@ def _slots(x: Any) -> Iterator[tuple[str, Any]]:
         yield x, None
 
 
+def _derived_slots(name: str, arg: Any) -> Iterator[str]:
+    """The value slots a derived placeholder object renders from, nested ones included."""
+    if name == "$format":
+        parts = list(arg[1:])
+    elif name == "$jsontext":
+        parts = [arg]
+    elif name == "$or":
+        parts = [arg[0]]
+    else:  # $each: the list slot and the item template
+        parts = [arg[0], arg[1]]
+    for part in parts:
+        for inner, inner_arg in _slots(part):
+            if inner_arg is None:
+                yield inner
+            else:
+                yield from _derived_slots(inner, inner_arg)
+
+
 def _strings(x: Any) -> Iterator[str]:
     if isinstance(x, dict):
         for k, v in x.items():
@@ -229,14 +251,21 @@ def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> N
     else:
         assert present == [], present
         if s.get("note") != STATUS_NOTE:
-            assert len([p for p in parts if p not in OBJECT_NOTES]) <= 1, s["note"]
-            assert all(p in RO_NOTES | OBJECT_NOTES for p in parts), s["note"]
+            assert len([p for p in parts if p not in OBJECT_NOTES | {NOT_SENT_NOTE}]) <= 1
+            allowed_notes = RO_NOTES | OBJECT_NOTES | {NOT_SENT_NOTE, ROUND_TRIP_NOTE}
+            assert all(p in allowed_notes for p in parts), s["note"]
     templates = [s["write"]] if "write" in s else []
     templates += list(s.get("write_table", {}).values())
     for template in templates:
         for name, arg in _slots(template):
             if arg is None and VALUE_OBJECT_SLOT.fullmatch(name):
                 assert kind == "object", (ident, name)
+                continue
+            if name in DERIVED_SLOTS:
+                assert kind == "object", (ident, name)
+                inner = list(_derived_slots(name, arg))
+                assert inner, (ident, name)
+                assert all(VALUE_OBJECT_SLOT.fullmatch(n) or n in SCALAR_SLOTS for n in inner)
                 continue
             if arg is None:
                 assert name in SCALAR_SLOTS or PARAM_SLOT.fullmatch(name), name
@@ -252,7 +281,17 @@ def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> N
         assert s["default"] in s["values"]  # a select shows its default
     read = s.get("read")
     if read is not None:
-        assert {"param", "map"} <= set(read) <= {"param", "map", "view", "no_default", "fallback"}
+        assert {"param", "map"} <= set(read) <= {
+            "param", "map", "view", "no_default", "fallback", "members"
+        }  # fmt: skip
+        for member in (read.get("members") or {}).values():
+            assert kind == "object", ident
+            assert type(member["param"]) is int, ident
+            assert member in (
+                {"param": member["param"], "as": "flag"},
+                {"param": member["param"], "member": member.get("member")},
+            )
+            assert member.get("as") == "flag" or isinstance(member["member"], str), ident
         if "no_default" in read:
             assert read["no_default"] is True
             assert s["access"] == "ro"  # a status only the device reports

@@ -13,6 +13,8 @@ from typing import Any
 
 import pytest
 
+from .routing_input import write_routing
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -211,6 +213,7 @@ def test_a_run_reads_the_shown_file_into_every_task(
         app_version="1",
         **{name: data / f"{name}.json" for name in ("labels", "trees", "titles", "released")},
         shown=data / "shown.json",
+        routing=write_routing(data / "routing.json"),
         answers=None,
     )
     gen_models._generate_all(args, tmp_path, tmp_path / "out", quiet=True)

@@ -132,7 +132,7 @@ def test_a_multi_bit_flag_is_on_only_when_all_its_bits_are(data_root: Path) -> N
 def test_control_comes_from_the_file(
     data_root: Path, entry: dict[str, object], control: object
 ) -> None:
-    write = {"cmd": 1, "params": {"v": "$v"}} if entry["access"] == "rw" else None
+    write = {"cmd": 1230, "params": {"volume": "$v"}} if entry["access"] == "rw" else None
     full = {**entry, "read": None, **({"write": write} if write else {})}
     assert _load(data_root, {"k": full})["k"].control is control
 

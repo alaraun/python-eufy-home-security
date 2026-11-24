@@ -207,12 +207,7 @@ def _check(setting: Setting, entry: dict[str, Any], value: Value, ctx: Any) -> N
         assert wire.value == int(scalar)
     else:
         assert wire.value is None
-        if wire.path is WritePath.DIRECT and is_ecb_scalar(cmd) and body is not None:
-            # An ECB command id goes DIRECT only when its body lacks the command's field
-            # and is not one scalar.
-            assert ecb_field_value(cmd, body) is None
-            values = {json.dumps(v) for k, v in body.items() if k != "channel"}
-            assert len(values) > 1
+        assert not is_ecb_scalar(cmd) or wire.path is not WritePath.JSON_FRAME
     assert [list(u) for u in wire.updates] == [list(u) for u in _updates(want)]
     public = value if setting.bit is not None else setting.validate(value)
     assert _canon(setting._render_recipe(public, wctx)) == _canon(want)

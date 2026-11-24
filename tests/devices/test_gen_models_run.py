@@ -35,6 +35,14 @@ def _load(name: str) -> ModuleType:
 
 
 gen_models = _load("gen_models")
+# By path, not as a package module: the several-job scripts below load this file alone.
+_routing_spec = importlib.util.spec_from_file_location(
+    "routing_input", Path(__file__).with_name("routing_input.py")
+)
+assert _routing_spec is not None
+assert _routing_spec.loader is not None
+routing_input = importlib.util.module_from_spec(_routing_spec)
+_routing_spec.loader.exec_module(routing_input)
 PNS = ["T9ZZ1", "T9ZZ2", "T9ZZ3", "T9ZZ4", "T9ZZ5"]  # product codes named nowhere
 ORDER_GATE: Path | None = None  # set: the first model finishes only after the last one
 
@@ -92,6 +100,7 @@ def _args(tmp_path: Path, jobs: int) -> argparse.Namespace:
         titles=data / "titles.json",
         shown=data / "shown.json",
         released=data / "released.json",
+        routing=routing_input.write_routing(data / "routing.json"),
         answers=None,
     )
 

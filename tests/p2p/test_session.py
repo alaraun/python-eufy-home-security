@@ -19,7 +19,7 @@ import pytest
 import eufy_home_security.p2p.session as session_mod
 import eufy_home_security.p2p.session as session_module
 import eufy_home_security.p2p.session.media_stream as media_stream_module
-from eufy_home_security._logging import set_secret_logging
+from eufy_home_security._logging import set_secret_logging, set_wire_logging
 from eufy_home_security.devices.recipes import (
     goto_preset,
     query_preset_positions,
@@ -1103,6 +1103,59 @@ async def test_an_rsa_session_sends_ecb_scalars_and_reads_results_under_any_encr
     assert station.ecb_received == [(1250, 0, 30), (1253, 255, 1)]
     assert info.value.code == -104  # read in clear
     assert (stats.receipts_by_code, stats.dropped_undecodable) == ({"0": 1, "-104": 1}, 0)
+
+
+async def test_a_channel_value_command_carries_no_account(station: FakeStation) -> None:
+    """1013 goes out like an ECB scalar with an eight-byte body ``[channel][value]``."""
+    session = make_session(station, Provider(station))
+    try:
+        await session.async_send_ecb_scalar(1013, 1, channel=3)
+    finally:
+        await session.async_close()
+    assert station.ecb_received == [(1013, 3, 1)]
+    assert station.ecb_bodies[-1] == struct.pack("<II", 3, 1) + bytes(8)
+
+
+async def test_a_string_command_carries_its_number_and_logs_no_coordinates(
+    station: FakeStation, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="eufy_home_security")
+    set_wire_logging(True)
+    session = make_session(station, Provider(station))
+    try:
+        await session.async_send_string_command(
+            1414, '{"lat": "59.437","lng": "24.7536"}', channel=0, number=1
+        )
+        await session.async_send_json_frame(
+            1404, lambda account: json.dumps({"account_id": account}).encode()
+        )
+    finally:
+        await session.async_close()
+        set_wire_logging(False)
+    text = '{"lat": "59.437","lng": "24.7536"}'
+    assert station.string_commands_received == [(1414, 0, text)]
+    assert station.string_numbers == [1]
+    assert station.string_dev_types == [0xFF]
+    assert "tx string cmd 1414 ch0 number 1" in caplog.text
+    assert "tx JSON frame 1404 ch0" in caplog.text
+    for secret in ("59.437", "24.7536", station.account_id):
+        assert secret not in caplog.text
+
+
+@pytest.mark.parametrize(("header", "sent"), [(None, 0), (3, 3), (0xFF, 0xFF)])
+async def test_a_json_frame_names_the_header_channel_it_is_given(
+    station: FakeStation, header: int | None, sent: int
+) -> None:
+    session = make_session(station, Provider(station))
+    kwargs = {} if header is None else {"header_channel": header}
+    try:
+        written = await session.async_send_json_frame(
+            1271, lambda _account: b'{"snooze_time":1800}', **kwargs
+        )
+    finally:
+        await session.async_close()
+    assert written
+    assert station.json_frames_received == [(1271, sent, b'{"snooze_time":1800}')]
 
 
 async def test_a_string_command_is_stored_on_its_channel_and_a_foreign_one_refused(
