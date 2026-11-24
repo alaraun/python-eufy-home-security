@@ -225,8 +225,9 @@ screens the app draws natively. For each `rw` template, in each context:
 A bare JSON-text write's body is the handler's params as JSON text. The handler fills
 some members from the account the app's message names (the snooze's `account_id`); the
 generator drives such a write once more naming an account, and each member that takes
-it becomes `"$account_id"`, in the handler's member order. The other frame forms carry
-the owner's id outside the body (or none), so their templates are left as they are.
+it becomes `"$account_id"`, in the handler's member order. A native screen's own form
+is sent as the screen builds it, and the other frame forms carry the owner's id outside
+the body (or none), so their templates are left as they are.
 
 The run fails when the library's frame-form tables (`p2p.messages`) or its per-command
 value fields (`ECB_VALUE_FIELDS`) differ from the input's.

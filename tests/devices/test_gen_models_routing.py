@@ -206,7 +206,8 @@ def _settings() -> dict[str, Any]:
 def test_apply_makes_a_write_the_app_does_not_send_read_only() -> None:
     settings, counts = _settings(), dict[str, int]()
     before = copy.deepcopy(settings)
-    routing.apply(settings, ROUTES, native_screens=True, counts=counts)
+    screens = routing.apply(settings, ROUTES, native_screens=True, counts=counts)
+    assert screens == {"screen": {None}, "screen_table": {"0"}}  # the screens' templates
     assert settings["sent"] == before["sent"]
     assert settings["unsent"] == {
         "access": "ro",
@@ -232,7 +233,7 @@ def test_apply_makes_a_write_the_app_does_not_send_read_only() -> None:
 
 def test_apply_on_a_model_the_rn_bundle_draws_sends_no_screen_form() -> None:
     settings, counts = _settings(), dict[str, int]()
-    routing.apply(settings, ROUTES, native_screens=False, counts=counts)
+    assert routing.apply(settings, ROUTES, native_screens=False, counts=counts) == {}
     assert settings["screen"]["access"] == "ro"
     assert settings["screen_table"]["access"] == "ro"
     assert counts == {f"ro:{routing.NOT_SENT_NOTE}": 6}

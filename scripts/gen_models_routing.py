@@ -188,11 +188,15 @@ def _adds_owner(routing: Routing, cmd: int) -> bool:
 
 def apply(
     settings: dict[str, Any], routing: Routing, *, native_screens: bool, counts: dict[str, int]
-) -> None:
+) -> dict[str, frozenset[str | None]]:
     """Route every write of a model's settings in one context: a template the app sends
     another way becomes that way, a setting with a template the app does not send becomes
-    read-only with :data:`NOT_SENT_NOTE` or :data:`SCREEN_OBJECT_NOTE` (its read kept)."""
-    for entry in settings.values():
+    read-only with :data:`NOT_SENT_NOTE` or :data:`SCREEN_OBJECT_NOTE` (its read kept).
+
+    Returns the templates a native screen sends, per setting: their ``write_table`` keys,
+    None for the ``write``."""
+    screens: dict[str, frozenset[str | None]] = {}
+    for ident, entry in settings.items():
         if entry.get("access") != "rw":
             continue
         table = entry.get("write_table") or {}
@@ -218,5 +222,10 @@ def apply(
             entry["write"] = write.template
         for key, r in routes.items():
             table[key] = r.template
-        if write.screen or any(r.screen for r in routes.values()):
+        screen: frozenset[str | None] = frozenset(k for k, r in routes.items() if r.screen)
+        if write.screen:
+            screen |= {None}
+        if screen:
+            screens[ident] = screen
             counts["routing:screen"] = counts.get("routing:screen", 0) + 1
+    return screens

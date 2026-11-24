@@ -43,7 +43,9 @@ PN = "T9ZZ7"  # a product code named nowhere in the library
 # {snooze_time: end, startTime: start} as the duration end - start. chirp: a scalar that
 # only a native screen sends (1408, no request case). ring: 1013 with the owner id, a frame
 # that carries none. doze (1961) reads its stored end against the clock, so the read depends
-# on the absolute start; nap (1962) reads no 30 min choice from its stored span.
+# on the absolute start; nap (1962) reads no 30 min choice from its stored span. glow: 1963,
+# which only a native screen sends, in its own form, though the handler's params name the
+# owner id.
 HANDLER = """
 function parse(s) { return JSON.parse(s.slice(0, s.lastIndexOf("EOF;"))); }
 const DUR = { "0": 1800, "1": 3600, "-1": 0 };
@@ -67,6 +69,9 @@ module.exports.controlDevice = function (s) {
     const d = DUR[String(v)], name = ident + "_time";
     p2p = { cmd, params: { [name]: d },
             update: { needUpdate: true, cmd, paramValue: b64('{"' + name + '":' + d + "}") } };
+  } else if (ident === "glow") {
+    p2p = { cmd: 1963, params: { on: v ? 1 : 0, user_id: m.user_id },
+            update: { needUpdate: true, cmd: 1963, paramValue: v ? "1" : "0" } };
   } else if (ident === "chirp") {
     p2p = { cmd: 1408, params: { on: v ? 1 : 0 },
             update: { needUpdate: true, cmd: 1408, paramValue: v ? "1" : "0" } };
@@ -108,6 +113,7 @@ module.exports.deviceStatus = function (s) {
         out[name] = k !== undefined ? Number(k) : -1;
       } catch (e) { out[name] = -1; }
     }
+    if (p.param_type === 1963) out.glow = p.param_value === "1";
     if (p.param_type === 1408) out.chirp = p.param_value === "1";
     if (p.param_type === 1013) out.ring = Number(p.param_value);
   }
@@ -132,12 +138,16 @@ def _duration_enum(ident: str) -> dict[str, Any]:
 PROPS = [
     *(_duration_enum(ident) for ident in ("snooze", "pause", "doze", "nap")),
     {"identifier": "chirp", "access_mode": "RW", "data_type": {"type": "bool"}},
+    {"identifier": "glow", "access_mode": "RW", "data_type": {"type": "bool"}},
     {
         "identifier": "ring",
         "access_mode": "RW",
         "data_type": {"type": "int", "specs": {"min": "0", "max": "2", "step": "1"}},
     },
 ]
+
+
+GLOW_SCREEN = {"state": "$v:flag", "account_id": "$account_id"}
 
 
 def _routes() -> Any:
@@ -148,7 +158,8 @@ def _routes() -> Any:
         "1961": {"msgType": 6, "reader": "json"},
         "1962": {"msgType": 6, "reader": "json"},
     }
-    doc["native"]["forms"]["json_text"]["cmds"] += [1961, 1962]
+    doc["native"]["forms"]["json_text"]["cmds"] += [1961, 1962, 1963]
+    doc["screens"]["forms"] = {"1963": {"form": "json_text", "params": GLOW_SCREEN}}
     doc["screens"]["senders"] = {"1408": [{"msgType": 10}]}
     return routing.parse(doc)
 
@@ -188,6 +199,13 @@ def test_a_json_text_frame_carries_the_owner_id_the_handler_sets(native: dict[st
     assert list(write["params"]) == ["account_id", "snooze_time"]
     assert write["params"]["account_id"] == model_settings.ACCOUNT_SLOT
     assert "user" not in json.dumps(native["ring"]["write"])
+
+
+def test_a_screen_s_json_text_form_keeps_its_own_members(native: dict[str, Any]) -> None:
+    """A write the native screen sends in its own JSON-text form keeps that form's members
+    and order, even when the handler's params name the owner id elsewhere."""
+    assert native["glow"]["access"] == "rw"
+    assert list(native["glow"]["write"]["params"].items()) == list(GLOW_SCREEN.items())
 
 
 def _stored(end: int, start: int) -> str:

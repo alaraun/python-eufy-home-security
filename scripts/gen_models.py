@@ -1760,6 +1760,7 @@ def owner_members(
     *,
     props: Sequence[Mapping[str, Any]],
     routes: Any,
+    screens: Mapping[str, Collection[str | None]],
     context: codec.Context,
     counts: dict[str, int],
 ) -> None:
@@ -1767,12 +1768,13 @@ def owner_members(
     the handler builds them: a member the handler fills from the user id the app's message
     names becomes ``$account_id``, in the handler's member order. The other runs drive the
     handler without a user id, so such a member is missing from their templates; the other
-    frame forms carry the account outside the body."""
+    frame forms carry the account outside the body. A native screen's own form (``screens``,
+    from ``routing.apply``) is sent as the screen builds it and is left as it is."""
     domains = {p["identifier"]: codec.domain(p)[1] for p in props}
-    asks: list[str] = []
+    asks: list[list[dict[str, Any]]] = []
     requests: list[dict[str, Any]] = []
     for ident, entry in settings.items():
-        templates = _json_text_templates(entry, routes)
+        templates = _json_text_templates(entry, routes, screens.get(ident, ()))
         if not templates or not domains.get(ident):
             continue
         base = {
@@ -1782,9 +1784,9 @@ def owner_members(
             "device": context.device(product_code),
         }
         requests += [base, {**base, "user_id": OWNER_PROBE}]
-        asks.append(ident)
+        asks.append(templates)
     replies = run_driver(product_code, handler, requests) if requests else []
-    for n, ident in enumerate(asks):
+    for n, templates in enumerate(asks):
         without, with_owner = (p2p(r) or {} for r in replies[2 * n : 2 * n + 2])
         plain, named = without.get("params"), with_owner.get("params")
         if not isinstance(plain, dict) or not isinstance(named, dict):
@@ -1792,7 +1794,7 @@ def owner_members(
         owner = [k for k, v in named.items() if v == OWNER_PROBE and plain.get(k) != OWNER_PROBE]
         if not owner:
             continue
-        for template in _json_text_templates(settings[ident], routes):
+        for template in templates:
             params = template["params"]
             order = [*named, *(k for k in params if k not in named)]
             template["params"] = {
@@ -1803,16 +1805,20 @@ def owner_members(
         _count(counts, "routing:owner id")
 
 
-def _json_text_templates(entry: Mapping[str, Any], routes: Any) -> list[dict[str, Any]]:
+def _json_text_templates(
+    entry: Mapping[str, Any], routes: Any, screen: Collection[str | None]
+) -> list[dict[str, Any]]:
     """The write templates of a writable setting that go out as a bare JSON-text frame
-    with an object body."""
+    with an object body, except those a native screen sends (``screen``: their
+    ``write_table`` keys, None for the ``write``)."""
     if entry.get("access") != "rw":
         return []
-    found = [entry.get("write"), *(entry.get("write_table") or {}).values()]
+    found = [(None, entry.get("write")), *(entry.get("write_table") or {}).items()]
     return [
         t
-        for t in found
-        if isinstance(t, dict)
+        for key, t in found
+        if key not in screen
+        and isinstance(t, dict)
         and "subCmd" not in t
         and isinstance(t.get("params"), dict)
         and isinstance(t.get("cmd"), int)
@@ -2172,13 +2178,14 @@ def build_context(  # noqa: C901
     )
     if routes is not None:
         native = tree is not None and tree.get("settings_ui") != joiner.RN_SETTINGS
-        routing.apply(settings, routes, native_screens=native, counts=counts)
+        screens = routing.apply(settings, routes, native_screens=native, counts=counts)
         owner_members(
             product_code,
             handler,
             settings,
             props=props,
             routes=routes,
+            screens=screens,
             context=context,
             counts=counts,
         )
