@@ -846,7 +846,8 @@
   },
   "notification_alarm_delay_value": {
    "access": "rw",
-   "kind": "other",
+   "control": "switch",
+   "kind": "bool",
    "read": {
     "map": null,
     "param": 1282

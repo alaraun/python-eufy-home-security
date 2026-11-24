@@ -1870,7 +1870,7 @@ rw 18 / ro 77
 | `is_support_webrtc` | bool | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
 | `model_config` | string | - | - | no | - | - |
-| `notification_alarm_delay_value` | other | - | - | yes | - | - |
+| `notification_alarm_delay_value` | bool | - | - | yes | switch | - |
 | `notification_ignore_switch` | bool | - | - | yes | switch | - |
 | `nvr_get_device_volume` | string | - | - | no | - | - |
 | `nvr_motion_detection` | string | - | - | no | - | - |
@@ -2133,7 +2133,7 @@ rw 8 / ro 38
 | `is_device_upgrade` | string | - | - | no | - | - |
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
-| `notification_alarm_delay_value` | other | - | - | yes | - | - |
+| `notification_alarm_delay_value` | bool | - | - | yes | switch | - |
 | `ordered_trigger_actions` | other | - | - | no | - | - |
 | `prompt_volume_value` | range | 1..26 step 1 | - | yes | slider | - |
 | `sd_card_repair_status` | bool | - | - | no | - | - |
@@ -2186,7 +2186,7 @@ rw 8 / ro 38
 | `is_device_upgrade` | string | - | - | no | - | - |
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
-| `notification_alarm_delay_value` | other | - | - | yes | - | - |
+| `notification_alarm_delay_value` | bool | - | - | yes | switch | - |
 | `ordered_trigger_actions` | other | - | - | no | - | - |
 | `prompt_volume_value` | range | 1..26 step 1 | - | yes | slider | - |
 | `sd_card_repair_status` | bool | - | - | no | - | - |
@@ -2242,7 +2242,7 @@ rw 11 / ro 39
 | `is_device_upgrade` | string | - | - | no | - | - |
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
-| `notification_alarm_delay_value` | other | - | - | yes | - | - |
+| `notification_alarm_delay_value` | bool | - | - | yes | switch | - |
 | `ordered_trigger_actions` | other | - | - | no | - | - |
 | `prompt_volume_value` | range | 1..26 step 1 | - | yes | slider | - |
 | `sd_card_repair_status` | bool | - | - | no | - | - |
@@ -2291,7 +2291,7 @@ rw 6 / ro 32
 | `is_device_upgrade` | bool | - | - | no | - | - |
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
-| `notification_alarm_delay_value` | other | - | - | yes | - | - |
+| `notification_alarm_delay_value` | bool | - | - | yes | switch | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `switching_notification` | flags | any of 0, 1, 2, 3 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing, 3=Switch modes from Keypad |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
@@ -2480,7 +2480,7 @@ rw 13 / ro 59
 | `is_support_familiar_face` | bool | - | - | no | - | - |
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
-| `notification_alarm_delay_value` | other | - | - | yes | - | - |
+| `notification_alarm_delay_value` | bool | - | - | yes | switch | - |
 | `notification_ignore_switch` | bool | - | - | yes | switch | - |
 | `ordered_trigger_actions` | other | - | - | no | - | - |
 | `power_source_mode` | other | - | - | no | - | - |
@@ -2665,7 +2665,7 @@ rw 13 / ro 61
 | `is_support_familiar_face` | bool | - | - | no | - | - |
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
-| `notification_alarm_delay_value` | other | - | - | yes | - | - |
+| `notification_alarm_delay_value` | bool | - | - | yes | switch | - |
 | `notification_ignore_switch` | bool | - | - | yes | switch | - |
 | `ordered_trigger_actions` | other | - | - | no | - | - |
 | `p2p_encryption_type` | other | - | - | no | - | - |
@@ -2765,7 +2765,7 @@ rw 20 / ro 80
 | `lcd_screen_config` | string | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
 | `model_config` | string | - | - | no | - | - |
-| `notification_alarm_delay_value` | other | - | - | yes | - | - |
+| `notification_alarm_delay_value` | bool | - | - | yes | switch | - |
 | `notification_ignore_switch` | bool | - | - | yes | switch | - |
 | `nvr_get_device_volume` | string | - | - | no | - | - |
 | `nvr_motion_detection` | string | - | - | no | - | - |
@@ -14987,7 +14987,7 @@ rw 19 / ro 92
 | `is_support_webrtc` | bool | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
 | `model_config` | string | - | - | no | - | - |
-| `notification_alarm_delay_value` | other | - | - | yes | - | - |
+| `notification_alarm_delay_value` | bool | - | - | yes | switch | - |
 | `notification_ignore_switch` | bool | - | - | yes | switch | - |
 | `nvr_get_device_volume` | string | - | - | no | - | - |
 | `nvr_motion_detection` | string | - | - | no | - | - |
@@ -15544,7 +15544,7 @@ rw 15 / ro 89
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `is_support_webrtc` | bool | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
-| `notification_alarm_delay_value` | other | - | - | yes | - | - |
+| `notification_alarm_delay_value` | bool | - | - | yes | switch | - |
 | `notification_ignore_switch` | bool | - | - | yes | switch | - |
 | `nvr_get_device_volume` | string | - | - | no | - | - |
 | `power_charge_mode` | enum | 0, 1 | - | no | - | 0=Battery, 1=External Solar Panel |

@@ -1748,7 +1748,7 @@
     "map": null,
     "param": 1402
    },
-   "role": "setting",
+   "role": "status",
    "section": "picture",
    "shown": "page",
    "write": {
