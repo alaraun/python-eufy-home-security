@@ -1142,6 +1142,31 @@ async def test_a_string_command_carries_its_number_and_logs_no_coordinates(
         assert secret not in caplog.text
 
 
+@pytest.mark.parametrize("rsa", [False, True], ids=["gcm", "session-ecb"])
+async def test_a_string_body_is_hexdumped_masked_in_the_wire_log(
+    station: FakeStation, caplog: pytest.LogCaptureFixture, rsa: bool, short_settle: None
+) -> None:
+    """The frame line of a string + int body (not JSON) masks the coordinates and the
+    owner account id it carries, in text and in hex, under either session cipher."""
+    caplog.set_level(logging.DEBUG, logger="eufy_home_security")
+    set_wire_logging(True)
+    session = make_rsa_session(station) if rsa else make_session(station, Provider(station))
+    try:
+        await session.async_send_string_command(
+            1414, '{"lat": "59.437","lng": "24.7536"}', channel=0, number=1, timeout=1.0
+        )
+        await session.async_send_string_command(1215, "JST-9|1.1307", channel=0, timeout=1.0)
+    finally:
+        await session.async_close()
+        set_wire_logging(False)
+    frame_lines = [r.getMessage() for r in caplog.records if "tx " in r.getMessage()]
+    assert any("frame 0x0586" in line for line in frame_lines)
+    assert any("frame 0x04bf" in line for line in frame_lines)
+    for secret in ("59.437", "24.7536", station.account_id):
+        assert secret not in caplog.text
+        assert secret.encode().hex() not in caplog.text
+
+
 @pytest.mark.parametrize(("header", "sent"), [(None, 0), (3, 3), (0xFF, 0xFF)])
 async def test_a_json_frame_names_the_header_channel_it_is_given(
     station: FakeStation, header: int | None, sent: int

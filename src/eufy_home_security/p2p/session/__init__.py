@@ -53,6 +53,7 @@ from typing import Any, Protocol, cast
 
 from ..._logging import (
     Address,
+    HexDump,
     LogThrottle,
     Payload,
     Secret,
@@ -3928,7 +3929,7 @@ class StationSession:
                 frame_type,
                 seq,
                 Secret(nonce),
-                plaintext.hex() if obj is None else Payload(obj),
+                HexDump(plaintext) if obj is None else Payload(obj),
             )
         return self._require_transport().send_drw(0, frame)
 
@@ -3951,7 +3952,7 @@ class StationSession:
                 self._log_name,
                 frame_type,
                 seq,
-                plaintext.hex() if obj is None else Payload(obj),
+                HexDump(plaintext) if obj is None else Payload(obj),
             )
         return self._send_request(frame_type, frame, self._require_transport())
 
