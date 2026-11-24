@@ -333,7 +333,8 @@ tested on hardware unless marked):
 - **Snooze** (`device_snooze_time`; 1271): JSON text of the handler's body, the owner id
   first, the device's channel in the header. Body for the 30-minute choice:
   `{"account_id":"<owner id>","snooze_time":1800}`; `snooze_time` 0 ends a snooze. The
-  frame is **[verified]** on a HomeBase 3 with a T8160 and a T8170 (receipt 0, applied;
+  frame and the library's `set` and `get` of the setting are **[verified]** on a HomeBase 3
+  with a T8160 and a T8170 (receipt 0, applied, read back as the chosen duration;
   [hardware-verification.md](../reference/hardware-verification.md)): without the owner
   id the station refuses it (−104), with header channel 255 too (−106). While a snooze
   runs, the device reports 1271 as base64 JSON `{"snooze_time": <end>, "startTime":
