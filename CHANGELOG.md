@@ -4,6 +4,28 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.18](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.17...v0.4.18) (2026-11-24)
+
+
+### Features
+
+* **devices:** app settings layout for every cached product ([#218](https://github.com/alaraun/python-eufy-home-security/issues/218)) ([1c82948](https://github.com/alaraun/python-eufy-home-security/commit/1c82948201c1d7e379f058cbd6912b7e585999d4))
+* **devices:** light settings as the JSON objects the device stores ([#222](https://github.com/alaraun/python-eufy-home-security/issues/222)) ([bb1086e](https://github.com/alaraun/python-eufy-home-security/commit/bb1086e6f9e5c66cccfe1c1091ffaa737eb8a331))
+* **devices:** probe every property's write, whatever its access mode ([#221](https://github.com/alaraun/python-eufy-home-security/issues/221)) ([68930b6](https://github.com/alaraun/python-eufy-home-security/commit/68930b6f9aa7605263d1d447feb2e2442c58091f))
+* **devices:** refresh every model from the current thing descriptions ([#220](https://github.com/alaraun/python-eufy-home-security/issues/220)) ([7089eeb](https://github.com/alaraun/python-eufy-home-security/commit/7089eeb80ef2497917d02cc93f1982dd88275cac))
+* **devices:** regenerate model data from the current eufy app build ([#216](https://github.com/alaraun/python-eufy-home-security/issues/216)) ([7ce8613](https://github.com/alaraun/python-eufy-home-security/commit/7ce861351449fba641dc835187670b351ed541ce))
+* **devices:** send each settings write in the eufy app's frame form ([#223](https://github.com/alaraun/python-eufy-home-security/issues/223)) ([7742cb6](https://github.com/alaraun/python-eufy-home-security/commit/7742cb63592606947f5094b54c2083d55b95b9f2))
+* **devices:** smoke sensor status as a read-only flags setting with member meanings ([issue 204](https://github.com/alaraun/homeassistant-eufy-home-security/issues/204)) ([#226](https://github.com/alaraun/python-eufy-home-security/issues/226)) ([9b7899d](https://github.com/alaraun/python-eufy-home-security/commit/9b7899d9622e9d2f87e5bd144dfb0e3196335931))
+* **devices:** write the floodlight motion-light controls and send the light timer in seconds ([#221](https://github.com/alaraun/python-eufy-home-security/issues/221)) ([68930b6](https://github.com/alaraun/python-eufy-home-security/commit/68930b6f9aa7605263d1d447feb2e2442c58091f))
+* redact_location and LOCATION_KEYS, the house-location keys as public API ([#227](https://github.com/alaraun/python-eufy-home-security/issues/227)) ([4877390](https://github.com/alaraun/python-eufy-home-security/commit/48773908660eda4661bfb2d9774e1d1274bfaaf9))
+* **station:** expose per-camera detected and recorded activity events by [@screamerbg](https://github.com/screamerbg) in [#182](https://github.com/alaraun/python-eufy-home-security/issues/182) ([58e1a34](https://github.com/alaraun/python-eufy-home-security/commit/58e1a3472764f070071cbef855d9fb24ad7ccfc7))
+
+
+### Bug Fixes
+
+* **devices:** give the HomeBase alarm delay the eufy app's switch ([#224](https://github.com/alaraun/python-eufy-home-security/issues/224)) ([4b5a9ca](https://github.com/alaraun/python-eufy-home-security/commit/4b5a9ca1506ee4c8a37ab65f4fe6f9d727d0a0e3))
+* **push:** read a video doorbell's event from the doorbell body ([issue 205](https://github.com/alaraun/homeassistant-eufy-home-security/issues/205)) ([#225](https://github.com/alaraun/python-eufy-home-security/issues/225)) ([83e5c33](https://github.com/alaraun/python-eufy-home-security/commit/83e5c336855db5b8960c2c33a2eddf67d2e7a1d4))
+
 ## [0.4.17](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.16...v0.4.17) (2026-11-21)
 
 
