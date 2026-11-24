@@ -392,8 +392,20 @@ def test_a_screen_switch_writes_its_two_values(rule: dict[str, Any], values: Any
         {"x": {**INT_SWITCH, "on": "1"}},
         {"x": {**INT_SWITCH, "off": None}},
         {"x": {**INT_SWITCH, "type": "Bool"}},
+        {"x": {**INT_SWITCH, "on": True, "off": False}},
     ],
-    ids=["list", "text", "no-source", "text-sources", "type", "same", "int-text", "none", "bool"],
+    ids=[
+        "list",
+        "text",
+        "no-source",
+        "text-sources",
+        "type",
+        "same",
+        "int-text",
+        "none",
+        "bool",
+        "int-bools",
+    ],
 )
 def test_a_screen_switch_entry_needs_two_values_of_its_type(rules: Any) -> None:
     with pytest.raises(join.GeneratorError, match="screen switch"):
