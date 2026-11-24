@@ -137,9 +137,12 @@ def _ms(value: object) -> int | None:
 
 
 def _pic_url(value: object) -> str | None:
-    """The picture URL of a ``pic_url`` field, a comma-separated list: its first item."""
+    """The picture URL of a ``pic_url`` field, read as a comma-separated list: its first
+    non-blank item."""
     text = coerce_str(value)
-    return coerce_str(text.split(",", 1)[0]) if text is not None else None
+    if text is None:
+        return None
+    return next((url for item in text.split(",") if (url := coerce_str(item))), None)
 
 
 def is_security_push(data: Mapping[str, Any]) -> bool:

@@ -514,6 +514,8 @@ def test_a_plain_json_payload_decodes() -> None:
     [
         ("https://example/1.jpg,https://example/2.jpg", "https://example/1.jpg"),
         ("https://example/1.jpg", "https://example/1.jpg"),
+        (",https://example/2.jpg", "https://example/2.jpg"),
+        (" , ", None),
         ("", None),
     ],
 )
