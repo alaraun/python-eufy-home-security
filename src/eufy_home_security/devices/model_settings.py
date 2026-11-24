@@ -198,14 +198,16 @@ class SettingRole(StrEnum):
     """What a setting is to the user, from where the eufy app shows it."""
 
     SETTING = "setting"
-    """A control: the library writes it, or the app offers it as one (``writable`` then
-    says whether the library can write it)."""
+    """A control: the library writes it through a ``control``, or the app offers it as one
+    (``writable`` then says whether the library can write it)."""
     STATUS = "status"
-    """A read-only state the app shows: on the device card or home page (an entry
-    sensor's door state, tamper, low battery) or as a row of a settings page."""
+    """A state the app shows and offers no control for: on the device card or home page
+    (an entry sensor's door state, tamper, low battery) or as a row of a settings page.
+    Read-only, or ``writable`` without a ``control`` (a write no app control offers)."""
     DIAGNOSTIC = "diagnostic"
-    """A read-only value the app shows nowhere (capability data, configuration JSON), or
-    one the library already reports as a device state field (battery, online, counters)."""
+    """A value the app shows nowhere and offers no control for (capability data,
+    configuration JSON), or one the library already reports as a device state field
+    (battery, online, counters)."""
 
 
 class SettingShown(StrEnum):

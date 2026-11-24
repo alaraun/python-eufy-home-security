@@ -342,8 +342,8 @@ def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> N
         _check_variant(ident, rule, settings)
     assert s["section"] in SECTIONS, ident
     assert s["role"] in ROLES, ident
-    if s["access"] == "rw":
-        assert s["role"] == "setting", ident  # a setting the library writes is a control
+    if s["access"] == "rw" and "control" in s:
+        assert s["role"] == "setting", ident  # a setting the library shows as a control
     assert s.get("shown", "page") in PLACES, ident
     if s["role"] == "status":
         assert "shown" in s, ident  # a status is one the app shows

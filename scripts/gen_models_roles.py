@@ -7,7 +7,9 @@ app lists it as a status it only reads; absent otherwise. It does not depend on 
 
 The first role rule that applies decides, from the eufy app's own data:
 
-1. ``setting``: the library writes it in some context (``access`` ``rw``).
+1. ``setting``: the library writes it in some context (``access`` ``rw``) and either shows
+   it with a ``control`` or the thing description declares it writable. A write proven only
+   through the handler, with no control to show it, leaves the role to the rules below.
 2. ``diagnostic``: it is read from, or the handler fills it from, a parameter whose
    value the library already reports
    (:data:`~eufy_home_security.devices.param_info.STATE_PARAM_INFO`), so a consumer has
@@ -108,7 +110,8 @@ def role_of(
     reports; ``located``: identifier -> the one parameter the handler fills it from,
     whether or not the setting reads it.
     """
-    if any(form.get("access") == "rw" for form in _forms(entry)):
+    written = any(form.get("access") == "rw" for form in _forms(entry))
+    if written and (ident in td_writable or any(form.get("control") for form in _forms(entry))):
         return SETTING, "written"
     params = _read_params(entry)
     if ident in located:

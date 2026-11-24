@@ -114,12 +114,32 @@ def test_each_rule_gives_its_role_and_place() -> None:
 
 
 def test_a_setting_written_in_one_context_only_is_a_setting() -> None:
-    entry = _entry(contexts=[{"names": ["standalone"], "entry": {"access": "rw"}}])
+    entry = _entry(
+        contexts=[{"names": ["standalone"], "entry": {"access": "rw", "control": "switch"}}]
+    )
     assert _role("ability", entry) == ("setting", "written")
 
 
 def test_a_setting_written_with_a_state_parameter_stays_a_setting() -> None:
-    assert _role("battery", _entry("rw", 1101)) == ("setting", "written")
+    assert _role("battery", _entry("rw", 1101, control="slider")) == ("setting", "written")
+
+
+@pytest.mark.parametrize(
+    ("ident", "entry", "role"),
+    [
+        ("door", _entry("rw", 1550), ("status", "shown")),  # the read-only rules decide
+        ("ability", _entry("rw", 1103), ("diagnostic", "not shown")),
+        ("battery", _entry("rw", 1101), ("diagnostic", "device state")),
+        ("door", _entry("rw", 1550, control="switch"), ("setting", "written")),
+        ("volume", _entry("rw", 1400), ("setting", "written")),  # the TD declares it writable
+    ],
+    ids=["shown", "not-shown", "state", "control", "td-writable"],
+)
+def test_an_undeclared_write_without_a_control_keeps_its_read_only_role(
+    ident: str, entry: dict[str, Any], role: tuple[str, str]
+) -> None:
+    """A proven write the TD does not declare, with no control to show it, is no setting."""
+    assert _role(ident, entry, shown={"door": "page"}) == role
 
 
 def test_a_state_parameter_read_in_another_context_is_a_device_state_field() -> None:

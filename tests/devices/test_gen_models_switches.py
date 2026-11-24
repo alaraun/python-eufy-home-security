@@ -333,6 +333,18 @@ def test_a_bare_int_the_apps_screen_switches_is_a_switch(tmp_path: Path) -> None
     assert entry["read"] == {"param": 1282, "map": None}  # "1" / "0" read as the bool
 
 
+@pytest.mark.timeout(120)
+def test_without_the_screens_switch_a_bare_int_keeps_no_control(tmp_path: Path) -> None:
+    """The write is still proven, but no control: the role is the one a read gives it."""
+    doc, _ = gen_models.generate(
+        PN, _int_cache(tmp_path, BARE_INT_TD), titles={}, shown={"alarm_delay": "page"}
+    )
+    entry = doc["settings"]["alarm_delay"]
+    assert (entry["kind"], entry["access"]) == ("other", "rw")
+    assert "control" not in entry
+    assert entry["role"] == "status"
+
+
 ENUM_TD = {
     "type": "enum",
     "specs": {"eunmList": [{"value": "0", "desc": "Off"}, {"value": "1", "desc": "On"}]},

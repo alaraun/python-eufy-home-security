@@ -1053,7 +1053,8 @@ A closed session (`async_close`) never reconnects on its own — build a new
     from per-key rules. A read-only setting (`writable` False) gets an entity only when
     it is `readable`: an unreadable one would always be unknown, so it gets none (most
     statuses: the library has no read for them yet, and some only steer the app's own
-    pages).
+    pages). A `STATUS` or `DIAGNOSTIC` can be `writable` with no `control` (a write the
+    library proves that no app control offers): map it by its role, as a read-only one.
 
     | `role` | `shown` | entity |
     |---|---|---|
