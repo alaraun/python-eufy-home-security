@@ -1059,10 +1059,10 @@ A closed session (`async_close`) never reconnects on its own — build a new
     Never make a structured value an entity's state: a setting with `structured` True
     (a JSON object or array, or its text, as the device reports it, such as
     `arming_get_alarm_*_mode`) is never a state, whatever its role or control (a writable
-    `OBJECT`, such as a light's combined motion-light settings, has control `OBJECT`:
-    still no entity of its own). Put it into an attribute of a related entity, or create
-    no entity for it; it is known before the first read. A state is also limited to 255
-    characters.
+    light schedule keeps control `TEXT`: still no text entity; an `OBJECT`, such as a
+    light's combined motion-light settings, has control `OBJECT`: still no entity of its
+    own). Put it into an attribute of a related entity, or create no entity for it; it is
+    known before the first read. A state is also limited to 255 characters.
   - `applies_when`: see [`applies_when`](#applies_when).
   - Values are the vendor's: int for an enum or a range (a few enums have str values),
     bool for a bool, str for a string, a `dict` (the JSON object the device stores) for
@@ -1481,7 +1481,7 @@ is the control to build, decided by the library from the vendor's codec; map it 
 | `box` | `RANGE` (more than 200 steps) | `number`, `NumberMode.BOX` | the number |
 | `toggles` | `FLAGS` | one `switch` per member in `setting.flags`, named `setting.flag_label(member)` | on = `member in setting.decode_flags(raw)[0]`; write with `station.async_set_flag(key, member, on)` |
 | `text` | `STRING` | `text` | the string |
-| `object` | `OBJECT` | none of its own (a service or a related entity's attribute) | `setting.decode(raw)` is the object the device stores (a `dict`, snake_case members; in the motion-light and ambient-light objects a schedule's days are a bitmask, the light schedule `spotlight_schedule_config` keeps its `week` arrays, and its shape differs per model); write the whole object back with one member changed: `station.async_set_setting(key, {**current, "enable": 1})`. An empty object, or one nested deeper than 32 levels, is refused (`ValueError`). The motion-light and ambient-light objects can carry the house's coordinates (`latitude`, `longtitude`): leave those members out of states and attributes |
+| `object` | `OBJECT` | none of its own (a service or a related entity's attribute) | `setting.decode(raw)` is the object the device stores (a `dict` with snake_case members, as the model's handler stores it; a schedule's days are a bitmask); write the whole object back with one member changed: `station.async_set_setting(key, {**current, "enable": 1})`. An empty object, or one nested deeper than 32 levels, is refused (`ValueError`). The motion-light and ambient-light objects can carry the house's coordinates (`latitude`, `longtitude`): leave those members out of states and attributes |
 
 Follow `control` for durations too: the app draws the clip length and the retrigger
 interval as sliders; `unit` (seconds) still sets the device class. `OTHER` settings have

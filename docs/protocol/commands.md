@@ -234,12 +234,7 @@ the base64 of its compact JSON text in the parameter of the same id, which a dum
 reports. Members are snake_case (`enable`, `time`, `mode`, `sunset2rise`, `brightness`,
 `manual_switch`, `manual_brightness`, and the coordinates `latitude` and `longtitude`,
 spelled so, which logs mask) and a `schedule` entry's
-`week` is a day bitmask (bit `1 << day`). The light schedule `spotlight_schedule_config`
-keeps its `week` arrays and is written in one of three forms, per the model's handler:
-under `schedules` (1404 `{"schedules": {"loop": [...]}}`, no stored copy); as the whole
-1700 payload (sub-command 6085), the stored object `{"schedules": {"loop": [...]}}`
-with its base64 stored in 6085; or under 1700 as `{"schedules": {"loop": <object>}}`
-with the object's base64 stored. Which models write which form
+`week` is a day bitmask (bit `1 << day`). Which models write them
 is per model data ([models-schema.md § Object writes](../reference/models-schema.md#object-writes),
 [devices.md](../reference/devices.md)); a write sends the object as the client gives it,
 so change members of a fresh read.
