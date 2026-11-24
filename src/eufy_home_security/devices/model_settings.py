@@ -151,6 +151,8 @@ as text (``str``) or as a switch, 1 or 0 (``flag``)."""
 ACCOUNT_SLOT: Final = "$account_id"
 """A template leaf the session fills with the owner's account id when it sends the frame."""
 _BASE64_TEXT: Final = re.compile(r"[A-Za-z0-9+/]+={0,2}")
+_WHOLE_TEXT: Final = re.compile(r"-?[0-9]+")
+"""A whole number's text: ASCII digits, maybe after a minus."""
 _OBJECT_BODY: Final = "$v:json"
 _OBJECT_DEPTH: Final = 32
 _CUR_MODE: Final = "cur_mode"
@@ -886,7 +888,7 @@ def object_slot(slot: str, value: object) -> Any:
 
 def _whole(slot: str, part: bool | int | float | str) -> int:
     """An integer member: an int, a float with no fraction or a digit text."""
-    if isinstance(part, str) and part.lstrip("-").isdigit():
+    if isinstance(part, str) and _WHOLE_TEXT.fullmatch(part):
         return int(part)
     if isinstance(part, float) and part.is_integer():
         return int(part)
@@ -1244,7 +1246,7 @@ def _ecb_scalar(cmd: int, template: Recipe, params: Any, body: Mapping[str, Any]
 
 def _int_field(cmd: int, raw: object) -> int:
     """An integer request field: an int, a bool as 0/1, or a digit string."""
-    if isinstance(raw, str) and raw.lstrip("-").isdigit():
+    if isinstance(raw, str) and _WHOLE_TEXT.fullmatch(raw):
         return int(raw)
     if isinstance(raw, bool | int):
         return int(raw)
@@ -1877,7 +1879,7 @@ def _span_spec(raw: Any) -> tuple[str, str, Mapping[str, Value]] | None:
     end, start, by = raw["member"], raw["start"], raw["map"]
     if not isinstance(end, str) or not isinstance(start, str) or not isinstance(by, dict):
         raise TypeError("read.span is not {member: text, start: text, map: object}")
-    if not all(isinstance(k, str) and k.lstrip("-").isdigit() for k in by):
+    if not all(isinstance(k, str) and _WHOLE_TEXT.fullmatch(k) for k in by):
         raise ValueError(f"read.span map keys {sorted(by)} are not whole seconds")
     return end, start, MappingProxyType({k: _scalar(v, "read span value") for k, v in by.items()})
 

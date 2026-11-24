@@ -618,6 +618,7 @@ def test_a_span_read_names_only_values_of_the_setting() -> None:
         {"start": None},
         {"map": []},
         {"map": {"x": 0}},
+        {"map": {"\u0663": 0}},  # a non-ASCII digit
         {"extra": 1},
     ],
 )
@@ -806,8 +807,9 @@ def test_ecb_path_does_not_depend_on_the_caller_type(value: object) -> None:
     assert (wire.cmd, wire.value) == (1253, 1)
 
 
-def test_ecb_command_with_a_non_numeric_value_is_refused(data_root: Path) -> None:
-    """An open-kind setting on an ECB command takes only an integer value."""
+@pytest.mark.parametrize("value", ["abc", "\u0663", "--3"])
+def test_ecb_command_with_a_non_numeric_value_is_refused(data_root: Path, value: str) -> None:
+    """An open-kind setting on an ECB command takes only an integer value (ASCII digits)."""
     write = {
         "cmd": 1253,
         "params": {"timeSystem": "$v"},
@@ -816,7 +818,7 @@ def test_ecb_command_with_a_non_numeric_value_is_refused(data_root: Path) -> Non
     entry = {**GOOD_ENTRY, "access": "rw", "kind": "other", "role": "setting", "write": write}
     _write_model(data_root, {"time_format_set": entry})
     with pytest.raises(ValueError, match="1253"):
-        settings_of("T0001")["time_format_set"].encode("abc", ALONE)
+        settings_of("T0001")["time_format_set"].encode(value, ALONE)
 
 
 def test_ecb_value_repeated_under_two_names_goes_ecb() -> None:
@@ -1899,6 +1901,7 @@ def test_an_object_member_slot_renders_that_member() -> None:
     [
         ("$v.x:int", 18, 18),
         ("$v.x:int", "18", 18),
+        ("$v.x:int", "-3", -3),
         ("$v.x:int", 18.0, 18),
         ("$v.x:int", -2, -2),
         ("$v.x:str", True, "true"),
@@ -1908,6 +1911,9 @@ def test_an_object_member_slot_renders_that_member() -> None:
         ("$v.x:int", True, ValueError),
         ("$v.x:int", 1.5, ValueError),
         ("$v.x:int", "x", ValueError),
+        ("$v.x:int", "\u0663", ValueError),  # a non-ASCII digit
+        ("$v.x:int", "--3", ValueError),
+        ("$v.x:int", "3x", ValueError),
         ("$v.x:int", [1], ValueError),
         ("$v.x:int", float("nan"), ValueError),
     ],
