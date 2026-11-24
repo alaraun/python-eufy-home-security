@@ -37,7 +37,7 @@ replayed without Node. ``--no-answers`` asks Node for every job.
 
     gen_models.py [PN ...] [--check] [--cache DIR] [--out DIR] [--jobs N]
                   [--labels FILE] [--trees FILE] [--titles FILE] [--shown FILE]
-                  [--app-version V] [--released FILE] [--update-released REF]
+                  [--routing FILE] [--app-version V] [--released FILE] [--update-released REF]
                   [--answers DIR | --no-answers]
 """
 
@@ -72,6 +72,7 @@ from types import ModuleType
 from typing import Any, cast
 
 from eufy_home_security.devices.model_settings import (
+    ACCOUNT_SLOT,
     BATTERY_PROPERTY,
     SdStatusGroups,
     SdStatusSource,
@@ -1747,6 +1748,167 @@ def view_reads(
         _count(counts, "read:per view")
 
 
+OWNER_PROBE = "0" * 39 + "1"
+"""The user id a setProperty message names when the generator asks which members of a
+handler's write take the app's account (:func:`owner_members`)."""
+
+
+def owner_members(
+    product_code: str,
+    handler: Path,
+    settings: dict[str, Any],
+    *,
+    props: Sequence[Mapping[str, Any]],
+    routes: Any,
+    context: codec.Context,
+    counts: dict[str, int],
+) -> None:
+    """Put the owner's id into each bare JSON-text frame write, whose body is the params as
+    the handler builds them: a member the handler fills from the user id the app's message
+    names becomes ``$account_id``, in the handler's member order. The other runs drive the
+    handler without a user id, so such a member is missing from their templates; the other
+    frame forms carry the account outside the body."""
+    domains = {p["identifier"]: codec.domain(p)[1] for p in props}
+    asks: list[str] = []
+    requests: list[dict[str, Any]] = []
+    for ident, entry in settings.items():
+        templates = _json_text_templates(entry, routes)
+        if not templates or not domains.get(ident):
+            continue
+        base = {
+            "kind": "set",
+            "identifier": ident,
+            "payload": domains[ident][0],
+            "device": context.device(product_code),
+        }
+        requests += [base, {**base, "user_id": OWNER_PROBE}]
+        asks.append(ident)
+    replies = run_driver(product_code, handler, requests) if requests else []
+    for n, ident in enumerate(asks):
+        without, with_owner = (p2p(r) or {} for r in replies[2 * n : 2 * n + 2])
+        plain, named = without.get("params"), with_owner.get("params")
+        if not isinstance(plain, dict) or not isinstance(named, dict):
+            continue
+        owner = [k for k, v in named.items() if v == OWNER_PROBE and plain.get(k) != OWNER_PROBE]
+        if not owner:
+            continue
+        for template in _json_text_templates(settings[ident], routes):
+            params = template["params"]
+            order = [*named, *(k for k in params if k not in named)]
+            template["params"] = {
+                k: ACCOUNT_SLOT if k in owner else params[k]
+                for k in order
+                if k in owner or k in params
+            }
+        _count(counts, "routing:owner id")
+
+
+def _json_text_templates(entry: Mapping[str, Any], routes: Any) -> list[dict[str, Any]]:
+    """The write templates of a writable setting that go out as a bare JSON-text frame
+    with an object body."""
+    if entry.get("access") != "rw":
+        return []
+    found = [entry.get("write"), *(entry.get("write_table") or {}).values()]
+    return [
+        t
+        for t in found
+        if isinstance(t, dict)
+        and "subCmd" not in t
+        and isinstance(t.get("params"), dict)
+        and isinstance(t.get("cmd"), int)
+        and t["cmd"] not in routing.WRAPPERS
+        and routes.forms.get(t["cmd"]) == "json_text"
+    ]
+
+
+SPAN_START = "startTime"
+"""The member a device stores beside a timed value's end epoch: its start epoch (verified
+on hardware for 1271 on a HomeBase 3)."""
+SPAN_EPOCHS = (codec.FIXED_CLOCK_MS // 1000, codec.FIXED_CLOCK_MS // 1000 + 86_399)
+"""Start epochs a stored span is probed at: a read that follows the span reads the same."""
+
+
+def span_reads(
+    product_code: str,
+    handler: Path,
+    settings: dict[str, Any],
+    context: codec.Context,
+    counts: dict[str, int],
+) -> None:
+    """Add a span read (``read.span``) to each enum whose write stores a one-member JSON
+    object ``{member: n}`` per value (base64) and whose handler reads a stored
+    ``{member: start + n, startTime: start}`` as that value at every probed start: the
+    device stores a timed value as its end and start epochs, and the app shows the
+    duration's choice."""
+    asks: list[tuple[str, Any, int]] = []
+    requests: list[dict[str, Any]] = []
+    found: dict[str, tuple[str, dict[str, Any]]] = {}
+    for ident, entry in settings.items():
+        spans = _stored_spans(entry)
+        if spans is None:
+            continue
+        member, by_value = spans
+        found[ident] = (member, by_value)
+        param = entry["read"]["param"]
+        for value, duration in by_value.items():
+            for start in SPAN_EPOCHS:
+                device = context.device(product_code)
+                stored = {member: start + duration, SPAN_START: start}
+                device["params"] = [{"param_type": param, "param_value": _b64_json(stored)}]
+                requests.append({"kind": "get", "cmds": [param], "device": device})
+                asks.append((ident, value, duration))
+    replies = run_driver(product_code, handler, requests) if requests else []
+    matched: dict[str, bool] = {}
+    for (ident, value, _), reply in zip(asks, replies, strict=True):
+        got = (p2p(reply) or {}).get(ident, codec.MISSING)
+        matched[ident] = matched.get(ident, True) and codec.decodes_to(got, value)
+    for ident, ok in matched.items():
+        if not ok:
+            continue
+        member, by_value = found[ident]
+        spans = {str(d): v for v, d in by_value.items()}
+        if len(spans) != len(by_value):
+            continue  # two values share a duration: a span cannot tell them apart
+        settings[ident]["read"]["span"] = {
+            "member": member,
+            "start": SPAN_START,
+            "map": dict(sorted(spans.items(), key=lambda kv: int(kv[0]))),
+        }
+        _count(counts, "read:span")
+
+
+def _stored_spans(entry: Mapping[str, Any]) -> tuple[str, dict[Any, int]] | None:
+    """``(member, value -> n)`` when an enum's write stores ``{member: n}`` (base64 JSON,
+    one int member, the same member for each such value; at least two values) in the
+    parameter it reads. A value stored in another form is no span and is left out."""
+    write, read = entry.get("write"), entry.get("read")
+    if entry.get("kind") != "enum" or not isinstance(write, dict) or not isinstance(read, dict):
+        return None
+    update = write.get("update")
+    stored = update.get("paramValue") if isinstance(update, dict) else None
+    if (
+        not isinstance(stored, dict)
+        or set(stored) != {"$map"}
+        or read.get("param") != update.get("cmd")
+    ):
+        return None
+    values = {codec.value_key(v): v for v in entry.get("values") or ()}
+    members: set[str] = set()
+    out: dict[Any, int] = {}
+    for key, text in stored["$map"].items():
+        found = decode_object(text) if isinstance(text, str) and not text.startswith("{") else None
+        if key not in values or found is None or len(found) != 1:
+            continue
+        ((member, n),) = found.items()
+        if isinstance(n, bool) or not isinstance(n, int):
+            continue
+        members.add(member)
+        out[values[key]] = n
+    if len(members) != 1 or len(out) < 2:
+        return None
+    return members.pop(), out
+
+
 def param_of(entry: Mapping[str, Any]) -> int:
     write = entry["write"]
     cmd = (write.get("update") or {}).get("cmd") or write.get("subCmd")
@@ -2011,9 +2173,19 @@ def build_context(  # noqa: C901
     if routes is not None:
         native = tree is not None and tree.get("settings_ui") != joiner.RN_SETTINGS
         routing.apply(settings, routes, native_screens=native, counts=counts)
+        owner_members(
+            product_code,
+            handler,
+            settings,
+            props=props,
+            routes=routes,
+            context=context,
+            counts=counts,
+        )
     shape_controls(product_code, handler, settings, counts, context, wire=wire)
     joiner.hold_members(product_code, settings, titles, counts)
     view_reads(product_code, handler, settings, context, counts, inverted=inverted)
+    span_reads(product_code, handler, settings, context, counts)
     drop_absent_prior_updates(settings, counts)
     empty_value_reads(
         product_code, handler, settings, context, counts, wire=wire, skip=frozenset(inverted)

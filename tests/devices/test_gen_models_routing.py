@@ -145,14 +145,42 @@ def test_a_native_screen_sends_its_own_form_or_the_same_scalar() -> None:
     scalar = {"cmd": 1408, "params": {"on": "$v"}}
     assert routing.route(scalar, ROUTES, native_screens=True) == routing.Route(scalar, True)
     text = routing.route(handler, ROUTES, native_screens=True, kind="string")
-    assert text == routing.Route(None)  # the screen form reads members a text does not have
+    # the screen form reads members a text does not have
+    assert text == routing.Route(None, note=routing.SCREEN_OBJECT_NOTE)
 
 
 @pytest.mark.parametrize(
-    "template", [None, "x", {"cmd": "1013"}, {"cmd": 1013, "sendRequestUrl": "/x"}]
+    "template",
+    [
+        None,
+        "x",
+        {"cmd": "1013"},
+        {"cmd": 1013, "sendRequestUrl": "/x"},
+        {"cmd": 9258, "params": {}, "sendRequestUrl": "/x"},  # the library names the cloud
+    ],
 )
 def test_a_template_with_no_p2p_command_is_left_to_the_library(template: Any) -> None:
     assert routing.route(template, ROUTES, native_screens=False).template == template
+
+
+@pytest.mark.parametrize(
+    ("params", "sent"),
+    [
+        ({"mode": "$v"}, {"mode": "$v", "account_id": "$account_id"}),
+        ({"account_id": "", "mode": "$v"}, {"account_id": "$account_id", "mode": "$v"}),
+    ],
+)
+def test_a_json_text_case_that_adds_the_owner_id_gets_its_slot(
+    params: dict[str, Any], sent: dict[str, Any]
+) -> None:
+    """Appended, or in place of a member of that name, as a map put does."""
+    doc = _doc()
+    doc["executor"]["cases"]["1255"] = {"msgType": 6, "reader": "json+account"}
+    found = routing.route({"cmd": 1255, "params": params}, routing.parse(doc), native_screens=False)
+    assert found.template is not None
+    assert list(found.template["params"].items()) == list(sent.items())
+    plain = routing.route({"cmd": 1271, "params": params}, ROUTES, native_screens=False)
+    assert plain.template == {"cmd": 1271, "params": params}
 
 
 def _settings() -> dict[str, Any]:
@@ -188,10 +216,18 @@ def test_apply_makes_a_write_the_app_does_not_send_read_only() -> None:
     assert settings["noted"]["note"] == f"n; {routing.NOT_SENT_NOTE}"
     assert settings["table"] == {"access": "ro", "note": routing.NOT_SENT_NOTE}
     assert settings["screen"]["write"]["params"] == SCREEN_1414
-    assert settings["text"]["access"] == "ro"
+    assert settings["text"] == {
+        "access": "ro",
+        "kind": "string",
+        "note": routing.SCREEN_OBJECT_NOTE,
+    }
     assert settings["screen_table"] == before["screen_table"]
     assert settings["ro"] == before["ro"]
-    assert counts == {f"ro:{routing.NOT_SENT_NOTE}": 4, "routing:screen": 2}
+    assert counts == {
+        f"ro:{routing.NOT_SENT_NOTE}": 3,
+        f"ro:{routing.SCREEN_OBJECT_NOTE}": 1,
+        "routing:screen": 2,
+    }
 
 
 def test_apply_on_a_model_the_rn_bundle_draws_sends_no_screen_form() -> None:

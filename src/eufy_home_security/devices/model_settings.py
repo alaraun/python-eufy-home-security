@@ -144,7 +144,7 @@ declares its battery differently, and a station model's battery is not this rule
 _PRODUCT_CODE: Final = re.compile(r"[A-Za-z0-9]{1,32}")
 _SN_SLOTS: Final = frozenset({"$device_sn", "$station_sn"})
 _PARAM_SLOT: Final = re.compile(r"\$param:(\d+):(int|str)")
-OBJECT_SLOT: Final = re.compile(r"\$v((?:\.[A-Za-z0-9_]+)*):(json|b64json|str|flag)")
+OBJECT_SLOT: Final = re.compile(r"\$v((?:\.[A-Za-z0-9_]+)*):(json|b64json|str|flag|int)")
 """A template leaf of an ``OBJECT`` value: the value (or a member, ``$v.<member>:...``) as a
 JSON object (``json``), as base64 of its compact JSON text (``b64json``), a scalar member
 as text (``str``) or as a switch, 1 or 0 (``flag``)."""
@@ -440,6 +440,9 @@ class Setting:
         default=None, repr=False
     )
     """A per-view read: which view the report's quality comes from, and quality -> value."""
+    _read_span: tuple[str, str, Mapping[str, Value]] | None = field(default=None, repr=False)
+    """A timed value stored as end and start epochs: ``(end member, start member, duration
+    in seconds -> value)``."""
     _read_members: Mapping[str, tuple[int, str | None]] | None = field(default=None, repr=False)
     """An object read from several parameters: member -> (parameter, its JSON member, or
     None for the parameter itself read as a switch)."""
@@ -523,6 +526,8 @@ class Setting:
         if self._read_members is not None:
             return members_read(self._read_members, {**(block or {}), self._read_param: raw})
         value = self._decode(raw)
+        if value is None and self._read_span is not None:
+            value = self._span_value(raw, *self._read_span)
         if value is None and self._read_view is not None:
             by, qualities = self._read_view
             quality = _view_quality(raw, by, block or {})
@@ -532,6 +537,19 @@ class Setting:
             ):
                 return mapped
         return self._read_fallback if value is None else value
+
+    def _span_value(
+        self, raw: str, end: str, start: str, by_duration: Mapping[str, Value]
+    ) -> Value | None:
+        """The value whose duration is the stored object's ``end - start`` (both ints)."""
+        stored = decode_object(raw)
+        if stored is None:
+            return None
+        to, since = stored.get(end), stored.get(start)
+        if any(isinstance(x, bool) or not isinstance(x, int) for x in (to, since)):
+            return None
+        value = by_duration.get(str(cast(int, to) - cast(int, since)))
+        return value if value is not None and self._in_values(value) else None
 
     def _decode(self, raw: str) -> Value | None:
         if self.domain is not None:
@@ -837,10 +855,12 @@ class MissingMemberError(ValueError):
 def object_slot(slot: str, value: object) -> Any:
     """The rendering of an :data:`OBJECT_SLOT` leaf for the object ``value``: the value or
     its named member as JSON data (``json``), base64 of its compact JSON text (``b64json``),
-    a scalar member as text (``str``: a string as is, a number or bool as its JSON text) or
-    as a switch (``flag``: 1 for true, the number 1 or the text ``"1"``/``"true"``/``"TRUE"``,
-    else 0). ValueError for another leaf, a value that is no object, a member the value
-    lacks, or a ``str``/``flag`` of a member that is no scalar."""
+    a scalar member as text (``str``: a string as is, a number or bool as its JSON text), as
+    a switch (``flag``: 1 for true, the number 1 or the text ``"1"``/``"true"``/``"TRUE"``,
+    else 0) or as an integer (``int``: a whole number or its digit text). ValueError for
+    another leaf, a value that is no object, a member the value lacks, a
+    ``str``/``flag``/``int`` of a member that is no scalar, or an ``int`` of one that is no
+    whole number."""
     m = OBJECT_SLOT.fullmatch(slot)
     if m is None:
         raise ValueError(f"unknown placeholder {slot!r}")
@@ -859,7 +879,20 @@ def object_slot(slot: str, value: object) -> Any:
         raise ValueError(f"{slot}: {part!r} is not a scalar")
     if m[2] == "flag":
         return _as_flag(part)
+    if m[2] == "int":
+        return _whole(slot, part)
     return part if isinstance(part, str) else _compact_json(part)
+
+
+def _whole(slot: str, part: bool | int | float | str) -> int:
+    """An integer member: an int, a float with no fraction or a digit text."""
+    if isinstance(part, str) and part.lstrip("-").isdigit():
+        return int(part)
+    if isinstance(part, float) and part.is_integer():
+        return int(part)
+    if isinstance(part, int) and not isinstance(part, bool):
+        return part
+    raise ValueError(f"{slot}: {part!r} is not a whole number")
 
 
 def _as_flag(raw: bool | int | float | str) -> int:
@@ -1834,6 +1867,21 @@ def _view_spec(view: Any) -> tuple[int | str | None, Mapping[str, Value]] | None
     return by, MappingProxyType(qualities)
 
 
+def _span_spec(raw: Any) -> tuple[str, str, Mapping[str, Value]] | None:
+    """A read's ``span`` (absent: None): ``{"member": end, "start": start, "map": {seconds:
+    value}}``."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict) or set(raw) != {"member", "start", "map"}:
+        raise TypeError("read.span is not {member, start, map}")
+    end, start, by = raw["member"], raw["start"], raw["map"]
+    if not isinstance(end, str) or not isinstance(start, str) or not isinstance(by, dict):
+        raise TypeError("read.span is not {member: text, start: text, map: object}")
+    if not all(isinstance(k, str) and k.lstrip("-").isdigit() for k in by):
+        raise ValueError(f"read.span map keys {sorted(by)} are not whole seconds")
+    return end, start, MappingProxyType({k: _scalar(v, "read span value") for k, v in by.items()})
+
+
 def _members_spec(raw: Any, kind: SettingKind) -> Mapping[str, tuple[int, str | None]] | None:
     """A read's ``members`` (absent: None), on an ``OBJECT`` only:
     ``{name: {"param": id, "as": "flag"}}`` or ``{name: {"param": id, "member": text}}``."""
@@ -2000,6 +2048,7 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
     read_fallback: Value | None = None
     read_view = None
     read_members = None
+    read_span = None
     if read is not None:
         if not isinstance(read, dict) or not isinstance(read.get("param"), int):
             raise TypeError("read is not {param, map}")
@@ -2008,6 +2057,7 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
             read_map = {str(k): _scalar(v, "read value") for k, v in read["map"].items()}
         read_view = _view_spec(read.get("view"))
         read_members = _members_spec(read.get("members"), kind)
+        read_span = _span_spec(read.get("span"))
         if read.get("fallback") is not None:
             read_fallback = _scalar(read["fallback"], "read fallback")
     when = entry.get("applies_when")
@@ -2095,6 +2145,7 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
         _read_fallback=_read_fallback(read_fallback, kind, values),
         _no_default=_no_default(read),
         _read_view=read_view,
+        _read_span=read_span,
         _read_members=read_members,
         _write_params=_template_params([write, *(table or {}).values()]),
         _variants=_variant_rules(entry.get("variants")),

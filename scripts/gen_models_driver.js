@@ -3,11 +3,12 @@
 // points in a vm sandbox.
 //
 // job:    {"handler": "<path to <PN>Handle.mix.js>",
-//          "requests": [{"kind": "set", "identifier", "payload", "device"}
+//          "requests": [{"kind": "set", "identifier", "payload", "device", "user_id"?}
 //                     | {"kind": "action", "identifier", "payload", "device"}
 //                     | {"kind": "get", "cmds", "device", "props"?}
 //                     | {"kind": "parse", "action", "input", "device"}]}
-// "set" sends the action "setProperty"; "action" sends the identifier itself as the action;
+// "set" sends the action "setProperty" (with "user_id", the message names that user, as the
+// app names its account); "action" sends the identifier itself as the action;
 // "parse" sends a parse action with a device answer's fields as its input, unwrapped.
 // reply:  a JSON array with one reply per request; a throwing request yields {"error": "..."}.
 //
@@ -105,6 +106,7 @@ function call(handler, request) {
     input: { [request.identifier]: JSON.stringify({ "payload-value": request.payload }) },
     device: request.device,
   };
+  if (request.user_id !== undefined) msg.user_id = request.user_id;
   return handler.controlDevice(JSON.stringify(msg) + "EOF;", 0);
 }
 

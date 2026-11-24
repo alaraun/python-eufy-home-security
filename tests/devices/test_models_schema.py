@@ -34,8 +34,8 @@ SCALAR_SLOTS = {"$v", "$v:str", "$v:int", "$channel", "$device_sn", "$station_sn
 PARAM_SLOT = re.compile(r"\$param:\d+:(int|str)")
 CONTEXTS = {"standalone"} | {c.value for c in ConnectType if c is not ConnectType.SINGLE}
 OBJECT_SLOTS = {"$map", "$affine"}
-VALUE_OBJECT_SLOT = re.compile(  # an object value's forms; text and switch of a member only
-    r"\$v(\.[A-Za-z0-9_]+)*:(json|b64json)|\$v(\.[A-Za-z0-9_]+)+:(str|flag)"
+VALUE_OBJECT_SLOT = re.compile(  # an object value's forms; text, switch, int of a member only
+    r"\$v(\.[A-Za-z0-9_]+)*:(json|b64json)|\$v(\.[A-Za-z0-9_]+)+:(str|flag|int)"
 )
 DERIVED_SLOTS = {"$format", "$jsontext", "$each", "$or"}  # built from an object value's slots
 RO_NOTES = {
@@ -55,6 +55,9 @@ OBJECT_NOTES = {
 }
 ROUND_TRIP_NOTE = "round trip does not return the written value"
 NOT_SENT_NOTE = "the eufy app sends nothing for this write"  # appended: no frame the app sends
+SCREEN_OBJECT_NOTE = (
+    "the eufy app's screen sends this write as an object, which this setting is not"
+)
 STATUS_NOTE = "status the eufy app only reads"  # ro with its read kept
 SETTING_KEYS = {
     "kind",
@@ -251,8 +254,9 @@ def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> N
     else:
         assert present == [], present
         if s.get("note") != STATUS_NOTE:
-            assert len([p for p in parts if p not in OBJECT_NOTES | {NOT_SENT_NOTE}]) <= 1
-            allowed_notes = RO_NOTES | OBJECT_NOTES | {NOT_SENT_NOTE, ROUND_TRIP_NOTE}
+            routed = {NOT_SENT_NOTE, SCREEN_OBJECT_NOTE}
+            assert len([p for p in parts if p not in OBJECT_NOTES | routed]) <= 1
+            allowed_notes = RO_NOTES | OBJECT_NOTES | routed | {ROUND_TRIP_NOTE}
             assert all(p in allowed_notes for p in parts), s["note"]
     templates = [s["write"]] if "write" in s else []
     templates += list(s.get("write_table", {}).values())
@@ -282,8 +286,15 @@ def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> N
     read = s.get("read")
     if read is not None:
         assert {"param", "map"} <= set(read) <= {
-            "param", "map", "view", "no_default", "fallback", "members"
+            "param", "map", "view", "no_default", "fallback", "members", "span"
         }  # fmt: skip
+        if "span" in read:
+            span = read["span"]
+            assert kind == "enum", ident
+            assert set(span) == {"member", "start", "map"}, ident
+            assert all(type(v) is type(s["values"][0]) for v in span["map"].values()), ident
+            assert set(span["map"].values()) <= set(s["values"]), ident
+            assert all(k.lstrip("-").isdigit() for k in span["map"]), ident
         for member in (read.get("members") or {}).values():
             assert kind == "object", ident
             assert type(member["param"]) is int, ident

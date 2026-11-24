@@ -993,7 +993,8 @@ class FakeStation:
             self._on_string_command(ftype, plain)
         elif ftype in _JSON_FRAMES:
             self.json_frames_received.append((ftype, subheader[2], plain))
-            self.send_receipt(ftype, RECEIPT_TAKEN)
+            if ftype not in self.unanswered_commands:
+                self.send_receipt(ftype, RECEIPT_TAKEN)
         elif ftype == FrameType.DOORBELL_PAYLOAD:
             obj = decode_json_payload(plain)
             if obj is None:

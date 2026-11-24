@@ -7,7 +7,8 @@ per bare command (``executor``), and the native settings screens' senders and wr
 forms (``screens``). The rule (docs/reference/models-schema.md § Write routing):
 
 - A handler template is sent when its command gets a request type (its params'
-  ``msgType``, else the builder's case) and a frame form the library sends.
+  ``msgType``, else the builder's case) and a frame form the library sends; a JSON-text
+  case that adds the owner's id (``json+account``) gets the ``$account_id`` member.
 - Otherwise, for a model whose settings the app draws natively, the native screen's
   form: its own template params where the input gives them, else the same scalar frame
   when a screen sends the command as one.
@@ -27,9 +28,14 @@ from typing import Any
 
 from gen_models_codec import GeneratorError
 
+from eufy_home_security.devices.model_settings import ACCOUNT_SLOT
 from eufy_home_security.p2p import messages
 
 NOT_SENT_NOTE = "the eufy app sends nothing for this write"
+SCREEN_OBJECT_NOTE = (
+    "the eufy app's screen sends this write as an object, which this setting is not"
+)
+"""Note of a write only a native screen sends, in a form that reads members of an object."""
 SENT_FORMS = frozenset(
     {"ecb_channel_value", "ecb_station", "ecb_value", "channel_value", "json_text", "string_int"}
 )
@@ -47,6 +53,8 @@ LIBRARY_FORMS = {
 }
 _FIELD_READERS = {"int": False, "flag": True}  # reader -> EcbValueField.flag
 _INT_REQUEST = 10  # the request type that sends one int (and the owner id)
+OWNER_JSON_READER = "json+account"
+"""The request case that sends the params as JSON text with the owner's id added."""
 _TRANSPORT_KEYS = ("sendRequestUrl", "http", "multipleRequest", "localParams", "storeToLocal",
                    "ble", "mqttCmdCode")  # fmt: skip
 
@@ -133,6 +141,8 @@ class Route:
 
     template: Mapping[str, Any] | None
     screen: bool = False
+    note: str = NOT_SENT_NOTE
+    """Why the app sends nothing (``template`` None)."""
 
 
 def route(template: Any, routing: Routing, *, native_screens: bool, kind: str = "object") -> Route:
@@ -156,15 +166,24 @@ def route(template: Any, routing: Routing, *, native_screens: bool, kind: str = 
         msg_type = routing.msg_types.get(cmd, 0)
     form = routing.forms.get(cmd)
     if msg_type != 0 and form in SENT_FORMS:
+        if form == "json_text" and isinstance(params, dict) and _adds_owner(routing, cmd):
+            return Route({**template, "params": {**params, "account_id": ACCOUNT_SLOT}})
         return Route(template)
     if native_screens and cmd in routing.screen_forms:
         params = routing.screen_forms[cmd]["params"]
         if kind == "object" or "$v." not in json.dumps(params):
             return Route({**template, "params": params}, screen=True)
+        return Route(None, note=SCREEN_OBJECT_NOTE)
     senders = routing.screen_senders.get(cmd, frozenset())
     if native_screens and form in SCALAR_FORMS and senders - {0, None}:
         return Route(template, screen=True)
     return Route(None)
+
+
+def _adds_owner(routing: Routing, cmd: int) -> bool:
+    """The request builder puts the owner's id into the command's JSON text as
+    ``account_id`` (replacing a member of that name in place, else appending it)."""
+    return routing.fields.get(cmd, ("", None))[0] == OWNER_JSON_READER
 
 
 def apply(
@@ -172,7 +191,7 @@ def apply(
 ) -> None:
     """Route every write of a model's settings in one context: a template the app sends
     another way becomes that way, a setting with a template the app does not send becomes
-    read-only with :data:`NOT_SENT_NOTE` (its read kept)."""
+    read-only with :data:`NOT_SENT_NOTE` or :data:`SCREEN_OBJECT_NOTE` (its read kept)."""
     for entry in settings.values():
         if entry.get("access") != "rw":
             continue
@@ -184,15 +203,16 @@ def apply(
         write = route(entry.get("write"), routing, native_screens=native_screens, kind=kind)
         if write.template is None and entry.get("write") is None and not table:
             continue
-        if (entry.get("write") is not None and write.template is None) or any(
-            r.template is None for r in routes.values()
-        ):
+        unsent = [r for r in (write, *routes.values()) if r.template is None]
+        if entry.get("write") is None:
+            unsent = [r for r in routes.values() if r.template is None]
+        if unsent:
             entry["access"] = "ro"
             entry.pop("write", None)
             entry.pop("write_table", None)
-            note = entry.get("note")
-            entry["note"] = f"{note}; {NOT_SENT_NOTE}" if note else NOT_SENT_NOTE
-            counts[f"ro:{NOT_SENT_NOTE}"] = counts.get(f"ro:{NOT_SENT_NOTE}", 0) + 1
+            note, why = entry.get("note"), unsent[0].note
+            entry["note"] = f"{note}; {why}" if note else why
+            counts[f"ro:{why}"] = counts.get(f"ro:{why}", 0) + 1
             continue
         if entry.get("write") is not None:
             entry["write"] = write.template
