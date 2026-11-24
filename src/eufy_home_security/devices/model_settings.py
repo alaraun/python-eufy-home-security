@@ -227,9 +227,10 @@ class SettingMeaning(StrEnum):
     from the eufy app's own reading of the property (a temperature, a timestamp, a time of
     day). Binary meanings are the statuses the app's device card shows for a security
     sensor (declared, eufy app): ``True`` is the state the name gives (open, tampered,
-    low battery, water, cold, ringing, smoke). A ``BOOL`` status carries one as
-    :attr:`Setting.meaning`, a member of a ``FLAGS`` status in :attr:`Setting.flag_meanings`.
-    None on a setting: no meaning the app gives.
+    low battery, water, cold, ringing, smoke, fault, silenced, end of life). ``TESTING`` is
+    the library's reading of a smoke sensor's two test members, which no card shows. A
+    ``BOOL`` status carries one as :attr:`Setting.meaning`, a member of a ``FLAGS`` status
+    in :attr:`Setting.flag_meanings`. None on a setting: no meaning the app gives.
     """
 
     DURATION = "duration"
@@ -265,7 +266,8 @@ class SettingMeaning(StrEnum):
     END_OF_LIFE = "end_of_life"
     """``True``: the device has reached the end of its service life."""
     TESTING = "testing"
-    """``True``: a test is running (from the device's button or from the app)."""
+    """``True``: a test is running (from the device's button or from the app); the
+    library's reading of the member names, not a state the app's card shows."""
 
 
 BINARY_MEANINGS: Final = frozenset(
@@ -421,8 +423,9 @@ class Setting:
     thing description's. ``meaning`` says what the value stands for
     (:class:`SettingMeaning`): from the model's data where the app gives the property one
     (a sensor status, a timestamp, a temperature), else from ``unit``; None for none.
-    ``flag_meanings`` gives a ``FLAGS`` status's members the binary meaning the app's
-    device card reads them as (a smoke sensor's ``alarm`` and ``highAlarm``: smoke);
+    ``flag_meanings`` gives a ``FLAGS`` status's members a binary meaning: the state the
+    app's device card shows for the member (a smoke sensor's ``alarm`` and ``highAlarm``:
+    smoke), or the library's reading of its name (its test members: testing);
     :meth:`meaning_on` answers one meaning for a reported mask.
     """
 
@@ -661,17 +664,21 @@ class Setting:
 
     def flag_values(self, value: object) -> dict[str, bool] | None:
         """Each member of a ``FLAGS`` mask on (all its bits set) or off; ``value`` is the
-        mask or its parameter text. None when it is no mask (unreported, malformed)."""
+        mask or its parameter text. None when it is no mask (unreported, malformed): text
+        other than ASCII decimal digits (``""``, ``"-1"``, ``"0x81"``, ``"1e3"``) reads
+        unknown, where the eufy app's card reads it as a number."""
         mask = _mask(value)
         if self.kind is not SettingKind.FLAGS or mask is None:
             return None
         return {k: mask & bits == bits for k, bits in self.flags.items()}
 
-    def meaning_on(self, value: object, meaning: SettingMeaning) -> bool | None:
-        """Whether any member :attr:`flag_meanings` gives ``meaning`` is on in ``value``
-        (the mask or its parameter text); None when it is no mask (unreported, malformed).
-        ValueError when no member carries ``meaning``."""
-        members = [k for k, m in self.flag_meanings.items() if m is meaning]
+    def meaning_on(self, value: object, meaning: SettingMeaning | str) -> bool | None:
+        """Whether any member :attr:`flag_meanings` gives ``meaning`` (a
+        :class:`SettingMeaning` or its value) is on in ``value``, the mask or its parameter
+        text; None when it is no mask, as :meth:`flag_values` reads it (unreported,
+        malformed). ValueError for an unknown meaning or one no member carries."""
+        meaning = SettingMeaning(meaning)
+        members = [k for k, m in self.flag_meanings.items() if m == meaning]
         if not members:
             raise ValueError(f"{self.key}: no flags member means {meaning.value!r}")
         on = self.flag_values(value)
@@ -782,13 +789,14 @@ class Setting:
 
 
 def _mask(raw: object) -> int | None:
-    """``raw`` as a non-negative int bitmask, or None."""
+    """``raw`` as a non-negative int bitmask (text: ASCII decimal digits), or None."""
     if isinstance(raw, bool):
         return None
     if isinstance(raw, int):
         return raw if raw >= 0 else None
-    if isinstance(raw, str) and raw.strip().isdigit():
-        return int(raw.strip())
+    text = raw.strip() if isinstance(raw, str) else ""
+    if text.isascii() and text.isdigit():
+        return int(text)
     return None
 
 

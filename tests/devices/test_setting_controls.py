@@ -202,7 +202,22 @@ def test_flag_values_give_every_member_on_or_off(data_root: Path) -> None:
     assert s.flag_values(0) == dict.fromkeys(SMOKE_FLAGS, False)
 
 
-@pytest.mark.parametrize("raw", [None, "", "x", "-1", True, 1.5])
+@pytest.mark.parametrize(
+    "raw",
+    [
+        None,
+        "",
+        "x",
+        "-1",
+        True,
+        1.5,
+        "0x81",
+        "1e3",
+        "1.0",
+        "²",  # a digit int() refuses
+        "٣",  # a non-ASCII decimal digit int() takes
+    ],
+)
 def test_flag_values_of_an_unreported_or_malformed_value_are_none(
     data_root: Path, raw: object
 ) -> None:
@@ -249,6 +264,14 @@ def test_meaning_on_takes_the_decoded_mask_too(data_root: Path) -> None:
     s = _load(data_root, {"k": SMOKE_STATUS})["k"]
     assert s.meaning_on(s.decode("8"), SettingMeaning.LOW_BATTERY) is True
     assert s.meaning_on(s.decode("8"), SettingMeaning.SMOKE) is False
+
+
+def test_meaning_on_takes_a_meanings_value(data_root: Path) -> None:
+    s = _load(data_root, {"k": SMOKE_STATUS})["k"]
+    assert s.meaning_on("128", "smoke") is True
+    assert s.meaning_on("128", "testing") is False
+    with pytest.raises(ValueError, match="no_such_meaning"):
+        s.meaning_on("128", "no_such_meaning")
 
 
 def test_meaning_on_refuses_a_meaning_no_member_carries(data_root: Path) -> None:
