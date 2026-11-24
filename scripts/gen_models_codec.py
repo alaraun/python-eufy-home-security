@@ -119,11 +119,12 @@ def as_switch(
 ) -> dict[str, Any]:
     """A property of ``kind`` (a string, or a bare ``other``) the app shows as a switch, typed
     as the bool it shows; any other property unchanged. A TD default whose text is one of the
-    values in ``texts`` (``"1"``, ``"true"`` for a JSON bool) becomes that state."""
+    values in ``texts`` (``"1"`` or JSON ``1`` for an Int switch, ``"true"`` or JSON ``true``
+    for a JSON bool) becomes that state."""
     if kind_of(prop) != kind:
         return dict(prop)
-    default = specs_of(prop).get("defaultValue")
-    states = [s for s, text in texts.items() if value_key(text) == default]
+    raw = specs_of(prop).get("defaultValue")
+    states = [s for s, t in texts.items() if raw is not None and value_key(t) == value_key(raw)]
     specs = {"defaultValue": value_key(states[0])} if states else {}
     return {**prop, "data_type": {**(prop.get("data_type") or {}), "type": "bool", "specs": specs}}
 

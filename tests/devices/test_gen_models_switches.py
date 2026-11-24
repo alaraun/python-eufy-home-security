@@ -245,8 +245,33 @@ def test_a_switchs_td_default_becomes_its_state(
 
 
 @pytest.mark.parametrize(
+    ("data_type", "values", "expected"),
+    [
+        ({"type": "int", "specs": {"defaultValue": 1}}, {True: 1, False: 0}, "true"),
+        ({"type": "int", "specs": {"defaultValue": 1}}, {True: 0, False: 1}, "false"),
+        ({"type": "string", "specs": {"defaultValue": True}}, {True: True, False: False}, "true"),
+    ],
+    ids=["int-on", "int-off", "json-bool"],
+)
+def test_a_switchs_json_default_becomes_its_state(
+    data_type: dict[str, Any], values: dict[bool, Any], expected: str
+) -> None:
+    """A TD default given as a JSON number or bool, not as text, still names its state."""
+    prop = {"identifier": "x", "data_type": data_type}
+    kind = codec.kind_of(prop)
+    assert codec.as_switch(prop, values, kind=kind)["data_type"] == {
+        "type": "bool",
+        "specs": {"defaultValue": expected},
+    }
+
+
+@pytest.mark.parametrize(
     ("default", "values"),
-    [(None, {True: True, False: False}), ("on", {True: True, False: False})],
+    [
+        (None, {True: True, False: False}),
+        ("on", {True: True, False: False}),
+        (None, {True: "None", False: "0"}),
+    ],
 )
 def test_a_switch_default_matching_no_state_is_dropped(
     default: Any, values: dict[bool, Any]
