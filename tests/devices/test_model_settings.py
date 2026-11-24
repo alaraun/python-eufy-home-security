@@ -1293,7 +1293,8 @@ def test_unit_meaning_covers_every_time_unit() -> None:
 
 
 def test_binary_meanings_are_the_sensor_card_statuses() -> None:
-    """Every status meaning a bool carries, and none of the value meanings."""
+    """Every status meaning a bool or a flags member carries, and none of the value
+    meanings."""
     assert {
         SettingMeaning.OPENING,
         SettingMeaning.TAMPER,
@@ -1301,6 +1302,11 @@ def test_binary_meanings_are_the_sensor_card_statuses() -> None:
         SettingMeaning.MOISTURE,
         SettingMeaning.COLD,
         SettingMeaning.SIREN_RINGING,
+        SettingMeaning.SMOKE,
+        SettingMeaning.PROBLEM,
+        SettingMeaning.MUTED,
+        SettingMeaning.END_OF_LIFE,
+        SettingMeaning.TESTING,
     } == model_settings.BINARY_MEANINGS
 
 
@@ -2103,3 +2109,41 @@ def test_a_very_deep_object_text_is_refused_on_write_and_unread_on_read() -> Non
     assert setting.decode(deep) is None
     assert setting.decode(base64.b64encode(deep.encode()).decode()) is None
     assert model_settings.decode_object(deep) is None
+
+
+_SMOKE_MEMBERS = [
+    "alarm",
+    "localTesting",
+    "remotingTesting",
+    "battery",
+    "trouble",
+    "muting",
+    "endoflife",
+    "highAlarm",
+]
+
+
+@pytest.mark.parametrize("code", ["T90S0", "T8931"])
+def test_a_smoke_sensors_status_is_the_flags_of_its_smoke_parameter(code: str) -> None:
+    """The smoke status is the mask its handler builds the app's card status from: one
+    member per bit of parameter 1823, read-only, unreported reads None."""
+    s = _setting(code, "sensor_smoke_status")
+    assert (s.kind, s.writable, s.read_param) == (SettingKind.FLAGS, False, 1823)
+    assert dict(s.flags) == {m: 1 << k for k, m in enumerate(_SMOKE_MEMBERS)}
+    assert s.flag_values(s.decode("3")) == {m: m in {"alarm", "localTesting"} for m in s.flags}
+    assert s.decode(None) is None
+
+
+@pytest.mark.parametrize("code", ["T90S0", "T8931"])
+@pytest.mark.parametrize(
+    ("raw", "smoke"), [("1", True), ("128", True), ("0", False), ("2", False), (None, None)]
+)
+def test_a_smoke_sensors_smoke_is_its_alarm_or_high_alarm(
+    code: str, raw: str | None, smoke: bool | None
+) -> None:
+    s = _setting(code, "sensor_smoke_status")
+    assert {k for k, m in s.flag_meanings.items() if m is SettingMeaning.SMOKE} == {
+        "alarm",
+        "highAlarm",
+    }
+    assert s.meaning_on(s.decode(raw), SettingMeaning.SMOKE) is smoke

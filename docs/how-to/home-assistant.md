@@ -1059,7 +1059,7 @@ A closed session (`async_close`) never reconnects on its own — build a new
     | `role` | `shown` | entity |
     |---|---|---|
     | `SETTING` | any | the control above when `writable`; when not, the app offers it as a control the library cannot write: a disabled diagnostic `sensor` (it keeps its identity once a write lands) |
-    | `STATUS` | `CARD` | an enabled primary entity, no entity category: a `sensor`, a `binary_sensor` for a bool. Its device class comes from `meaning` (an entry sensor's `sensor_door_status` is `OPENING`: device class `door`; a tamper or low-battery flag `TAMPER` / `LOW_BATTERY`). Its value moves with the station's parameter notifies: refresh it on the `StationStateChanged` that follows them (see [Coordinator per station](#coordinator-per-station-push-for-the-rest)) |
+    | `STATUS` | `CARD` | an enabled primary entity, no entity category: a `sensor`, a `binary_sensor` for a bool, one `binary_sensor` per member meaning for a read-only `FLAGS` status ([Device classes](#device-classes-from-meaning)). Its device class comes from `meaning` (an entry sensor's `sensor_door_status` is `OPENING`: device class `door`; a tamper or low-battery flag `TAMPER` / `LOW_BATTERY`). Its value moves with the station's parameter notifies: refresh it on the `StationStateChanged` that follows them (see [Coordinator per station](#coordinator-per-station-push-for-the-rest)) |
     | `STATUS` | `PAGE` | an enabled entity with entity category diagnostic: listed in the device page's Diagnostic section, neither hidden nor disabled |
     | `DIAGNOSTIC` | any | a disabled diagnostic entity, or none: the app shows it nowhere, or it is a value the device fields already give (battery level, online status, charging, a station's own status, counters, the active mode, a firmware update in progress), a structured value (`structured`), or a card status that is a bare code (an `OTHER` without labels or unit, which the app's card draws as an icon: a connection type, a Wi-Fi level). The device-field test ignores scope: on a camera paired to a HomeBase the storage status, and on a station that is not standalone its battery, charging and Wi-Fi values, are diagnostic though no device field carries them; none of these is readable today |
 
@@ -1470,9 +1470,29 @@ without a device class.
 | `MOISTURE` | `BOOL` | `binary_sensor` | `moisture` | — |
 | `COLD` | `BOOL` | `binary_sensor` | `cold` | — |
 | `SIREN_RINGING` | `BOOL` | `binary_sensor` | `sound` | — |
+| `SMOKE` | `FLAGS` member | `binary_sensor` | `smoke` | — |
+| `PROBLEM` | `FLAGS` member | `binary_sensor` | `problem` | — |
+| `END_OF_LIFE` | `FLAGS` member | `binary_sensor` | `problem` | — |
+| `MUTED` | `FLAGS` member | `binary_sensor` | none | — |
+| `TESTING` | `FLAGS` member | `binary_sensor` | none | — |
 
-The binary meanings (`devices.model_settings.BINARY_MEANINGS`) only sit on `BOOL`
-settings, `True` being the named state.
+The binary meanings (`devices.model_settings.BINARY_MEANINGS`) sit on `BOOL` settings
+(`setting.meaning`) and on the members of a read-only `FLAGS` status
+(`setting.flag_meanings`, member → meaning), `True` being the named state. A `FLAGS`
+status gets one `binary_sensor` per distinct meaning of its members, not one per member:
+several members can share one (a smoke sensor's `alarm` and `highAlarm` both mean smoke,
+its two test members testing). Its state is
+`setting.meaning_on(state.setting(key, device_sn=sn), meaning)`: True when any member of
+that meaning is on, None (unknown) while the device has reported no value. Members
+without a meaning are left out.
+
+**Smoke sensor (`sensor_smoke_status`, T90S0, T8931).** A read-only `FLAGS` status, read
+from parameter 1823, `role` `STATUS`, `shown` `CARD`. Its members are the eufy app's card
+states; the smoke `binary_sensor` (device class `smoke`) is
+`setting.meaning_on(value, SettingMeaning.SMOKE)`, on for `alarm` or `highAlarm`, as the
+app's cards show smoke. A station notify of 1823 moves the value at once (a
+`ParamChanged`, then `StationStateChanged`). Declared from the eufy app, not tested on
+hardware: whether a test press also sets `alarm` is not known.
 
 #### One entity per writable setting: `setting.control`
 

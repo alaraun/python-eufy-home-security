@@ -367,7 +367,8 @@ the event is emitted:
 **[declared: app]** Between dumps a station reports some parameter changes as a `0x0547`
 JSON notify about the device subheader byte 2 names (255 = the station). The eufy app
 writes each value into that device's parameters, so every status a handler reads from
-them (an entry sensor's door and tamper state, a battery warning) moves at once:
+them (an entry sensor's door and tamper state, a smoke sensor's status mask in 1823, a
+battery warning) moves at once:
 
 | JSON | parameters set |
 |---|---|

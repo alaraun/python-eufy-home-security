@@ -44,6 +44,7 @@ from eufy_home_security.devices.live_view import (
 from eufy_home_security.devices.model_settings import (
     PARENTLESS_ONLY,
     SdStatusGroups,
+    SettingMeaning,
     bundled_codes,
     mode_table_settings,
     settings_of,
@@ -1585,6 +1586,45 @@ async def test_an_entry_sensors_door_status_follows_the_stations_notify(
         await hub.async_close()
     assert now.setting("sensor_disassemble_status", device_sn=serial) is True
     assert _snapshots(events)[-1].setting("sensor_door_status", device_sn=serial) is True
+
+
+_SMOKE_SENSOR = CloudDevice(
+    device_sn="T90S0P0000000001",
+    device_type=2,
+    name="Smoke",
+    station_sn=SYNTHETIC.station_sn,
+    channel=16,
+)
+
+
+async def test_a_smoke_sensors_status_follows_the_stations_notify(
+    fake: FakeStation, station: Station
+) -> None:
+    """A sensor notify of the smoke status parameter moves the read-only flags status at
+    once, and its smoke meaning with it."""
+    fake.params[16] = {1823: "0"}
+    hub = Station(STATION, station.session, sub_devices=[CAMERA, _SMOKE_SENSOR])
+    serial = _SMOKE_SENSOR.device_sn
+    setting = hub.setting("sensor_smoke_status", device_sn=serial)
+    try:
+        state = await hub.async_update()
+        assert state.setting("sensor_smoke_status", device_sn=serial) == 0
+        fake.send_json(
+            FrameType.NOTIFY_PAYLOAD,
+            {"cmd": 1829, "payload": {"params": [{"param_type": 1823, "param_value": 129}]}},
+            device_channel=16,
+        )
+        async with asyncio.timeout(3):
+            while (now := hub.state) is None or not now.setting(
+                "sensor_smoke_status", device_sn=serial
+            ):
+                await asyncio.sleep(0.02)
+    finally:
+        await hub.async_close()
+    value = now.setting("sensor_smoke_status", device_sn=serial)
+    assert value == 129
+    assert setting.meaning_on(value, SettingMeaning.SMOKE) is True
+    assert setting.meaning_on(value, SettingMeaning.TESTING) is False
 
 
 async def test_a_notify_emits_its_param_changes_then_one_snapshot(

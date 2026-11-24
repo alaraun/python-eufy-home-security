@@ -84,6 +84,7 @@ SETTING_KEYS = {
     "structured",
     "control",
     "flags",
+    "flag_meanings",
     "bit",
     "domain",
     "meaning",
@@ -215,6 +216,11 @@ def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> N
         assert set(s.get("labels", {})) <= set(s["flags"])
     else:
         assert "flags" not in s
+    if "flag_meanings" in s:
+        assert kind == "flags", ident
+        assert s["flag_meanings"], ident
+        assert set(s["flag_meanings"]) <= set(s["flags"]), ident
+        assert all(SettingMeaning(m) in BINARY_MEANINGS for m in s["flag_meanings"].values())
     if "bit" in s:
         bit = s["bit"]
         assert kind == "bool", ident
@@ -454,6 +460,37 @@ def _check_battery(battery: Any, settings: dict[str, Any]) -> None:
             assert int(raw) <= 255
             assert str(int(raw)) == raw
             assert level is None or (type(level) is int and 0 <= level <= 100 and level != int(raw))
+
+
+_FLAGS_STATUS: dict[str, Any] = {
+    "kind": "flags",
+    "access": "ro",
+    "flags": {"alarm": 1, "localTesting": 2},
+    "flag_meanings": {"alarm": "smoke", "localTesting": "testing"},
+    "read": {"param": 1823, "map": None, "no_default": True},
+    "section": "system",
+    "role": "status",
+    "shown": "card",
+}
+
+
+def test_the_schema_takes_a_read_only_flags_status_with_member_meanings() -> None:
+    _check_setting("k", _FLAGS_STATUS, {"k": _FLAGS_STATUS})
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"flag_meanings": {"siren": "smoke"}},  # not a member
+        {"flag_meanings": {"alarm": "duration"}},  # not a binary meaning
+        {"flag_meanings": {}},  # names nothing
+        {"kind": "bool", "flags": None},  # meanings on a setting without members
+    ],
+)
+def test_the_schema_refuses_bad_member_meanings(change: dict[str, Any]) -> None:
+    entry = {k: v for k, v in {**_FLAGS_STATUS, **change}.items() if v is not None}
+    with pytest.raises(AssertionError):
+        _check_setting("k", entry, {"k": entry})
 
 
 def test_models_holds_exactly_the_indexed_codes() -> None:

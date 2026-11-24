@@ -13,6 +13,7 @@ from eufy_home_security.devices.model_settings import (
     Setting,
     SettingControl,
     SettingKind,
+    SettingMeaning,
     WriteContext,
     settings_of,
 )
@@ -153,3 +154,143 @@ def test_inconsistent_control_or_flags_name_the_file(
     full = {"read": None, "write": {"cmd": 1, "params": {"v": "$v"}}, **entry}
     with pytest.raises(ModelDataError, match=r"T0001\.json"):
         _load(data_root, {"k": full})
+
+
+# A read-only status mask, as a smoke sensor's handler reads it from one parameter.
+SMOKE_FLAGS = {
+    "alarm": 1,
+    "localTesting": 2,
+    "remotingTesting": 4,
+    "battery": 8,
+    "trouble": 16,
+    "muting": 32,
+    "endoflife": 64,
+    "highAlarm": 128,
+}
+SMOKE_STATUS = {
+    "access": "ro",
+    "kind": "flags",
+    "role": "status",
+    "flags": SMOKE_FLAGS,
+    "flag_meanings": {
+        "alarm": "smoke",
+        "highAlarm": "smoke",
+        "localTesting": "testing",
+        "remotingTesting": "testing",
+        "battery": "low_battery",
+        "trouble": "problem",
+        "muting": "muted",
+        "endoflife": "end_of_life",
+    },
+    "read": {"param": 1823, "map": None, "no_default": True},
+}
+
+
+def test_a_read_only_flags_status_reads_its_mask(data_root: Path) -> None:
+    s = _load(data_root, {"sensor_smoke_status": SMOKE_STATUS})["sensor_smoke_status"]
+    assert (s.kind, s.writable, s.readable, s.control) == (SettingKind.FLAGS, False, True, None)
+    assert s.read_param == 1823
+    assert s.decode("3") == 3
+    assert s.decode("x") is None
+
+
+def test_flag_values_give_every_member_on_or_off(data_root: Path) -> None:
+    s = _load(data_root, {"k": SMOKE_STATUS})["k"]
+    on = {"alarm", "localTesting"}
+    assert s.flag_values("3") == {m: m in on for m in SMOKE_FLAGS}
+    assert s.flag_values(3) == s.flag_values("3")
+    assert s.flag_values(0) == dict.fromkeys(SMOKE_FLAGS, False)
+
+
+@pytest.mark.parametrize("raw", [None, "", "x", "-1", True, 1.5])
+def test_flag_values_of_an_unreported_or_malformed_value_are_none(
+    data_root: Path, raw: object
+) -> None:
+    assert _load(data_root, {"k": SMOKE_STATUS})["k"].flag_values(raw) is None
+
+
+def test_flag_meanings_load_as_meanings(data_root: Path) -> None:
+    s = _load(data_root, {"k": SMOKE_STATUS})["k"]
+    assert s.flag_meanings["highAlarm"] is SettingMeaning.SMOKE
+    assert s.flag_meanings["muting"] is SettingMeaning.MUTED
+    assert s.flag_meanings["endoflife"] is SettingMeaning.END_OF_LIFE
+    assert s.flag_meanings["trouble"] is SettingMeaning.PROBLEM
+    assert s.flag_meanings["remotingTesting"] is SettingMeaning.TESTING
+    assert s.flag_meanings["battery"] is SettingMeaning.LOW_BATTERY
+    assert s.meaning is None  # the mask itself names no state
+
+
+@pytest.mark.parametrize(
+    ("raw", "smoke"),
+    [
+        ("1", True),  # alarm
+        ("128", True),  # high alarm
+        ("129", True),
+        ("3", True),  # alarm while testing
+        ("0", False),
+        ("2", False),  # a test press alone
+        ("4", False),
+        ("126", False),  # every other member
+        ("256", False),  # a bit no member names
+        (None, None),  # not reported
+        ("", None),
+        ("x", None),
+        ("-1", None),
+    ],
+)
+def test_meaning_on_is_any_member_of_that_meaning(
+    data_root: Path, raw: str | None, smoke: bool | None
+) -> None:
+    s = _load(data_root, {"k": SMOKE_STATUS})["k"]
+    assert s.meaning_on(raw, SettingMeaning.SMOKE) is smoke
+
+
+def test_meaning_on_takes_the_decoded_mask_too(data_root: Path) -> None:
+    s = _load(data_root, {"k": SMOKE_STATUS})["k"]
+    assert s.meaning_on(s.decode("8"), SettingMeaning.LOW_BATTERY) is True
+    assert s.meaning_on(s.decode("8"), SettingMeaning.SMOKE) is False
+
+
+def test_meaning_on_refuses_a_meaning_no_member_carries(data_root: Path) -> None:
+    s = _load(data_root, {"k": SMOKE_STATUS})["k"]
+    with pytest.raises(ValueError, match="moisture"):
+        s.meaning_on("1", SettingMeaning.MOISTURE)
+    with pytest.raises(ValueError, match="flags"):
+        _load(data_root, {"b": BIT_SWITCH})["b"].meaning_on("1", SettingMeaning.SMOKE)
+
+
+def test_a_flags_setting_without_flag_meanings_has_none(data_root: Path) -> None:
+    s = _load(data_root, {"d": DETECTION})["d"]
+    assert dict(s.flag_meanings) == {}
+    assert s.flag_values("4") == {"1": False, "2": True, "3": False, "4": False}
+
+
+def test_a_multi_bit_member_is_on_only_when_all_its_bits_are(data_root: Path) -> None:
+    s = _load(data_root, {"d": DETECTION})["d"]
+    assert s.flag_values("1") == {"1": False, "2": False, "3": False, "4": False}  # 3 needs 1|2
+    assert s.flag_values("3") == {"1": True, "2": False, "3": False, "4": False}
+
+
+def test_flag_values_of_a_setting_that_is_no_flags_mask_are_none(data_root: Path) -> None:
+    assert _load(data_root, {"b": BIT_SWITCH})["b"].flag_values("256") is None
+
+
+@pytest.mark.parametrize(
+    "meanings",
+    [
+        {"alarm": "duration"},  # not a binary meaning
+        {"alarm": "no_such_meaning"},
+        {"siren": "smoke"},  # not a member
+        {},  # names nothing
+        ["smoke"],  # not an object
+    ],
+)
+def test_bad_flag_meanings_name_the_file(data_root: Path, meanings: object) -> None:
+    with pytest.raises(ModelDataError, match=r"T0001\.json"):
+        _load(data_root, {"k": {**SMOKE_STATUS, "flag_meanings": meanings}})
+
+
+def test_flag_meanings_on_a_setting_that_is_no_flags_name_the_file(data_root: Path) -> None:
+    entry = {**BIT_SWITCH, "flag_meanings": {"x": "smoke"}}
+    with pytest.raises(ModelDataError, match=r"T0001\.json"):
+        _load(data_root, {"k": entry})

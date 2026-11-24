@@ -227,7 +227,9 @@ class SettingMeaning(StrEnum):
     from the eufy app's own reading of the property (a temperature, a timestamp, a time of
     day). Binary meanings are the statuses the app's device card shows for a security
     sensor (declared, eufy app): ``True`` is the state the name gives (open, tampered,
-    low battery, water, cold, ringing). None on a setting: no meaning the app gives.
+    low battery, water, cold, ringing, smoke). A ``BOOL`` status carries one as
+    :attr:`Setting.meaning`, a member of a ``FLAGS`` status in :attr:`Setting.flag_meanings`.
+    None on a setting: no meaning the app gives.
     """
 
     DURATION = "duration"
@@ -254,6 +256,16 @@ class SettingMeaning(StrEnum):
     """``True``: the temperature is below the device's low-temperature threshold."""
     SIREN_RINGING = "siren_ringing"
     """``True``: the siren is sounding."""
+    SMOKE = "smoke"
+    """``True``: smoke is detected."""
+    PROBLEM = "problem"
+    """``True``: the device reports a fault."""
+    MUTED = "muted"
+    """``True``: the device's alarm is silenced."""
+    END_OF_LIFE = "end_of_life"
+    """``True``: the device has reached the end of its service life."""
+    TESTING = "testing"
+    """``True``: a test is running (from the device's button or from the app)."""
 
 
 BINARY_MEANINGS: Final = frozenset(
@@ -264,9 +276,14 @@ BINARY_MEANINGS: Final = frozenset(
         SettingMeaning.MOISTURE,
         SettingMeaning.COLD,
         SettingMeaning.SIREN_RINGING,
+        SettingMeaning.SMOKE,
+        SettingMeaning.PROBLEM,
+        SettingMeaning.MUTED,
+        SettingMeaning.END_OF_LIFE,
+        SettingMeaning.TESTING,
     }
 )
-"""The meanings of a ``BOOL`` status: ``True`` is the named state."""
+"""The meanings of a ``BOOL`` status or a ``FLAGS`` member: ``True`` is the named state."""
 
 _UNIT_MEANINGS: Final[Mapping[SettingUnit, SettingMeaning]] = MappingProxyType(
     {
@@ -404,6 +421,9 @@ class Setting:
     thing description's. ``meaning`` says what the value stands for
     (:class:`SettingMeaning`): from the model's data where the app gives the property one
     (a sensor status, a timestamp, a temperature), else from ``unit``; None for none.
+    ``flag_meanings`` gives a ``FLAGS`` status's members the binary meaning the app's
+    device card reads them as (a smoke sensor's ``alarm`` and ``highAlarm``: smoke);
+    :meth:`meaning_on` answers one meaning for a reported mask.
     """
 
     key: str
@@ -435,6 +455,9 @@ class Setting:
     bit: int | None = None
     domain: str | None = None
     meaning: SettingMeaning | None = None
+    flag_meanings: Mapping[str, SettingMeaning] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
     _write: Recipe | None = field(default=None, repr=False)
     _write_table: Mapping[str, Recipe] | None = field(default=None, repr=False)
     _read_param: int | None = field(default=None, repr=False)
@@ -635,6 +658,24 @@ class Setting:
             raise ValueError(f"{self.key}: {current!r} is not a mask")
         bits = self.flags[flag]
         return (mask | bits) if on else (mask & ~bits)
+
+    def flag_values(self, value: object) -> dict[str, bool] | None:
+        """Each member of a ``FLAGS`` mask on (all its bits set) or off; ``value`` is the
+        mask or its parameter text. None when it is no mask (unreported, malformed)."""
+        mask = _mask(value)
+        if self.kind is not SettingKind.FLAGS or mask is None:
+            return None
+        return {k: mask & bits == bits for k, bits in self.flags.items()}
+
+    def meaning_on(self, value: object, meaning: SettingMeaning) -> bool | None:
+        """Whether any member :attr:`flag_meanings` gives ``meaning`` is on in ``value``
+        (the mask or its parameter text); None when it is no mask (unreported, malformed).
+        ValueError when no member carries ``meaning``."""
+        members = [k for k, m in self.flag_meanings.items() if m is meaning]
+        if not members:
+            raise ValueError(f"{self.key}: no flags member means {meaning.value!r}")
+        on = self.flag_values(value)
+        return None if on is None else any(on[k] for k in members)
 
     def flag_label(self, flag: str) -> str:
         """The app's title of a ``FLAGS`` member, else the member key."""
@@ -2100,6 +2141,7 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
     if refusal is not None:
         writable, note = False, _join_note(note, refusal)
     control, flags, bit = _control_fields(kind, entry, access == "rw")
+    flag_meanings = _flag_meanings(entry.get("flag_meanings"), flags)
     unit = _unit(entry.get("unit"))
     raw_meaning = _optional_str(entry, "meaning")
     meaning = unit_meaning(unit) if raw_meaning is None else SettingMeaning(raw_meaning)
@@ -2142,6 +2184,7 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
         bit=bit,
         domain=domain,
         meaning=meaning,
+        flag_meanings=flag_meanings,
         _write=write,
         _write_table=table,
         _read_param=read_param,
@@ -2154,6 +2197,22 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
         _write_params=_template_params([write, *(table or {}).values()]),
         _variants=_variant_rules(entry.get("variants")),
     )
+
+
+def _flag_meanings(raw: Any, flags: Mapping[str, int]) -> Mapping[str, SettingMeaning]:
+    """A ``FLAGS`` setting's ``flag_meanings`` (absent: none): members of ``flags``, each
+    with a binary meaning."""
+    if raw is None:
+        return MappingProxyType({})
+    if not isinstance(raw, dict) or not raw:
+        raise ValueError("flag_meanings is not an object naming members")
+    out: dict[str, SettingMeaning] = {}
+    for member, name in raw.items():
+        meaning = SettingMeaning(name)
+        if member not in flags or meaning not in BINARY_MEANINGS:
+            raise ValueError(f"flag meaning {member!r}: {name!r}")
+        out[member] = meaning
+    return MappingProxyType(out)
 
 
 def _read_fallback(
