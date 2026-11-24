@@ -32,7 +32,7 @@ are 1-space-indented JSON with a trailing newline, and a re-run gives the same b
 | `min`, `max`, `step`, `default` | From the TD where it gives them; `default` is the eufy app's own where the app shows another value while the device reports none (`device_cross_cam_assistance_switch` on a T8030: on); an enum's `default` is always one of its `values` |
 | `unit` | The unit the app's screen shows: a settings-page control's on the page the setting is on, on a model whose settings the app's RN screens render, or a screen that reads the property wherever it sits (the clip length and retrigger interval: `s` on every model; the power-manager counters show a bare number: no unit); it wins over the TD unit. Else the TD unit normalised to `s`, `ms` or `%` (the TD's `day` is dropped: no app screen shows those values in days; its volume unit is `%` on a 0..100 or 1..100 scale and dropped on any other, a bare level); absent otherwise |
 | `meaning` | What the app reads the value as, where its own code names the property: a security sensor's card status (`opening`, `tamper`, `low_battery`, `moisture`, `cold`, `siren_ringing`; bool settings only), `timestamp` (epoch milliseconds), `time_of_day` (`HH:MM`); or `temperature` from the TD unit `degree`. Absent otherwise: the loader then derives it from `unit` (a time unit: `duration`, `%`: `percent`) |
-| `access` | `rw`: the handler has a value-dependent write. `ro`: it has none, or the setting is a status the eufy app only reads (`hb_keypad_is_password_set`, `device_back_screen_connect_status`). The handler's write is probed for every property, whatever the TD's `access_mode` declares (the app does not check it before writing); a property the TD does not declare writable (no `W`) is `rw` only in a context where its write also gives a `read`: getProperty returns the written value (the motion light switch `motion_actived_light_switch` of a T8420), or the setting is an enum read by the inverse of its write (`read` below) |
+| `access` | `rw`: the handler has a value-dependent write. `ro`: it has none, or the setting is a status the eufy app only reads (`hb_keypad_is_password_set`, `device_back_screen_connect_status`). The handler's write is probed for every property, whatever the TD's `access_mode` declares (the app does not check it before writing); a property the TD does not declare writable (no `W`) is `rw` only in a context where its write also gives a `read`: getProperty returns the written value (the motion light switch `motion_actived_light_switch` of a T8420), or the setting is an enum read by the inverse of its write (`read` below), or an `object` setting the handler reads from the value its write stores (*Object writes*) |
 | `write` | Recipe template (base context, below) |
 | `write_table` | `{"<value>": recipe}` when the recipe's shape depends on the value. It replaces `write` |
 | `read` | `{"param": <id>, "map": null}`: the parameter's value is the public value's string form. `{"param": <id>, "map": {"<param value>": <public value>}}`: decode through the map. Either may carry `view` (below). `fallback` (an enum's value): any reported value outside the values reads as it, as the eufy app's screen shows it (the recording type `device_recording_type` reads `3`, Continuous); writing a value outside the values is still refused. `null`: not readable. The generator takes it from the handler's getProperty of each written value; for a setting without a write, from the one parameter the handler fills it from (located once, in the base context: the parameter ids the handler's code names are held at two values, in ascending and in descending order, and the property is read back by name, else by command id), held at each value's string form. Such a read carries `"no_default": true`: unreported, the setting reads None, never its `default`. It stays `null` when several parameters decide the value (in either order, or together), when a bool does not read as a boolean for every value held (`"2"` too), or when an open kind (`string`, `other`) does not read a multi-digit number and a JSON object back unchanged; an `other` is also read as a number when each integer text reads back as that integer, the JSON object does not read as another structure, no other property reads its parameter and its own write, if any, stores the number as is (a property that reads one field of a JSON value stays `null`; reading such fields is not described). An enum whose getProperty does not return the written value, but whose write stores every value as its own parameter value (no failed conversion such as `NaN`), is read by the inverse of the write unless a per-view read decodes it: the value read is the one the client wrote. The eufy app's own display of the watermark setting (T8414, T8440, T8442) differs from it |
@@ -149,8 +149,8 @@ keys that are such reports are dropped.
 
 A property whose app screens write a JSON object (the combined light settings
 `motion_activated_light_setting` and `light_ambient_lighting_setting`) is driven, besides
-the domain sweep, with the objects the app's screens write for it, when the thing
-description declares it writable (the generator's `object_writes` input: the screen's starting
+the domain sweep, with the objects the app's screens write for it, whatever the thing
+description's `access_mode` (the generator's `object_writes` input: the screen's starting
 object with the switch on and off, a schedule written, dusk-to-dawn written, a
 read-modify-write of a read object), in every context on both channels. The value each
 object stands for is the object the recipe stores (the first `update` or `extUpdates`
@@ -161,8 +161,11 @@ its base64, renders every swept value back to its recipe byte for byte (member o
 included), with at least two distinct values. It is readable from the parameter the
 write stores the value's base64 in when the handler fills the property from that
 parameter (held at each written value's stored form, the property reads back, with as
-many distinct answers as values). Otherwise the setting keeps its entry and its note
-names why (below). So a handler that reshapes the app's object (days to a bitmask,
+many distinct answers as values). A property the thing description does not declare
+writable (no `W`) becomes `object` only in a context where its object write is also
+readable that way, as for its `access` above. Otherwise the setting keeps its entry and,
+when the description declares it writable, its note names why (below); an undeclared one
+keeps it without a note. So a handler that reshapes the app's object (days to a bitmask,
 renamed members, defaults) and stores the result as base64 gets the stored object as
 its value; one that stores JSON text is left read-only.
 

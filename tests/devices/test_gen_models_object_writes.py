@@ -59,7 +59,8 @@ CHILD = WriteContext(
 # body and stores its base64, and reads the property from that parameter. "text": it stores
 # the JSON text instead. "member": the body wraps it next to a fixed field, the stored
 # base64 is of {schedules}, and nothing reads it back. "constant": as "base64", but the
-# property reads one fixed value whatever the parameter holds.
+# property reads one fixed value whatever the parameter holds. "alone": as "base64", but the
+# property reads from the parameter only on a standalone device.
 HANDLER = """
 function parse(s) { return JSON.parse(s.slice(0, s.lastIndexOf("EOF;"))); }
 const MODE = "@MODE@";
@@ -87,7 +88,10 @@ module.exports.controlDevice = function (s) {
 module.exports.deviceStatus = function (s) {
   const m = parse(s);
   const p = (m.device.params || []).find((x) => x.param_type === 1422);
-  if (!p || MODE === "member") return JSON.stringify({ data: { p2p: {} } });
+  const alone = m.device.device_sn === m.device.station_sn;
+  if (!p || MODE === "member" || (MODE === "alone" && !alone)) {
+    return JSON.stringify({ data: { p2p: {} } });
+  }
   if (MODE === "constant") return JSON.stringify({ data: { p2p: { [IDENT]: "{}" } } });
   const raw = p.param_value.startsWith("{") ? p.param_value
     : Buffer.from(p.param_value, "base64").toString();
@@ -98,7 +102,7 @@ module.exports.deviceStatus = function (s) {
 
 def _cache(tmp_path: Path, mode: str, access: str = "RW") -> Path:
     folder = tmp_path / PN
-    folder.mkdir()
+    folder.mkdir(parents=True)
     td = {
         "large_version": 3,
         "profile": {"plugin_path": f"https://cdn.example/p/2024/05/06/x/{PN}Handle.mix.js"},
@@ -181,13 +185,79 @@ def test_a_read_that_does_not_follow_the_stored_value_is_no_read(tmp_path: Path)
 
 @pytest.mark.needs_node
 @pytest.mark.timeout(120)
-def test_a_property_the_description_does_not_mark_writable_is_not_driven(
-    tmp_path: Path,
+@pytest.mark.parametrize("access", ["", "R"])
+def test_an_undeclared_object_written_and_read_back_is_writable(
+    tmp_path: Path, access: str
 ) -> None:
-    doc, counts = gen_models.generate(PN, _cache(tmp_path, "base64", access="R"), titles=TITLES)
+    """No ``W`` in its ``access_mode``: the object write is kept where it is proven and the
+    handler reads the property from the stored value."""
+    doc, counts = gen_models.generate(PN, _cache(tmp_path, "base64", access=access), titles=TITLES)
+    entry = doc["settings"][IDENT]
+    assert (entry["kind"], entry["access"], entry["control"]) == ("object", "rw", "object")
+    assert entry["write"]["params"] == "$v:json"
+    assert entry["read"] == {"param": 1422, "map": None}
+    assert "contexts" not in entry
+    assert counts["object:write"] == 1
+
+
+@pytest.mark.needs_node
+@pytest.mark.timeout(120)
+@pytest.mark.parametrize("mode", ["member", "constant"])
+def test_an_undeclared_object_written_without_a_read_stays_read_only(
+    tmp_path: Path, mode: str
+) -> None:
+    """The handler writes the app's objects, but nothing reads the stored value back: the
+    entry stays as without the app's objects, without a note."""
+    doc, counts = gen_models.generate(PN, _cache(tmp_path, mode, access=""), titles=TITLES)
+    plain, _ = gen_models.generate(PN, _cache(tmp_path / "plain", mode, access=""), titles={})
     entry = doc["settings"][IDENT]
     assert (entry["kind"], entry["access"]) == ("string", "ro")
+    assert "write" not in entry
+    assert "note" not in entry
+    assert entry == plain["settings"][IDENT]
     assert not any(key.startswith("object:") for key in counts)
+
+
+@pytest.mark.needs_node
+@pytest.mark.timeout(120)
+def test_an_undeclared_object_without_an_object_form_gets_no_note(tmp_path: Path) -> None:
+    doc, counts = gen_models.generate(PN, _cache(tmp_path, "text", access=""), titles=TITLES)
+    entry = doc["settings"][IDENT]
+    assert (entry["kind"], entry["access"]) == ("string", "ro")
+    assert "note" not in entry
+    assert not any(key.startswith("object:") for key in counts)
+
+
+@pytest.mark.needs_node
+@pytest.mark.timeout(120)
+def test_an_undeclared_object_read_back_in_one_context_is_written_there_only(
+    tmp_path: Path,
+) -> None:
+    """Read back only on a standalone device: the base context stays read-only, the
+    standalone context carries the object write and its read."""
+    doc, _ = gen_models.generate(PN, _cache(tmp_path, "alone", access=""), titles=TITLES)
+    entry = doc["settings"][IDENT]
+    assert (entry["kind"], entry["access"]) == ("string", "ro")
+    assert "write" not in entry
+    assert [group["names"] for group in entry["contexts"]] == [["standalone"]]
+    alone = entry["contexts"][0]["entry"]
+    assert (alone["kind"], alone["access"], alone["control"]) == ("object", "rw", "object")
+    assert alone["structured"] is True
+    assert alone["read"] == {"param": 1422, "map": None}
+    assert alone["write"]["update"]["paramValue"] == "$v:b64json"
+
+
+@pytest.mark.needs_node
+@pytest.mark.timeout(120)
+def test_a_declared_object_read_back_in_one_context_is_written_in_every_context(
+    tmp_path: Path,
+) -> None:
+    doc, _ = gen_models.generate(PN, _cache(tmp_path, "alone"), titles=TITLES)
+    entry = doc["settings"][IDENT]
+    assert (entry["kind"], entry["access"], entry["read"]) == ("object", "rw", None)
+    assert entry["contexts"] == [
+        {"names": ["standalone"], "entry": {"read": {"param": 1422, "map": None}}}
+    ]
 
 
 @pytest.mark.needs_node

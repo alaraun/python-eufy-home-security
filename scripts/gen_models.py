@@ -1271,14 +1271,11 @@ def object_sweep(
     contexts: dict[str, codec.Context],
     objects: Mapping[str, Sequence[dict[str, Any]]],
 ) -> dict[str, ObjectRows]:
-    """setProperty of each writable property ``objects`` names with each object the app
-    writes for it, in every context on both of its channels (one driver job each)."""
+    """setProperty of each property ``objects`` names, whatever its ``access_mode``, with
+    each object the app writes for it, in every context on both of its channels (one driver
+    job each); :func:`apply_object_writes` decides which writes a file keeps."""
     out: dict[str, ObjectRows] = {name: {} for name in contexts}
-    idents = [
-        p["identifier"]
-        for p in props
-        if p["identifier"] in objects and "W" in (p.get("access_mode") or "")
-    ]
+    idents = [p["identifier"] for p in props if p["identifier"] in objects]
     if not idents:
         return out
     for name, ctx in contexts.items():
@@ -1342,11 +1339,14 @@ def apply_object_writes(
     *,
     context: codec.Context,
     counts: dict[str, int],
+    undeclared: Collection[str],
 ) -> None:
     """Turn each setting whose app objects the handler writes in a form an object write
     reproduces (``gen_models_codec.infer_object_write``) into an ``object`` setting with
     that write and its read (:func:`object_reads`); a setting whose app objects get recipes
-    no object form reproduces keeps its entry, its note naming why."""
+    no object form reproduces keeps its entry, its note naming why. A property the thing
+    description does not declare writable (``undeclared``, :func:`td_writable`) is turned
+    only when its write gives a read, and otherwise keeps its entry without a note."""
     alt = codec.alt_channel(context)
     fits = {
         ident: codec.infer_object_write(main, second, context.channel, alt.channel)
@@ -1356,6 +1356,9 @@ def apply_object_writes(
     reads = object_reads(product_code, handler, context, fits)
     for ident, fit in fits.items():
         entry = settings[ident]
+        read = reads.get(ident)
+        if ident in undeclared and read is None:
+            continue
         if fit.write is None:
             if fit.note is not None:
                 entry["note"] = f"{entry['note']}; {fit.note}" if entry.get("note") else fit.note
@@ -1363,7 +1366,6 @@ def apply_object_writes(
             continue
         for key in (*OBJECT_ENTRY_DROPPED, "write_table", "note"):
             entry.pop(key, None)
-        read = reads.get(ident)
         entry.update(kind="object", access="rw", write=fit.write, read=read, structured=True)
         _count(counts, "object:write")
         _count(counts, "object:read" if read is not None else "object:no read")
@@ -1864,7 +1866,13 @@ def build_context(  # noqa: C901
     if reference:
         _count(counts, "reference_rows", len(reference))
     apply_object_writes(
-        product_code, handler, settings, objects or {}, context=context, counts=counts
+        product_code,
+        handler,
+        settings,
+        objects or {},
+        context=context,
+        counts=counts,
+        undeclared={p["identifier"] for p in props if not td_writable(p)},
     )
     shape_controls(product_code, handler, settings, counts, context, wire=wire)
     joiner.hold_members(product_code, settings, titles, counts)
