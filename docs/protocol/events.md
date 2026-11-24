@@ -571,14 +571,15 @@ The app uses FCM as its only push transport **[app]**. A headless client registe
 
 | outer key | meaning |
 |---|---|
-| `payload` | base64 (URL-safe or standard, padding optional) of NUL-terminated JSON, **not encrypted** |
+| `payload` | the event body: base64 (URL-safe or standard, padding optional) of NUL-terminated JSON, **not encrypted**; text starting with `{` is read as JSON itself **[app]**. Parsed strictly with bounded nesting; a body that does not decode lifts no event field |
+| `doorbell` | a video doorbell's event body **[app]**: when non-empty it is read instead of `payload`, in the same two encodings. Its fields are strings (`"event_type": "3103"`), read like the payload's |
 | `span_id` | **redelivery key**, lifted as `SecurityEvent.push_id`. The backend redelivers on reconnect and re-registration. The app keeps a 1000-entry ring; the listener keeps its own. It never matches the P2P copy of the same event: see [De-duplication across channels](#de-duplication-across-channels). |
 | `app_tab` | `eufy_security` (`eufy_home` = robot vacuums on the same channel). The listener drops any other value; a message without `app_tab` is kept. |
 | `type` | **device** type, not event type. ≥ 10100 = account-level server push (device removed, invitation, alarm notify). These decode raw-only: no fields are lifted. |
 | `event_type` | detection, same 31xx enum as local |
 | `station_sn`, `device_sn` | |
 | `event_time`, `push_time`, `server_receive_time` | epoch, **seconds or milliseconds**: multiply by 1000 when < 10¹⁰. Every captured `event_time` was seconds (10 digits). The time checks above run after this conversion. |
-| `message_id`, `trace_id`, `push_type`, `event_level`, `title`, `content`, `doorbell`, `origin`, `push_control` | metadata and pre-rendered text |
+| `message_id`, `trace_id`, `push_type`, `event_level`, `title`, `content`, `origin`, `push_control` | metadata and pre-rendered text |
 
 **Inner payload.** Newer firmware uses the long names of the local payload. Older
 firmware uses single letters, and **one payload has been seen mixing both**, so map
@@ -597,7 +598,8 @@ short keys onto long ones instead of choosing a dialect:
 most 64 characters); anything else is listed in `rejected_fields`. The push listener's
 debug line (`push event: …`) names the kind and whether the push carries a face id (by its
 length only), a person name, a `pic_url` (`https`, `station` or `other`) and a
-`session_id`, with the `push_count`.
+`session_id`, with the `push_count` and the outer field the body was read from
+(`body doorbell`, `body payload`, or `body none` without either).
 
 **Redelivery.** Because the token is re-registered on every start, old messages
 come back after a restart. The listener persists its dedupe ring (span ids with

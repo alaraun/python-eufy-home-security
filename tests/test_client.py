@@ -96,6 +96,7 @@ from eufy_home_security.p2p.pppp import BROADCAST, encode_sockaddr
 from eufy_home_security.p2p.transport import RENDEZVOUS_PORT, ConnectPath, PPPPTransport, Wake
 from eufy_home_security.p2p.xzyh import FrameType
 from eufy_home_security.push import fcm as fcm_module
+from eufy_home_security.push.decode import decode_push
 from eufy_home_security.station import Station
 from eufy_home_security.storage import CACHE_SECTIONS, CACHE_VERSION, MemoryStore
 from eufy_home_security.testing import (
@@ -2508,6 +2509,27 @@ async def test_a_station_is_reached_on_demand_by_the_app_list_or_the_battery_dev
         assert station.connects_on_demand is on_demand
         assert station.has_battery() is battery
         await eufy.async_close()
+
+
+async def test_a_standalone_doorbells_pushed_press_reaches_the_consumer() -> None:
+    """A press pushed in the ``doorbell`` body arrives as the doorbell's DOORBELL_PRESS."""
+    sn = "T8200" + SYNTHETIC.camera_sn[5:]
+    body = {"event_type": "3103", "event_time": str(int(time.time())), "device_sn": sn}
+    message = {"app_tab": "eufy_security", "type": "5", "span_id": "s1", "station_sn": sn}
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, FakeCloud(devices=[standalone_device(sn)]))
+        await eufy.async_discover()
+        events: list[Event] = []
+        eufy.subscribe(events.append)
+        await eufy.async_start(p2p=False)
+        StubPush.instances[-1].callback(decode_push(message | {"doorbell": json.dumps(body)}))
+        await eufy.async_close()
+    presses = [
+        (e.station_sn, e.device_sn)
+        for e in events
+        if isinstance(e, SecurityEvent) and e.detection is DetectionType.DOORBELL_PRESS
+    ]
+    assert presses == [(sn, sn)]
 
 
 async def test_a_hub_gets_the_cloud_refresh_loop_and_a_missing_copy_is_fetched_at_start() -> None:

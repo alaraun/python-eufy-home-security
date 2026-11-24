@@ -64,7 +64,7 @@ from ..exceptions import (
 )
 from ..storage import SessionCache
 from . import const
-from .decode import decode_payload, decode_push, is_security_push
+from .decode import body_field, decode_payload, decode_push, is_security_push
 
 if TYPE_CHECKING:
     from ..cloud.api import EufyCloudApi
@@ -749,7 +749,8 @@ class PushListener:
         self._remember(span)
         _LOGGER.debug(
             "push event: station %s device %s ch %s msg_type %s event_type %s detection %s "
-            "guard_mode %s fetch_id %s person_name %s pic_url %s session_id %s push_count %s",
+            "guard_mode %s fetch_id %s person_name %s pic_url %s session_id %s push_count %s "
+            "body %s",
             redact_serial(event.station_sn),
             redact_serial(event.device_sn),
             event.channel,
@@ -762,6 +763,7 @@ class PushListener:
             pic_url_kind(event.pic_url) or "none",
             "set" if event.session_id else "none",
             event.push_count,
+            body_field(data) or "none",
         )
         try:
             self._callback(event)

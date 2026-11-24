@@ -432,3 +432,92 @@ def test_motion_sensor_short_key_push_is_motion_even_without_e(short_e: int | st
     )
     assert event.msg_type == PushMessageType.MOTION_SENSOR
     assert event.detection is DetectionType.MOTION
+
+
+# ── the event body: `doorbell` before `payload` ──────────────────────────────
+
+#: A video doorbell that is its own station.
+DOORBELL_SN = "T8200" + SYNTHETIC.camera_sn[5:]
+
+
+def _press(**fields: Any) -> dict[str, Any]:
+    """A doorbell body: every field a string, as the cloud sends it."""
+    return {
+        "event_type": "3103",
+        "event_time": str(NOW_MS // 1000 - 2),
+        "device_sn": DOORBELL_SN,
+        "station_sn": DOORBELL_SN,
+        **fields,
+    }
+
+
+def _b64(body: dict[str, Any]) -> str:
+    return base64.b64encode(json.dumps(body).encode()).decode()
+
+
+def _person_payload() -> str:
+    return _b64({"msg_type": 18, "event_type": 3102, "device_sn": SYNTHETIC.camera_sn})
+
+
+def test_a_plain_json_doorbell_body_is_a_doorbell_press() -> None:
+    msg = {"app_tab": "eufy_security", "type": "5", "doorbell": json.dumps(_press())}
+    event = decode_push(msg, now_ms=lambda: NOW_MS)
+    assert event.detection is DetectionType.DOORBELL_PRESS
+    assert event.event_type == 3103
+    assert (event.station_sn, event.device_sn) == (DOORBELL_SN, DOORBELL_SN)
+    assert event.event_time_ms == (NOW_MS // 1000 - 2) * 1000
+
+
+def test_the_doorbell_body_is_read_instead_of_the_payload() -> None:
+    msg = {"type": "5", "doorbell": json.dumps(_press()), "payload": _person_payload()}
+    event = decode_push(msg, now_ms=lambda: NOW_MS)
+    assert event.detection is DetectionType.DOORBELL_PRESS
+    assert event.device_sn == DOORBELL_SN
+
+
+def test_an_empty_doorbell_field_falls_back_to_the_payload() -> None:
+    msg = {"type": "5", "doorbell": "", "payload": _person_payload()}
+    event = decode_push(msg, now_ms=lambda: NOW_MS)
+    assert event.detection is DetectionType.PERSON
+    assert event.device_sn == SYNTHETIC.camera_sn
+
+
+def test_a_base64_doorbell_body_decodes() -> None:
+    event = decode_push({"type": "5", "doorbell": _b64(_press())}, now_ms=lambda: NOW_MS)
+    assert event.detection is DetectionType.DOORBELL_PRESS
+
+
+def test_a_plain_json_payload_decodes() -> None:
+    body = {"msg_type": 18, "event_type": 3102, "device_sn": SYNTHETIC.camera_sn}
+    event = decode_push({"type": "19", "payload": " \n" + json.dumps(body)})
+    assert event.detection is DetectionType.PERSON
+    assert event.device_sn == SYNTHETIC.camera_sn
+
+
+def _deep(depth: int) -> str:
+    """A press whose extra field nests ``depth`` objects deep."""
+    nested = '{"x":' * depth + "1" + "}" * depth
+    return json.dumps(_press())[:-1] + f', "extra": {nested}}}'
+
+
+@pytest.mark.parametrize(
+    "doorbell",
+    [
+        "{nope",
+        "[3103]",
+        "not base64!!",
+        base64.b64encode(b"{nope").decode(),
+        json.dumps(_press())[:-1] + ', "x": NaN}',
+        _deep(100),  # deeper than the JSON depth bound: refused whole
+    ],
+)
+def test_a_malformed_doorbell_body_never_raises_and_lifts_no_event_field(doorbell: str) -> None:
+    msg = {"type": "5", "station_sn": SYNTHETIC.station_sn, "doorbell": doorbell}
+    event = decode_push(msg, now_ms=lambda: NOW_MS)
+    assert event.station_sn == SYNTHETIC.station_sn
+    assert (event.event_type, event.detection, event.device_sn) == (None, None, None)
+
+
+def test_a_body_within_the_depth_bound_decodes() -> None:
+    event = decode_push({"type": "5", "doorbell": _deep(40)}, now_ms=lambda: NOW_MS)
+    assert event.detection is DetectionType.DOORBELL_PRESS

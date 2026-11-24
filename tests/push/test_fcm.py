@@ -211,6 +211,37 @@ async def test_the_push_line_names_the_classifying_fields_without_the_face_id(
         assert private not in line
 
 
+_DOORBELL_SN = "T8200" + SYNTHETIC.camera_sn[5:]
+_PRESS = json.dumps({"event_type": "3103", "device_sn": _DOORBELL_SN})
+_ARMING = base64.b64encode(json.dumps({"arming": 1, "mode": 1}).encode()).decode()
+
+
+@pytest.mark.parametrize(
+    ("fields", "body"),
+    [
+        ({"doorbell": _PRESS, "payload": _ARMING}, "doorbell"),
+        ({"doorbell": "", "payload": _ARMING}, "payload"),
+        ({"payload": _ARMING}, "payload"),
+        ({"doorbell": "", "payload": ""}, "none"),
+        ({}, "none"),
+    ],
+)
+async def test_the_push_line_names_the_body_field_without_its_content(
+    caplog: pytest.LogCaptureFixture, fields: dict[str, str], body: str
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="eufy_home_security.push")
+    events: list[SecurityEvent] = []
+    _bare_listener(_throwaway_cache(), events)._on_message(
+        {"type": "5", "span_id": "s1", **fields}, "pid-1", None
+    )
+    line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("push event"))
+    assert line.endswith(f" body {body}")
+    for content in fields.values():
+        if content:
+            assert content not in line
+    assert _DOORBELL_SN not in line
+
+
 async def test_span_id_dedupe() -> None:
     events: list[SecurityEvent] = []
     listener = PushListener(
