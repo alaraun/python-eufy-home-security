@@ -1473,8 +1473,8 @@ without a device class.
 | `SMOKE` | `FLAGS` member | `binary_sensor` | `smoke` | — |
 | `PROBLEM` | `FLAGS` member | `binary_sensor` | `problem` | — |
 | `END_OF_LIFE` | `FLAGS` member | `binary_sensor` | `problem` | — |
-| `MUTED` | `FLAGS` member | `binary_sensor` | none | — |
-| `TESTING` | `FLAGS` member | `binary_sensor` | none | — |
+| `MUTED` | `FLAGS` member | `binary_sensor` | none fits: the integration's choice | — |
+| `TESTING` | `FLAGS` member | `binary_sensor` | none fits: the integration's choice | — |
 
 The binary meanings (`devices.model_settings.BINARY_MEANINGS`) sit on `BOOL` settings
 (`setting.meaning`) and on the members of a read-only `FLAGS` status
@@ -1482,17 +1482,29 @@ The binary meanings (`devices.model_settings.BINARY_MEANINGS`) sit on `BOOL` set
 status gets one `binary_sensor` per distinct meaning of its members, not one per member:
 several members can share one (a smoke sensor's `alarm` and `highAlarm` both mean smoke,
 its two test members testing). Its state is
-`setting.meaning_on(state.setting(key, device_sn=sn), meaning)`: True when any member of
-that meaning is on, None (unknown) while the device has reported no value. Members
-without a meaning are left out.
+`setting.meaning_on(state.setting(key, device_sn=sn), meaning)` (`meaning` a
+`SettingMeaning` or its value, `"smoke"`): True when any member of that meaning is on,
+None (unknown) while the device has reported no value or text other than ASCII decimal
+digits. Members without a meaning are left out.
 
-**Smoke sensor (`sensor_smoke_status`, T90S0, T8931).** A read-only `FLAGS` status, read
-from parameter 1823, `role` `STATUS`, `shown` `CARD`. Its members are the eufy app's card
-states; the smoke `binary_sensor` (device class `smoke`) is
-`setting.meaning_on(value, SettingMeaning.SMOKE)`, on for `alarm` or `highAlarm`, as the
-app's cards show smoke. A station notify of 1823 moves the value at once (a
-`ParamChanged`, then `StationStateChanged`). Declared from the eufy app, not tested on
-hardware: whether a test press also sets `alarm` is not known.
+A consumer table with one rule per `SettingMeaning` needs a row for each of `SMOKE`,
+`PROBLEM`, `MUTED`, `END_OF_LIFE` and `TESTING`. Proposed device classes: `SMOKE` smoke,
+`PROBLEM` and `END_OF_LIFE` problem (`LOW_BATTERY` keeps battery). Home Assistant has no
+binary sensor device class for a silenced alarm or a running self-test, so `MUTED` and
+`TESTING` are the integration's decision: a `binary_sensor` without a device class (a
+table that marks a binary meaning by its class then needs another mark for these two),
+or a class read loosely (`running` for `TESTING`).
+
+**Smoke sensor (`sensor_smoke_status`, e.g. the Smoke Sensor E10).** A read-only `FLAGS`
+status, read from parameter 1823, `role` `STATUS`, `shown` `CARD`. The eufy app's device
+card shows one state of it, the first member on in the order `highAlarm`, `alarm`,
+`trouble`, `battery`, `muting`, `endoflife` (else online); those members carry that state
+as their meaning. `TESTING` on the two test members (`localTesting`, `remotingTesting`) is
+the library's reading of the member names: no card shows them. The smoke `binary_sensor`
+(device class `smoke`) is `setting.meaning_on(value, SettingMeaning.SMOKE)`, on for
+`alarm` or `highAlarm`, as the app's cards show smoke. A station notify of 1823 moves the
+value at once (a `ParamChanged`, then `StationStateChanged`). Declared from the eufy app,
+not tested on hardware: whether a test press also sets `alarm` is not known.
 
 #### One entity per writable setting: `setting.control`
 
