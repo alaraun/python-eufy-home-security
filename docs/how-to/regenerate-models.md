@@ -27,6 +27,7 @@ All inputs are private and stay out of the repository:
 | app settings layout | `.work/tools/data/settings_trees.json` (`--trees`) | the app's settings pages, groups and order, from the same build |
 | app shown properties | `.work/tools/data/app_shown.json` (`--shown`) | the properties the app's settings pages read (`pages`) and the ones its device cards and home page read (`cards`), each `{identifier: [where, ...]}`, from the same build; they give each setting its `shown` (`card` wins over `page`) and decide a read-only setting's `role` (status or diagnostic) |
 | app setting titles | `.work/tools/data/app_setting_titles.json` (`--titles`) | the app's setting titles (per identifier, per model where the app branches), the units its screens show (`units`: `{identifier: {unit, page, source}}`, the screen's unit winning over the TD's; `unit` null for a bare number, `page` null for a screen that reads the property wherever it sits), what it reads a property as (`meanings`: `{identifier: {meaning, source}}`, `meaning` a `SettingMeaning` value) and legacy identifier pairs, plus app behaviour read by hand: defaults the app shows, read-only statuses, option titles, settings behind a warning, held flags members, excluded actions, the string properties the app shows as an on/off switch with the text it writes for each state (`switches`: such a property is generated as a bool, swept with those texts, its write and read polarity taken from the handler; `bool_switches` (`{identifier: {"source": text}}`) lists those whose switch writes the JSON bool itself, swept with `true`/`false`, a description default `"true"`/`"false"` kept as that state: the manual light `spotlight_switch` and the microphone `microphone_on_off` on a model whose description types them as a string), the JSON objects the app's screens write for a property (`object_writes`: `{identifier: {source, payloads: [object, ...]}}`, at least two distinct objects; the handler is driven with each, whatever the property's `access_mode`, and the property becomes an `object` setting where an object form reproduces its recipes (and, for a property the thing description does not declare writable, the handler reads the stored value back), see [models-schema.md § Object writes](../reference/models-schema.md#object-writes)) and the enum choices whose app screen writes another value than the thing description lists (`screen_values`: continuous recording time writes 0 for `default:00`, the motion light's on-time `timer_for_lights` the seconds 30, 60, 180, 300 and 900 for its choices 0-4; the handler is swept with the screen's value, the public value stays the description's), the domain the app's screen offers for a property (`domains`: `{identifier: {kind, labels | min/max/step, td, fallback, source}}`, `kind` `enum` with integer-keyed labels or `range`; applied to the property before the handler sweep, `td` `replace` on every model (the screen never reads the description's domain: the storage type's two choices, the response delay's 0s/5s/10s/15s) or `fill` only where the description declares no values or range, whatever its type (the chime ring volume 1-26, the library's reading of two app screens; the 12/24-hour time format); an enum's labels are the screen's texts as written; `fallback`, an enum value, is what the screen shows for any other value: it becomes the read's `fallback` and replaces a description default outside the labels (the recording type: Continuous), and without it such a default is dropped; the domains come with the bundled model files only) and the values the app's screen builds and parses as JSON itself (`structured`: `{identifier: {source}}`, marked `structured` on every model: the light schedule); from the same build |
+| app write routing | `app_routing.json` beside the app setting titles (`--routing`) | which frame form the eufy app sends each command in, the request type and value field it builds per command, and its native settings screens' own write forms, from the same build ([below](#the-routing-input)) |
 
 Node is needed for generating and for `--check`, and nowhere else: the handler runs in
 a `vm` sandbox (`scripts/gen_models_driver.js`), a fresh one per batch of requests. The
@@ -189,6 +190,21 @@ uv run python scripts/check_generated.py gen_ptz gen_live_open
 
 The model list (`gen_app_models.py`) takes the app's input files as arguments and is
 checked on its own.
+
+## The routing input
+
+The generator emits a write only in the frame form the eufy app sends
+([models-schema.md § Write routing](../reference/models-schema.md#write-routing)). Its
+input is generated from the app build by a private offline extractor, never by hand: the
+frame form per command from the app's own send handler (its command switch, each form
+named by a probe command and checked to cover the library's frame-form sets), the request
+type and the value field per command from the app's request builder (checked against
+known cases), and the native settings screens that send a command themselves, with the
+write forms the generator uses for them. Re-extract it for each app release with the other
+app inputs; the extractor's check mode fails when a fresh extraction differs from the
+file. `gen_models.py` refuses to run (exit 2) when the file's frame-form sets or value
+fields differ from the library's (`p2p.messages`), so a release that moves a command
+fails loudly: move the library's table to match (with its tests) and regenerate.
 
 ## The answer store
 

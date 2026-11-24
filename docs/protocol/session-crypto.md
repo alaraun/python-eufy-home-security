@@ -338,14 +338,14 @@ the command id**, with a cleartext header and an AES-128-ECB body under the stat
 ECB(static_key, body, zero-padded)
 ```
 
-The body layout depends on which of the app's three scalar handlers the
-command id maps to:
+The body layout depends on which of the app's scalar handlers the command id maps to:
 
 | handler | body | header channel | catalogued commands (full sets in `p2p/messages.py`) |
 |---|---|---|---|
 | channel + value | `u32le channel ‖ u32le value ‖ char[128] account_id` (136 B → 144 padded) | the sub-device channel | 1045, 1207, 1210, 1229, 1230, 1246 (51 ids in all) |
 | value | `u32le value ‖ char[128] account_id` (132 B → 144 padded) | the sub-device channel | 1249, 1250, 1251, 1252 |
 | station | `u32le value ‖ char[128] account_id` | **forced to 255** | 1235, 1253 (23 ids in all) |
+| channel + value, no account | `u32le channel ‖ u32le value` (8 B → 16 padded) **[declared]** (eufy app) | the sub-device channel | 1013, 1202, 1205, 1206 |
 | default | none. The app rejects the command with −103. | — | everything else, including 1157–1175, 1276, 1277, 1296, 1298 |
 
 - `account_id` is the **owner's** user id, ASCII, NUL-terminated inside the 128-byte field.
@@ -353,8 +353,8 @@ command id maps to:
   1400, `brightness` for 1401, `volume` for 1230; the table is `ECB_VALUE_FIELDS` in
   `p2p/messages.py`); the body's other fields are not sent
   ([commands.md](commands.md#settings), library write path).
-- A command on the default handler is not a scalar: send it as a GCM payload object
-  ([commands.md](commands.md)) or not at all.
+- A command on the default handler is not a scalar: it goes in another frame form
+  ([commands.md § Frame forms](commands.md#frame-forms)) or not at all.
 - Id 1224 (arming) is in the station scalar set: the eufy app arms a model whose
   handler builds a bare 1224 (a standalone T8414) with it, and every other model with
   the payload object; the library does the same

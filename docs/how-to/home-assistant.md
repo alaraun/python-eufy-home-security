@@ -1026,9 +1026,13 @@ A closed session (`async_close`) never reconnects on its own — build a new
   - `writable=False` → a read-only `sensor` (`binary_sensor` for a bool). `note` says why
     a setting is not writable (on a writable one it is a caveat, such as `round trip
     does not return the written value`): the handler ignores, transforms or rejects the
-    value, it has no write path, it is the guard mode (use `async_set_guard_mode`), or it goes
+    value, it has no write path, it is the guard mode (use `async_set_guard_mode`), it goes
     over a transport the library does not send (`cloud request`, `app-local`,
-    `multi-command write`, `Bluetooth`, `MQTT`).
+    `multi-command write`, `Bluetooth`, `MQTT`), or the eufy app sends no frame for it
+    (`the eufy app sends nothing for this write`: the light schedule
+    `spotlight_schedule_config` of T8110, T8110E, T8115, T8119, T814X, T814XS and T817L,
+    and `notification_interval_time` of T7100, T8E00, T8E00E, T8P00 and T8P10, which were
+    writable before; keep their entities as read-only sensors).
   - `readable=False` → the dump never reports it, so its state is always unknown. An
     enum the handler does not read back, but whose write gives every value its own
     parameter value, is readable by the inverse of that write: the value read is the one
@@ -1481,7 +1485,7 @@ is the control to build, decided by the library from the vendor's codec; map it 
 | `box` | `RANGE` (more than 200 steps) | `number`, `NumberMode.BOX` | the number |
 | `toggles` | `FLAGS` | one `switch` per member in `setting.flags`, named `setting.flag_label(member)` | on = `member in setting.decode_flags(raw)[0]`; write with `station.async_set_flag(key, member, on)` |
 | `text` | `STRING` | `text` | the string |
-| `object` | `OBJECT` | none of its own (a service or a related entity's attribute) | `setting.decode(raw)` is the object the device stores (a `dict` with snake_case members, as the model's handler stores it; a schedule's days are a bitmask); write the whole object back with one member changed: `station.async_set_setting(key, {**current, "enable": 1})`. An empty object, or one nested deeper than 32 levels, is refused (`ValueError`). The motion-light and ambient-light objects can carry the house's coordinates (`latitude`, `longtitude`): leave those members out of states and attributes |
+| `object` | `OBJECT` | none of its own (a service or a related entity's attribute) | `setting.decode(raw)` is the object the device stores (a `dict` with snake_case members, as the model's handler stores it; a schedule's days are a bitmask); write the whole object back with one member changed: `station.async_set_setting(key, {**current, "enable": 1})`. An empty object, or one nested deeper than 32 levels, is refused (`ValueError`). The motion-light and ambient-light objects can carry the house's coordinates (`latitude`, `longtitude`), and a floodlight's dusk-to-dawn object (`ambient_light_schedule_sunset_to_sunrise`: `{enable, lat, lng}` written, `sun_rise` and `sun_set` added on read) is them (`lat`, `lng`): leave those members out of states and attributes; the logs mask them |
 
 Follow `control` for durations too: the app draws the clip length and the retrigger
 interval as sliders; `unit` (seconds) still sets the device class. `OTHER` settings have

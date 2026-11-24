@@ -215,7 +215,8 @@ that serves reads, and do not resend into a stall — each resend queues again.
 
 ## Settings
 
-Two write schemes, chosen by command id ([session-crypto.md](session-crypto.md)).
+The frame a write goes in is chosen by its command id ([Frame forms](#frame-forms) below,
+[session-crypto.md](session-crypto.md)); the two most settings use:
 
 **GCM payload objects.** The value **and the channel** go inside `payload`.
 `mValue3` is ignored, and a payload without `channel` is not applied **[verified]**.
@@ -277,28 +278,74 @@ a few seconds.
 channel=…)` writes one setting of the addressed device's model file
 (`devices/data/models/<PN>.json`, [models-schema.md](../reference/models-schema.md)),
 keyed by the vendor identifier. The value is validated against the setting's domain,
-the handler's write codec is rendered for the device (station, station child on its
-channel, or a standalone camera on its own channel) and sent on the path the codec
-names: an ECB scalar frame for an ECB command, a `0x0546` (1350) DeviceMsgBean whose
-`cmd` is the codec's `subCmd`, the 1700 wrapper with its `subCmd`
-([below](#the-1700-wrapper-a-standalone-devices-commands-verified)), or a DeviceMsgBean
-of the codec's own command (not observed on hardware). An ECB scalar's value is the
-codec body's field for that command, as the eufy app reads it **[declared]** (eufy app):
-`open` for 1400, `brightness` for 1401, `switch` for 1403. A switch field such as
-1403's sends 1 for `true`, `1`, `"1"`, `"true"` or `"TRUE"`, else 0; a number field sends
-its integer (a finite float's integer part), and an infinite or NaN float, a list or an
+the write template is rendered for the device (station, station child on its channel,
+or a standalone camera on its own channel) and sent in the frame form the eufy app's
+send handler gives its command ([Frame forms](#frame-forms) below): a `0x0546` (1350)
+command object whose `cmd` is the template's `subCmd`, the 1700 wrapper with its `subCmd`
+([below](#the-1700-wrapper-a-standalone-devices-commands-verified)), or, for a bare
+command, its ECB scalar, channel-value, string or JSON-text frame. A command with no frame
+form is not sent: the setting is not writable and its note says so. The model files carry
+a write only in a form the eufy app sends (the generator's rule,
+[models-schema.md § Write routing](../reference/models-schema.md#write-routing)).
+
+An ECB scalar's value is the request's `mValue` when the template's body names one, else
+the body's field for that command, as the eufy app reads it **[declared]** (eufy app):
+`open` for 1400, `brightness` for 1401, `switch` for 1403. A switch field such as 1403's
+sends 1 for `true`, `1`, `"1"`, `"true"` or `"TRUE"`, else 0; a number field sends its
+integer (a finite float's integer part), and an infinite or NaN float, a list or an
 object there is refused before sending. The body's other fields are not sent: the manual
 light's `{value, open, type: 2}` goes out as ECB 1400 with `open` (wire verified on a
 HomeBase 3 with an eufyCam 3, see the table above). A body without the command's field (or
 a command with none) must hold one value, perhaps under several names, and that value is
-sent; otherwise the codec goes out as a DeviceMsgBean of its own command. Sending the
-user's value there is the library's choice: the eufy app sends 0 for a body that lacks the
-field. A codec that goes to the cloud, stays in the app or uses another transport is not
-sent: such a setting is not writable and says why. A rejection raises the typed error;
-nothing is read back. After a send, the parameter values the codec's `update` names are
-merged into the cached dump, as the app does, until the next real dump replaces them. The
-mode-table settings are the exception: they go through the 1255 table write
+sent; otherwise the write is refused. Sending the user's value there is the library's
+choice: the eufy app sends 0 for a body that lacks the field. A template that goes to the
+cloud, stays in the app or uses another transport is not sent: such a setting is not
+writable and says why. A rejection raises the typed error; nothing is read back. After a
+send, the parameter values the template's `update` names are merged into the cached dump,
+as the app does, until the next real dump replaces them. The mode-table settings are the
+exception: they go through the 1255 table write
 ([below](#mode-actions-delays-and-schedule-app-writes-verified)).
+
+### Frame forms
+
+The eufy app's send handler picks a frame's form by its command id alone; a command in
+none of these sets is not sent (the handler returns −103) **[declared]** (eufy app). Every
+form has frame type = the command id and goes under the session's cipher rules
+([session-crypto.md](session-crypto.md)). `p2p.messages` holds the sets.
+
+| form | commands | header channel | body |
+|---|---|---|---|
+| ECB channel + value | `ECB_CHANNEL_VALUE_CMDS` (1011 1015 … 1709) | the device's | `u32 channel, u32 value, char[128] owner id` |
+| ECB station | `ECB_STATION_CMDS` (1029 1034 … 1800) | 255 | `u32 value, char[128] owner id` |
+| ECB value | `ECB_VALUE_CMDS` (1249–1252) | the device's | `u32 value, char[128] owner id` |
+| channel + value | `CHANNEL_VALUE_CMDS` (1013 1202 1205 1206) | the device's | `u32 channel, u32 value` (8 bytes, no owner id) |
+| string + int | `STRING_CMDS` (1025 1132 1215 1216 1217 1414) | 255 | `u16 number, 00 00, u8 channel, char[128] text, char[128] owner id` (261 bytes) |
+| JSON text | `JSON_TEXT_CMDS` (1060 1204 1254–1256 1258–1262 1264 1271 1404) | 255; the device's for 1204 and 1271 (the library sends the mode table, mode list and schedule with 0, [below](#mode-actions-delays-and-schedule-app-writes-verified)) | the JSON document (compact) |
+| 1350 transfer | 1350 with a `subCmd` | as [above](#devicemsgbean) | the command object above |
+| 1700 wrapper | 1700 with a `subCmd` | as [below](#the-1700-wrapper-a-standalone-devices-commands-verified) | `{commandType, data}` |
+
+The integers are little-endian, the strings NUL-terminated within their field. The
+settings that use the forms beyond the ECB scalars (each **[declared]**, eufy app; not
+tested on hardware):
+
+- **Night vision** (`nightvision_type`, `nightvision_type_new`, `nightvision_on_off`;
+  1013): channel + value. Body for channel 3, value 1: `03 00 00 00 01 00 00 00`.
+- **Snooze** (`device_snooze_time`; 1271): JSON text of the handler's body, no owner id,
+  the device's channel in the header. Body for the 30-minute choice:
+  `{"snooze_time":1800}`.
+- **Alarm sound** (`device_alarm_sound_type` of a T90E0; 1507): ECB channel + value with
+  the value the template names in `mValue` and the owner id, as the app's sensor screen
+  sends it.
+- **Dusk to dawn** (`ambient_light_schedule_sunset_to_sunrise` of T8420, T8420X, T8422,
+  T8423, T8424; 1414): string + int. The number is the switch (1 on, 0 off), the text the
+  location as the app's light screen spells it, `{"lat": "<lat>","lng": "<lng>"}` (a space
+  after each colon). The value is `{enable, lat, lng}`; the read assembles
+  `{enable, lat, lng, sun_rise, sun_set}` from parameters 1414 (the switch) and 1415 (a
+  JSON object of the location and the sun times the device fills).
+- **Light schedule** (`ambient_light_schedule_config` of the same five; 1404): JSON text
+  `{"account_id":"<owner id>","schedules":{"loop":[…]}}`, each entry
+  `{cross_day, enable, end_h, end_m, interval, start_h, start_m, week: [{day}]}` in this
+  order (`interval` 0 when the entry has none), no `once` list, header channel 255.
 
 ## Parameter dump **[verified]**
 
