@@ -371,6 +371,18 @@ def test_answer_with_an_empty_body_raises_protocol_error() -> None:
         cm2.parse_on_off_reply(answer, _request())
 
 
+def test_hkdf_answer_time_reads_the_first_44_bytes_of_a_longer_field() -> None:
+    salt = TIME ^ 0x55
+    field = cbc_encrypt(
+        USER_ID.encode() + salt.to_bytes(4, "big") + b"more",
+        b"ANKER_SMARTLOCK_",
+        b"OCK_WORLD'S_NO.1",
+    ).hex()
+    assert cm2.open_hkdf_time_field(field) == (USER_ID, salt)
+    answer = _answer(0, key=cm2.hkdf_key(USER_ID, salt), time_field=field)
+    assert cm2.parse_on_off_reply(answer, _request(hkdf=True)).result is LockResult.ACCEPTED
+
+
 def test_hkdf_answer_time_must_hold_a_user_id_and_salt() -> None:
     short = cbc_encrypt(b"x" * 43, b"ANKER_SMARTLOCK_", b"OCK_WORLD'S_NO.1").hex()
     with pytest.raises(ProtocolError, match="not a user id and salt"):

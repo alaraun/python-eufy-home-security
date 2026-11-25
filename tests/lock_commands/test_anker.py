@@ -315,6 +315,12 @@ def test_1930_answer_with_version_33_is_plain() -> None:
     assert reply.result is LockResult.ACCEPTED
 
 
+@pytest.mark.parametrize("version", [32, 34])
+def test_1930_answer_of_any_other_version_is_encrypted(version: int) -> None:
+    reply = anker.parse_1930_reply(_answer_1930(0, version=version), _request_1930())
+    assert reply == LockReply(0, LockResult.ACCEPTED)
+
+
 def test_1930_answer_for_another_command_or_lock_is_not_ours() -> None:
     with pytest.raises(LockReplyMismatchError, match="command"):
         anker.parse_1930_reply(_answer_1930(0, command=9), _request_1930())
