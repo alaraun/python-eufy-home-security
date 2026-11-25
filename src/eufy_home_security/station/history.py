@@ -202,8 +202,7 @@ class _Searches:
     def floor(self, since: datetime, until: datetime, now: datetime) -> datetime:
         """The oldest bound of the searches still running at ``now``, ``since``
         (searched until ``until``) among them."""
-        if until > now:
-            self.bounds[since] = max(until, self.bounds.get(since, until))
+        self.bounds[since] = until
         self.bounds = {b: end for b, end in self.bounds.items() if end > now}
         return min((since, *self.bounds))
 

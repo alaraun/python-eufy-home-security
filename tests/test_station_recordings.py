@@ -1923,3 +1923,121 @@ async def test_a_detection_naming_its_recording_path_gives_that_rows_offset(
     path = str(fake.rows[0]["storage_path"])
     found = await station.async_recording_for_detection(_detection(event, video_path=path))
     assert (found.state, found.offset_s) == (DetectionRecordingState.SETTLED, -5.0)
+
+
+async def test_a_look_waiting_on_a_listing_whose_holder_is_cancelled_lists_itself(
+    station: Station, fake: FakeStation, today: datetime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    event = _whole(today, 120)
+    fake.rows = [_at(event, SYNTHETIC.camera_sn, _dayed(event, 4))]
+    real = station.session.async_list_history
+    held = asyncio.Event()
+    calls = 0
+
+    async def hold_first(*args: Any, **kwargs: Any) -> list[HistoryRecord]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            await held.wait()
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(station.session, "async_list_history", hold_first)
+    holder = asyncio.create_task(station.async_recording_for_detection(_detection(event)))
+    for _ in range(5):
+        await asyncio.sleep(0)
+    waiter = asyncio.create_task(station.async_recording_for_detection(_detection(event)))
+    for _ in range(5):
+        await asyncio.sleep(0)
+    holder.cancel()
+    async with asyncio.timeout(3.0):
+        found = await waiter
+    assert (found.state, calls) == (DetectionRecordingState.SETTLED, 2)
+    with pytest.raises(asyncio.CancelledError):
+        await holder
+
+
+async def test_a_failed_listing_no_other_look_shares_leaves_nothing_for_the_loop(
+    station: Station, fake: FakeStation, today: datetime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _failing_lists(station, monkeypatch, None)
+    loop = asyncio.get_running_loop()
+    seen: list[dict[str, Any]] = []
+    loop.set_exception_handler(lambda _loop, context: seen.append(context))
+    try:
+        with pytest.raises(StationUnreachableError):
+            await station.async_recording_for_detection(_detection(_whole(today, 60)))
+        station._history._searches.clear()  # drop the failed listing
+        await asyncio.sleep(0)
+        gc.collect()
+        assert seen == []
+    finally:
+        loop.set_exception_handler(None)
+
+
+async def test_a_listing_that_does_not_reach_back_far_enough_is_not_shared(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    """A fresh listing for a newer detection does not answer an older one (whose search
+    is over, so the newer one's listing did not reach its bound)."""
+    older = _whole(today, 400)
+    fake.rows = [_at(older, SYNTHETIC.camera_sn, _dayed(older, 4))]
+    await station.async_recording_for_detection(_detection(_whole(today, 10)))
+    found = await station.async_recording_for_detection(_detection(older))
+    assert found.record is not None
+    assert len(fake.history_queries) == 2
+
+
+@pytest.mark.parametrize("busy", [False, True])
+async def test_the_days_asked_are_the_stations(
+    host_utc: None,
+    station: Station,
+    fake: FakeStation,
+    monkeypatch: pytest.MonkeyPatch,
+    busy: bool,
+) -> None:
+    """Half past midnight on the station two hours ahead is still the day before in
+    UTC: only the station's own day is asked, a busy one only down to the bound."""
+    _in_zone(station, "Africa/Johannesburg")
+    midnight = datetime.combine(NOW.date() + timedelta(days=1), datetime.min.time(), SAST)
+    now = _freeze(monkeypatch, midnight + timedelta(minutes=30))
+    event = _whole(now, 20)
+    day = int(event.astimezone(SAST).strftime("%Y%m%d")) * HISTORY_RECORD_COUNTER
+    older = [event - timedelta(seconds=60 + 10 * n) for n in range(100)]
+    fake.rows = [_zoneless(event, SAST, day + 500)]
+    if busy:
+        fake.rows += [
+            _zoneless(s, SAST, day + 400 - n) for n, s in enumerate(older) if s >= midnight
+        ]
+    found = await station.async_recording_for_detection(_detection(event))
+    assert found.record is not None
+    assert found.record.record_id == day + 500
+    assert [q["start_date"] for q in fake.history_queries] == [midnight.strftime("%Y%m%d")]
+
+
+async def test_a_row_looked_up_by_id_settles_by_the_stations_clock(
+    host_utc: None, station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    now = _freeze(monkeypatch, NOW)
+    _in_zone(station, "Africa/Johannesburg")
+    started = _whole(now, 120)
+    record_id = int(started.astimezone(SAST).strftime("%Y%m%d")) * HISTORY_RECORD_COUNTER + 4
+    fake.rows = [_zoneless(started, SAST, record_id)]
+    found = await station.async_recording_for_detection(
+        _detection(started, record_id=record_id, event_time_ms=None)
+    )
+    assert found.state is DetectionRecordingState.SETTLED
+
+
+@pytest.mark.usefixtures("short_match")
+async def test_a_failed_look_is_asked_again_no_later_than_the_bound(
+    station: Station, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A retry longer than what is left of the search: the wait ends at the bound."""
+    monkeypatch.setattr(station_module, "RECORDING_MATCH_RETRY", 3.0)
+    monkeypatch.setattr(station_module, "RECORDING_MATCH_GIVE_UP", 0.5)
+    _failing_lists(station, monkeypatch, None)
+    started = time.monotonic()
+    async with asyncio.timeout(5.0):
+        with pytest.raises(StationUnreachableError):
+            await station.async_wait_recording_for_detection(_detection(datetime.now(UTC)))
+    assert time.monotonic() - started < 2.0
