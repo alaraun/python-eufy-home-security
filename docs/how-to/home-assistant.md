@@ -3608,7 +3608,9 @@ raises `MissingDependencyError` (its `extra` is `"mqtt"`). The transport is decl
 against the broker, and lock commands are not part of it yet; see
 [protocol/mqtt.md](../protocol/mqtt.md). Its loggers are under `eufy_home_security.mqtt`;
 `aiomqtt` logs each MQTT packet under `mqtt`, outside the library's tree and unredacted
-(the client id carries the account's user id), so leave `mqtt` out of `loggers`. Start one
+(the client id carries the account's user id), so leave `mqtt` out of `loggers`; its
+ERROR `Unexpected message ID "<n>" in on_subscribe callback` on an unload is harmless
+([debug-logging.md](debug-logging.md) § Reading the signals). Start one
 `EufyMqttAccount` per account with the cloud device list and call `async_update_devices()`
 after each device-list refresh: the library decides which devices are MQTT devices, which
 login scope's connection serves each (one connection per scope holding MQTT devices),

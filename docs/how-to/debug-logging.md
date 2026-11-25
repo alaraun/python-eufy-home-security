@@ -224,3 +224,8 @@ logger:
   ([regenerate-models.md](regenerate-models.md)).
 - `parameter probe unanswered in Ns; re-establishing` is the liveness check doing its
   job: the link was up but the encrypted session was not.
+- `Unexpected message ID "<n>" in on_subscribe callback` (ERROR with a `KeyError`
+  traceback, from `aiomqtt`'s `mqtt` logger; `on_unsubscribe` likewise) right after an
+  MQTT client stop or reconnect is harmless: the client stopped waiting for a SUBSCRIBE
+  before the broker's answer arrived, and `aiomqtt` logs that late answer. `<n>` is the
+  request's packet id.
