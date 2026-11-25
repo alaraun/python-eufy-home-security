@@ -117,6 +117,7 @@ class EufyMqttClient:
         self._keepalive = keepalive
         self._server_ca_pem = server_ca_pem
         self._devices: dict[str, CloudDevice] = {}
+        self._subscribe: frozenset[str] | None = None
         self._sequence = MessageSequence()
         self._listeners: list[Listener] = []
         self._waiters: dict[str, list[tuple[Match, asyncio.Future[MqttMessage]]]] = {}
@@ -167,17 +168,26 @@ class EufyMqttClient:
         return frozenset(device_key(device) for device in self._devices.values())
 
     async def async_start(
-        self, devices: Iterable[CloudDevice], *, connect_without_devices: bool = False
+        self,
+        devices: Iterable[CloudDevice],
+        *,
+        subscribe: Iterable[str] | None = None,
+        connect_without_devices: bool = False,
     ) -> None:
         """Serve the MQTT devices among ``devices``. With none, nothing connects, as in the
         app, unless ``connect_without_devices`` (a connection check: certificate, TLS and
         CONNECT with no subscription).
+
+        ``subscribe`` (serials) narrows the answer topics to those devices, for a check of
+        some of them; the certificate still covers every MQTT device, so the cached one
+        stays valid. It holds across :meth:`async_update_devices`.
 
         The connection runs in a background task that reconnects by itself; use
         :meth:`async_wait_connected` to wait for it.
         """
         if self._run_task is not None:
             raise RuntimeError("the MQTT client is already started")
+        self._subscribe = None if subscribe is None else frozenset(subscribe)
         self._devices = await self._select(devices)
         if not self._devices and not connect_without_devices:
             _LOGGER.debug("no MQTT device: no broker connection")
@@ -341,6 +351,7 @@ class EufyMqttClient:
             wanted = {
                 response_topic(topic_product_code(d) or d.device_sn[:5], d.device_sn)
                 for d in self._devices.values()
+                if self._subscribe is None or d.device_sn in self._subscribe
             }
             missing = sorted(wanted - self._subscribed)
             try:

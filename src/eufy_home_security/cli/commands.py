@@ -342,15 +342,18 @@ async def cmd_mqtt(ctx: Context) -> int:
 
     async with await open_account(ctx) as eufy:
         await eufy.async_login()
-        devices = await asyncio.to_thread(mqtt_devices, await eufy.cloud.async_get_devices())
+        every = await asyncio.to_thread(mqtt_devices, await eufy.cloud.async_get_devices())
+        devices, subscribe = every, None
         if ctx.args.devices:
             wanted = {serial.strip().upper() for serial in ctx.args.devices}
-            unknown = wanted - {d.device_sn.upper() for d in devices}
+            unknown = wanted - {d.device_sn.upper() for d in every}
             if unknown:
                 raise UsageError(
                     f"no MQTT device {', '.join(sorted(unknown))}; `{PROG} mqtt` lists them"
                 )
-            devices = [d for d in devices if d.device_sn.upper() in wanted]
+            # The filter narrows the subscriptions; the certificate covers every device.
+            devices = [d for d in every if d.device_sn.upper() in wanted]
+            subscribe = [d.device_sn for d in devices]
         topics = {
             d.device_sn: response_topic(topic_product_code(d) or d.device_sn[:5], d.device_sn)
             for d in devices
@@ -371,7 +374,9 @@ async def cmd_mqtt(ctx: Context) -> int:
         received: list[object] = []
         client.add_listener(received.append)
         try:
-            await client.async_start(devices, connect_without_devices=ctx.args.connect_empty)
+            await client.async_start(
+                every, subscribe=subscribe, connect_without_devices=ctx.args.connect_empty
+            )
             await client.async_wait_connected(_MQTT_CONNECT_WAIT)
             await asyncio.sleep(ctx.args.seconds)
             accepted = len(client.topics & set(topics.values()))

@@ -120,6 +120,15 @@ async def test_the_device_filter_keeps_the_named_devices(
     assert [t for _c, t, _q in setup.broker.subscriptions] == [response_topic("T85L0", LOCK2_SN)]
 
 
+@pytest.mark.parametrize("setup", [[station_device(), LOCK, LOCK2]], indirect=True)
+async def test_a_filtered_run_keeps_the_certificate_of_every_device(setup: Setup) -> None:
+    assert await setup.run("--device", LOCK2_SN, "--connect", "--seconds", "0.1") == 0
+    assert await setup.run("--connect", "--seconds", "0.1") == 0
+    assert await setup.run("--device", LOCK_SN, "--connect", "--seconds", "0.1") == 0
+    assert setup.cloud.calls.count("mqtt_register") == 1
+    assert len(setup.broker.connects) == 3
+
+
 async def test_the_device_filter_names_only_mqtt_devices(setup: Setup) -> None:
     with pytest.raises(UsageError, match="no MQTT device"):
         await setup.run("--device", SYNTHETIC.camera_sn)

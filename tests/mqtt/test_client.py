@@ -531,6 +531,20 @@ async def test_the_same_device_set_keeps_the_connection(rig: Rig) -> None:
     assert rig.registers() == 1
 
 
+async def test_a_subscription_filter_keeps_every_device_in_the_certificate(rig: Rig) -> None:
+    both = [_lock(), _lock(LOCK2_SN, "T85L0")]
+    await rig.client.async_start(both, subscribe=[LOCK2_SN])
+    await rig.client.async_wait_connected(5)
+    await _until(lambda: len(rig.client.topics) == 1)
+    assert _subscribed(rig) == [(response_topic("T85L0", LOCK2_SN), 1)]
+    cache = rig.eufy.cloud._cache
+    assert cache.mqtt_devices("eu") == frozenset(device_key(d) for d in both)
+    await rig.client.async_update_devices(both)  # the filter stays
+    await asyncio.sleep(0.1)
+    assert len(rig.broker.subscriptions) == 1
+    assert [d.device_sn for d in rig.client.devices] == [LOCK_SN, LOCK2_SN]
+
+
 async def test_a_device_set_back_after_none_connects_again(rig: Rig) -> None:
     await rig.client.async_start([_lock()])
     await rig.client.async_wait_connected(5)

@@ -149,6 +149,7 @@ await mqtt.async_stop()
 
 | call | |
 |---|---|
+| `async_start(devices, subscribe=None)` | serves the MQTT devices among `devices`; `subscribe` (serials) narrows the answer topics, the certificate still covering every MQTT device |
 | `async_publish(sn, trans)` | publishes the command; returns its `MqttHead` once the broker acknowledged it, which is no answer of the device |
 | `async_request(sn, trans, match=None, timeout=20)` | publishes and waits for the device's message: by default the one with the request's `msg_seq` or `sess_id`, else the first that `match` accepts. `DeviceTimeoutError` when none comes |
 | `add_listener(fn)` | `fn(MqttMessage)` for every message; returns its remover |
