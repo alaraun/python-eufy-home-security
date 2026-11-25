@@ -17,6 +17,7 @@ from eufy_home_security.events import Event, SecurityEvent
 from eufy_home_security.exceptions import (
     CloudApiError,
     CommunicationError,
+    EmptyResponseError,
     LoginLimitedError,
     ProtocolError,
     RateLimitedError,
@@ -267,6 +268,32 @@ async def test_a_region_without_a_device_list_answers_a_null_list() -> None:
         await eufy.async_close()
     assert devices == []
     assert cloud.calls == ["devices@us"]
+
+
+async def test_the_fake_cloud_serves_a_lock_public_key_once_then_none() -> None:
+    cloud = FakeCloud(lock_public_keys={("T8520P2000000001", 2): bytes(range(64))})
+    eufy = await _warm_cloud_client(cloud)
+    try:
+        key = await eufy.cloud.async_get_lock_public_key("T8520P2000000001", 2)
+        again = await eufy.cloud.async_get_lock_public_key("T8520P2000000001", 2)
+        with pytest.raises(EmptyResponseError):
+            await eufy.cloud.async_get_lock_public_key("T8520P2000000001", 3)
+    finally:
+        await eufy.async_close()
+    assert key == again == bytes(range(64))
+    assert cloud.calls == ["public_key:T8520***0001", "public_key:T8520***0001"]  # type 2, then 3
+
+
+async def test_a_served_refusal_reaches_a_lock_public_key_request() -> None:
+    cloud = FakeCloud()
+    eufy = await _warm_cloud_client(cloud)
+    cloud.call_errors = [FakeCloud.refusal(200, 26050)]
+    try:
+        with pytest.raises(CloudApiError) as raised:
+            await eufy.cloud.async_get_lock_public_key("T8520P2000000001", 2)
+    finally:
+        await eufy.async_close()
+    assert raised.value.code == 26050
 
 
 async def test_a_request_limit_from_the_fake_cloud_holds_off_the_whole_install(

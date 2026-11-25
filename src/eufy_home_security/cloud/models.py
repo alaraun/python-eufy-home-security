@@ -216,6 +216,10 @@ class CloudDevice:
     owner_user_id: str | None = None
     member_type: int | None = None
     """``member.member_type``: 0 guest, 1 admin, 2 owner. UI-level only."""
+    member_user_id: str | None = None
+    """``member.member_user_id``: the account the member record names."""
+    short_user_id: str | None = None
+    """``member.short_user_id``: the member's short id on a smart lock (hex text)."""
     main_sw_version: str | None = None
     sec_sw_version: str | None = None
     region: str | None = None
@@ -419,6 +423,8 @@ class CloudDevice:
             local_ip=_str_or_none(data.get("local_ip")),
             owner_user_id=_str_or_none(member.get("admin_user_id")),
             member_type=_int_or_none(member.get("member_type")),
+            member_user_id=_str_or_none(member.get("member_user_id")),
+            short_user_id=_str_or_none(member.get("short_user_id")),
             main_sw_version=_str_or_none(data.get("main_sw_version")),
             sec_sw_version=_str_or_none(data.get("sec_sw_version")),
             region=_str_or_none(data.get(REGION_KEY)),
@@ -726,7 +732,7 @@ CACHED_DEVICE_FIELDS: Final = (
     REGION_KEY,
     SOURCE_KEY,
 )
-CACHED_MEMBER_FIELDS: Final = ("admin_user_id", "member_type")
+CACHED_MEMBER_FIELDS: Final = ("admin_user_id", "member_type", "member_user_id", "short_user_id")
 CACHED_PARAM_FIELDS: Final = ("param_type", "param_value", "update_time")
 
 
