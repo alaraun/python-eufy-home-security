@@ -1771,8 +1771,8 @@ state. Whether this client can also lock and unlock it is per unit:
 `eufy.lock_control(device_sn)` answers from the lock's command route, firmware and cloud
 record, without a session or network, with `writable`, `path` (`station` or `mqtt`),
 `reason` (a text for the UI when not writable) and `guest`. A lock whose route is its
-station's session is writable only while this client runs that station. Give the `lock` entity lock and
-unlock where `writable`, and make it read-only otherwise.
+station's session is writable only while this client runs that station. Give the `lock`
+entity lock and unlock where `writable`, and make it read-only otherwise.
 
 `await eufy.async_lock(device_sn)` / `async_unlock(device_sn)` send the command over that
 path and return the `LockState` once the lock reports the asked state, never on an
