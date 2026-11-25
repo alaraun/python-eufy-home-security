@@ -756,7 +756,12 @@ async def test_lock_control_and_the_command_agree_for_every_lock(
     monkeypatch.setattr(lock_control_module.StationLockControl, "_run", run)
     monkeypatch.setattr(MqttLocks, "_run", run)
     eufy = _client()
-    eufy._mqtt_locks = MqttLocks(_NoBroker(), user_name="Nick", emit=lambda _e: None)  # type: ignore[arg-type]
+    eufy._mqtt_locks = MqttLocks(
+        _NoBroker(),  # type: ignore[arg-type]
+        user_id=SYNTHETIC.account_id,
+        user_name="Nick",
+        emit=lambda _e: None,
+    )
     writable = 0
     try:
         for serial in _lock_serials():

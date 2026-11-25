@@ -218,11 +218,23 @@ class EufyMqttAccount:
     # ── commands ─────────────────────────────────────────────────────────────
 
     async def async_publish(
-        self, device_sn: str, trans: str, *, need_ack: bool = False, sess_id: str | None = None
+        self,
+        device_sn: str,
+        trans: str,
+        *,
+        need_ack: bool = False,
+        sess_id: str | None = None,
+        account_id: str | None = None,
+        extra_fields: bool = True,
     ) -> MqttHead:
         """:meth:`.EufyMqttClient.async_publish` on the client of ``device_sn``'s scope."""
         return await self.client_for(device_sn).async_publish(
-            device_sn, trans, need_ack=need_ack, sess_id=sess_id
+            device_sn,
+            trans,
+            need_ack=need_ack,
+            sess_id=sess_id,
+            account_id=account_id,
+            extra_fields=extra_fields,
         )
 
     async def async_request(
@@ -232,8 +244,17 @@ class EufyMqttAccount:
         *,
         match: Match | None = None,
         timeout: float = REQUEST_TIMEOUT_SECONDS,
+        publish_timeout: float | None = None,
+        account_id: str | None = None,
+        extra_fields: bool = True,
     ) -> MqttMessage:
         """:meth:`.EufyMqttClient.async_request` on the client of ``device_sn``'s scope."""
         return await self.client_for(device_sn).async_request(
-            device_sn, trans, match=match, timeout=timeout
+            device_sn,
+            trans,
+            match=match,
+            timeout=timeout,
+            publish_timeout=publish_timeout,
+            account_id=account_id,
+            extra_fields=extra_fields,
         )

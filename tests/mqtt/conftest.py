@@ -38,7 +38,12 @@ def lock(
             "device_type": 0,
             "device_new_pn": pn,
             "bind_time": bind_time,
-            "member": {"admin_user_id": OWNER, "member_type": 1, "short_user_id": SHORT_USER},
+            "member": {
+                "admin_user_id": OWNER,
+                "member_type": 1,
+                "member_user_id": SYNTHETIC.account_id,
+                "short_user_id": SHORT_USER,
+            },
             **({REGION_KEY: region} if region else {}),
         }
     )

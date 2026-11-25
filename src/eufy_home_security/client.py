@@ -1296,7 +1296,10 @@ class EufySecurity:
             from .mqtt.locks import MqttLocks  # noqa: PLC0415 - the optional extra's module
 
             self._mqtt_locks = MqttLocks(
-                account, user_name=self.cloud.user_name, emit=self._bus.emit
+                account,
+                user_id=self.cloud.user_id or "",
+                user_name=self.cloud.user_name,
+                emit=self._bus.emit,
             )
 
     def _lock_of(self, device_sn: str) -> tuple[Station | None, CloudDevice, LockControl]:

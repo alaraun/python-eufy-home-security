@@ -297,6 +297,36 @@ async def test_a_request_without_an_answer_times_out_naming_the_device(rig: Rig)
     assert rig.client._waiters == {}  # nothing kept per serial once a request ended
 
 
+async def test_a_request_with_a_publish_bound_counts_its_answer_wait_from_the_ack(
+    rig: Rig,
+) -> None:
+    """``publish_timeout`` bounds the publish; ``timeout`` then starts at the broker's
+    acknowledgement, as the app's lock commands wait (15 s, then 20 s)."""
+    await rig.client.async_start([lock()])
+    await rig.client.async_wait_connected(5)
+    await until(lambda: len(rig.client.topics) == 1)
+    rig.broker.puback_delay = 0.4
+    task = asyncio.create_task(
+        rig.client.async_request(LOCK_SN, "ask", publish_timeout=0.5, timeout=1.0)
+    )
+    await until(lambda: len(rig.broker.published) == 1)
+    seq = json.loads(rig.broker.published[0].payload)["head"]["msg_seq"]
+    # Past both bounds counted from the send, within the answer bound counted from the ack.
+    await asyncio.sleep(1.15)
+    await rig.broker.send(response_topic("T85D0", LOCK_SN), answer({"msg_seq": seq}, "late"))
+    assert (await task).trans == "late"
+
+
+async def test_a_publish_not_acknowledged_within_its_bound_times_out(rig: Rig) -> None:
+    await rig.client.async_start([lock()])
+    await rig.client.async_wait_connected(5)
+    rig.broker.publish_acks = False
+    with pytest.raises(DeviceTimeoutError, match=r"not acknowledged within 0\.3 s"):
+        async with asyncio.timeout(2):  # the publish bound, not the answer's 5 s
+            await rig.client.async_request(LOCK_SN, "ask", publish_timeout=0.3, timeout=5)
+    assert rig.client._waiters == {}
+
+
 async def test_one_answer_ends_only_the_first_request_it_matches(rig: Rig) -> None:
     await rig.client.async_start([lock()])
     await rig.client.async_wait_connected(5)

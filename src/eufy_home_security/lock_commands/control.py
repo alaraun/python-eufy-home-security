@@ -19,6 +19,9 @@ from .actions import LockAction
 if TYPE_CHECKING:
     from ..cloud.models import CloudDevice
 
+LOCK_PUBLISH_TIMEOUT: Final = 15.0
+"""Seconds an MQTT lock command waits for the broker to take it, as the eufy app waits; its
+answer wait (:data:`LOCK_ANSWER_TIMEOUT`) starts then."""
 LOCK_ANSWER_TIMEOUT: Final = 20.0
 """Seconds a command waits for the lock's answer once the station took it, as the eufy app
 waits."""

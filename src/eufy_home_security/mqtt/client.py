@@ -496,10 +496,19 @@ class EufyMqttClient:
         return client
 
     async def async_publish(
-        self, device_sn: str, trans: str, *, need_ack: bool = False, sess_id: str | None = None
+        self,
+        device_sn: str,
+        trans: str,
+        *,
+        need_ack: bool = False,
+        sess_id: str | None = None,
+        account_id: str | None = None,
+        extra_fields: bool = True,
     ) -> MqttHead:
         """Publish the command ``trans`` to MQTT device ``device_sn``; returns the sent head.
 
+        ``account_id`` names the payload's account (default: the device's owner id);
+        ``extra_fields`` as :func:`~.envelope.build_request` takes it.
         Returns once the broker acknowledged the message, which is no answer of the device
         (see :meth:`async_request`). Raises :class:`UnsupportedError` for a device this
         client does not serve and :class:`CommunicationError` when no connection is up
@@ -516,12 +525,13 @@ class EufyMqttClient:
         client = await self._connected_client(device_sn)
         head, body = build_request(
             client_id=self._client_id or "",
-            account_id=device.owner_user_id or "",
+            account_id=(device.owner_user_id or "") if account_id is None else account_id,
             device_sn=device_sn,
             trans=trans,
             msg_seq=self._sequence.next(),
             need_ack=need_ack,
             sess_id=sess_id,
+            extra_fields=extra_fields,
         )
         topic = request_topic(topic_code(device), device_sn)
         try:
@@ -540,11 +550,17 @@ class EufyMqttClient:
         *,
         match: Match | None = None,
         timeout: float = REQUEST_TIMEOUT_SECONDS,
+        publish_timeout: float | None = None,
+        account_id: str | None = None,
+        extra_fields: bool = True,
     ) -> MqttMessage:
         """Publish ``trans`` to ``device_sn`` and return the first message of that device
         ``match`` accepts (default: the request's ``msg_seq`` or ``sess_id``, the SDK's
         correlation). Raises :class:`DeviceTimeoutError` when none arrives within
-        ``timeout`` seconds, and what :meth:`async_publish` raises."""
+        ``timeout`` seconds, and what :meth:`async_publish` raises; ``account_id`` and
+        ``extra_fields`` as there. With ``publish_timeout`` the publish has that long
+        (:class:`DeviceTimeoutError` when the broker does not acknowledge it) and
+        ``timeout`` starts at the acknowledgement."""
         loop = asyncio.get_running_loop()
         future: asyncio.Future[MqttMessage] = loop.create_future()
         sent: list[MqttHead] = []
@@ -556,17 +572,29 @@ class EufyMqttClient:
 
         entry = (match or default, future)
         self._waiters.setdefault(device_sn, []).append(entry)
-        publish = asyncio.ensure_future(self.async_publish(device_sn, trans))
+        publish = asyncio.ensure_future(
+            self.async_publish(device_sn, trans, account_id=account_id, extra_fields=extra_fields)
+        )
         try:
-            async with asyncio.timeout(timeout):
+            async with asyncio.timeout(
+                timeout if publish_timeout is None else publish_timeout
+            ) as bound:
                 ends: set[asyncio.Future[Any]] = {publish, future}
                 await asyncio.wait(ends, return_when=asyncio.FIRST_COMPLETED)
                 if future.done() and future.exception() is not None:
                     # a stop or a lost connection ended the request, sent or not
                     return future.result()
                 sent.append(await publish)
+                if publish_timeout is not None:
+                    bound.reschedule(loop.time() + timeout)
                 return await future
         except TimeoutError:
+            if publish_timeout is not None and not sent:
+                raise DeviceTimeoutError(
+                    f"MQTT publish to {redact_serial(device_sn)} not acknowledged within "
+                    f"{publish_timeout:g} s",
+                    device_sn=device_sn,
+                ) from None
             raise DeviceTimeoutError(
                 f"no MQTT answer from {redact_serial(device_sn)} within {timeout:g} s",
                 device_sn=device_sn,

@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import datetime as dt
 import ipaddress
@@ -27,10 +28,11 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
+from ..exceptions import ProtocolError
 from ..lock_commands import cm2
 from ..lock_commands.actions import LockAction, cbc_decrypt, serial_iv
 from ..lock_commands.frames import cm2_frame, parse_cm2_frame
-from ..lock_commands.mqtt_trans import decode_trans, encode_trans
+from ..lock_commands.mqtt_trans import encode_trans
 from ..mqtt.envelope import request_topic, response_topic
 from .locks import tlv_entries
 from .synthetic import SYNTHETIC
@@ -212,6 +214,8 @@ class FakeMqttBroker:
         self.connack_delay: float | None = 0.0
         self.publish_acks = True
         """False: a QoS 1 PUBLISH gets no PUBACK (the client's publish keeps waiting)."""
+        self.puback_delay = 0.0
+        """Seconds a PUBACK is held after its PUBLISH arrived."""
         self.open_sockets = 0
         """TLS connections open now, with or without a CONNACK."""
         self.port = 0
@@ -402,7 +406,11 @@ class FakeMqttBroker:
             packet_id = body[offset : offset + 2]
             offset += 2
             if self.publish_acks:
-                writer.write(_packet(_PUBACK, 0, packet_id))
+                ack = _packet(_PUBACK, 0, packet_id)
+                if self.puback_delay:
+                    asyncio.get_running_loop().call_later(self.puback_delay, writer.write, ack)
+                else:
+                    writer.write(ack)
         received = BrokerPublish(
             connection.client_id, topic, body[offset:], qos, bool(flags & 0x01)
         )
@@ -450,13 +458,48 @@ async def _read_packet(reader: asyncio.StreamReader) -> tuple[int, bytes]:
     return header, await reader.readexactly(length)
 
 
+@dataclass(frozen=True, slots=True)
+class _LockCommand:
+    """A lock command the fake lock took: its head, key, time value and asked action."""
+
+    head: dict[str, Any]
+    key: bytes
+    time_value: int
+    action: LockAction
+    seq_num: int
+    entries: dict[int, bytes]
+
+
+class _NotTheAppsFormError(ValueError):
+    """A published message that is not the app's lock command."""
+
+
+def _compact(obj: object) -> str:
+    return json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
+
+
+def _expect(condition: bool, reason: str) -> None:
+    if not condition:
+        raise _NotTheAppsFormError(reason)
+
+
 @dataclass(slots=True, kw_only=True)
 class FakeMqttLock:
     """A Wi-Fi lock on a :class:`FakeMqttBroker`: it answers each lock command published to
     its request topic on its response topic, as a lock is declared to (docs/protocol/
     mqtt.md § Lock commands), then reports its new state in a status report.
 
-    ``owner_user_id`` is the member record's ``admin_user_id`` the commands are keyed by.
+    It takes only the eufy app's lock message, byte for byte in its JSON layout: a command
+    message (``cmd`` 9, no acknowledgement asked) whose payload is exactly
+    ``{"account_id", "device_sn", "trans"}``, ``trans`` the compact JSON
+    ``{"cmd":1940,"mChannel":0,"mValue3":0,"payload":{"apiCommand":6018,"lock_payload",
+    "seq_num","time"}}`` with a numeric ``time``, and a cm2 frame of version 3, slave id 0,
+    function type 2, encrypted, command 0x23. Anything else published to its topic is
+    recorded in ``refused`` (with the reason) and not answered.
+
+    ``owner_user_id`` is the user id the commands are keyed by and name (the member record's
+    ``admin_user_id`` when the record names the sending account), which the message's
+    ``account_id`` must carry too.
     ``users`` records each command's sender entries as decrypted: ``(A2 user id, A5 short
     user id as hex)``.
     ``answer_code`` is the lock's answer (0 accepted); an accepted command moves the lock to
@@ -464,7 +507,9 @@ class FakeMqttLock:
     False; ``answer`` False: the lock sends nothing back. ``mismatch_first`` sends an answer
     to another request first. ``status_code`` is the status report's code (0: a state).
     ``report_first`` sends the status report (of the state the command leaves) before the
-    answer, also when ``answer`` is False.
+    answer, also when ``answer`` is False. Its messages are device messages (``cmd``
+    ``answer_cmd``, 8) whose through data names ``answer_dev_sn`` (None: the lock itself;
+    ``""``: no ``dev_sn``).
     ``received``
     records each command as decrypted: ``(action, seq_num)``. Call :meth:`attach`.
     """
@@ -481,8 +526,11 @@ class FakeMqttLock:
     answer: bool = True
     status_code: int = 0
     report_first: bool = False
+    answer_cmd: int = 8
+    answer_dev_sn: str | None = None
     received: list[tuple[LockAction, int]] = field(default_factory=list)
     users: list[tuple[str, str]] = field(default_factory=list)
+    refused: list[str] = field(default_factory=list)
     _tasks: set[asyncio.Task[None]] = field(default_factory=set)
 
     def attach(self) -> None:
@@ -491,26 +539,77 @@ class FakeMqttLock:
     def _on_publish(self, published: BrokerPublish) -> None:
         if published.topic != request_topic(self.product_code, self.serial):
             return
-        body = json.loads(published.payload)
-        trans = json.loads(body["payload"])["trans"]
-        command, payload = decode_trans(trans)
-        if command != cm2.P2P_COMMAND:
+        try:
+            command = self._read(published.payload)
+        except (ProtocolError, ValueError, KeyError, TypeError) as err:
+            self.refused.append(str(err) or type(err).__name__)
             return
-        time_value = int(payload["time"])
-        key = cm2.time_key(self.owner_user_id, time_value)
-        iv = serial_iv(self.serial)
-        frame = parse_cm2_frame(bytes.fromhex(payload["lock_payload"]))
-        entries = tlv_entries(cbc_decrypt(frame.body, key, iv))
-        action = LockAction.LOCK if entries[0xA3] == b"\x00" else LockAction.UNLOCK
-        self.received.append((action, int(payload["seq_num"])))
-        self.users.append((entries[0xA2].decode(), entries[0xA5].hex()))
+        self.received.append((command.action, command.seq_num))
+        self.users.append((command.entries[0xA2].decode(), command.entries[0xA5].hex()))
         if not self.answer and not self.report_first:
             return
         task = asyncio.get_running_loop().create_task(
-            self._answer(body["head"], key, iv, time_value, action)
+            self._answer(
+                command.head,
+                command.key,
+                serial_iv(self.serial),
+                command.time_value,
+                command.action,
+            )
         )
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
+
+    def _read(self, data: bytes) -> _LockCommand:
+        """The app's lock command in ``data``; :class:`_NotTheAppsFormError` for anything else."""
+        body = json.loads(data)
+        head = body["head"]
+        _expect((head["cmd"], head["cmd_status"]) == (9, 2), f"head {head}")
+        text = body["payload"]
+        payload = json.loads(text)
+        _expect(
+            list(payload) == ["account_id", "device_sn", "trans"], f"payload keys {list(payload)}"
+        )
+        _expect(text == _compact(payload), "payload is not compact JSON")
+        _expect(payload["account_id"] == self.owner_user_id, "account_id is not the key user")
+        _expect(payload["device_sn"] == self.serial, "device_sn is not the lock")
+        trans_text = base64.b64decode(payload["trans"], validate=True).decode()
+        outer = json.loads(trans_text)
+        _expect(trans_text == _compact(outer), "trans is not compact JSON")
+        _expect(
+            list(outer) == ["cmd", "mChannel", "mValue3", "payload"], f"trans keys {list(outer)}"
+        )
+        _expect((outer["cmd"], outer["mChannel"], outer["mValue3"]) == (1940, 0, 0), "trans head")
+        inner = outer["payload"]
+        _expect(
+            list(inner) == ["apiCommand", "lock_payload", "seq_num", "time"],
+            f"payload object keys {list(inner)}",
+        )
+        _expect(inner["apiCommand"] == 6018, f"apiCommand {inner['apiCommand']}")
+        for name in ("seq_num", "time"):
+            _expect(type(inner[name]) is int, f"{name} is not a number")
+        frame = parse_cm2_frame(bytes.fromhex(inner["lock_payload"]))
+        layout = (
+            frame.version,
+            frame.slave_id,
+            frame.function_type,
+            frame.encrypted,
+            frame.command,
+        )
+        _expect(layout == (3, 0, 2, True, 0x23), f"cm2 frame {layout}")
+        time_value = inner["time"]
+        key = cm2.time_key(self.owner_user_id, time_value)
+        entries = tlv_entries(cbc_decrypt(frame.body, key, serial_iv(self.serial)))
+        _expect(entries[0xA2].decode() == self.owner_user_id, "A2 is not the key user")
+        action = LockAction.LOCK if entries[0xA3] == b"\x00" else LockAction.UNLOCK
+        return _LockCommand(
+            head=head,
+            key=key,
+            time_value=time_value,
+            action=action,
+            seq_num=inner["seq_num"],
+            entries=entries,
+        )
 
     async def _answer(
         self, head: dict[str, Any], key: bytes, iv: bytes, time_value: int, action: LockAction
@@ -525,9 +624,16 @@ class FakeMqttLock:
                 version=cm2.FRAME_VERSION,
                 encrypted=True,
             )
-            trans = encode_trans(cm2.P2P_COMMAND, {"time": time_text, "lock_payload": frame.hex()})
+            dev_sn = self.serial if self.answer_dev_sn is None else self.answer_dev_sn
+            through = {"dev_sn": dev_sn} if dev_sn else {}
+            through |= {"lock_payload": frame.hex(), "time": time_text}
+            trans = encode_trans(cm2.P2P_COMMAND, through)
             payload = {"account_id": self.owner_user_id, "device_sn": self.serial, "trans": trans}
-            answer_head = {"cmd": 8, "msg_seq": head["msg_seq"] + 1000, "sess_id": "beef"}
+            answer_head = {
+                "cmd": self.answer_cmd,
+                "msg_seq": head["msg_seq"] + 1000,
+                "sess_id": "beef",
+            }
             return json.dumps({"head": answer_head, "payload": json.dumps(payload)}).encode()
 
         time_text = f"{time_value:08x}"

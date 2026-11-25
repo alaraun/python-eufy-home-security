@@ -3,7 +3,8 @@
 Topics are ``cmd/eufy_security/<product code>/<serial>/req`` (the client publishes) and
 ``…/res`` (the device publishes, the client subscribes). Every message body is the JSON object
 ``{"head": {...}, "payload": "<JSON text>"}``; the payload of a request is
-``{account_id, device_sn, trans, data, update_data, method}`` with ``trans`` the command
+``{account_id, device_sn, trans, data, update_data, method}`` (a lock command's only
+``{account_id, device_sn, trans}``) with ``trans`` the command
 itself, which this module carries as given. Pure: no I/O.
 """
 
@@ -149,13 +150,15 @@ def build_request(
     sess_id: str | None = None,
     seed: str | None = None,
     timestamp: int | None = None,
+    extra_fields: bool = True,
 ) -> tuple[MqttHead, bytes]:
     """The head and body of a command for ``device_sn``, as the eufy app builds them.
 
     ``account_id`` is the device owner's user id (the entry's ``member.admin_user_id``, ``""``
     when it names none); ``trans`` is the command, carried as given. ``sess_id`` defaults to 4
     random hex digits, ``seed`` to 32, ``timestamp`` to now (epoch s); ``need_ack`` sets
-    ``cmd_status`` 1, else 2.
+    ``cmd_status`` 1, else 2. ``extra_fields`` False leaves the empty ``data``,
+    ``update_data`` and ``method`` out of the payload, as the app's lock commands send it.
     """
     head = MqttHead(
         client_id=client_id,
@@ -166,14 +169,9 @@ def build_request(
         cmd_status=CMD_STATUS_REQUEST if need_ack else CMD_STATUS_REQUEST_NO_ACK,
         cmd=(business_type << 16) | cmd_code,
     )
-    payload = {
-        "account_id": account_id,
-        "device_sn": device_sn,
-        "trans": trans,
-        "data": "",
-        "update_data": "",
-        "method": "",
-    }
+    payload = {"account_id": account_id, "device_sn": device_sn, "trans": trans}
+    if extra_fields:
+        payload |= {"data": "", "update_data": "", "method": ""}
     body = {"head": head.as_json(), "payload": _compact(payload)}
     return head, _compact(body).encode()
 

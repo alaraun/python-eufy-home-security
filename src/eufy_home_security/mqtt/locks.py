@@ -2,11 +2,14 @@
 extra), confirmed by the lock's state.
 
 A Wi-Fi lock the route marks MQTT (:func:`~..devices.lock_routes.lock_route`) takes the
-1940 cm2 frame as the ``trans`` of a command message (declared, eufy app; docs/protocol/
-mqtt.md § Lock commands): the payload object ``{lock_payload, seq_num, apiCommand, time}``
-keyed by the member record's ``admin_user_id`` and a time value. The lock answers on its
-response topic with the frame encrypted under the key its own ``time`` names, and reports
-its state in a status report the same way; :class:`~..events.LockStateChanged` carries it.
+station path's 1940 payload object ``{apiCommand: 6018, lock_payload, seq_num, time}``,
+keyed and named by the key user id (:func:`~..lock_commands.cm2.key_user_id`), as the
+``trans`` of a command message whose payload carries only ``account_id`` (that user id),
+``device_sn`` and ``trans``, as the eufy app's lock card sends it (declared, eufy app;
+docs/protocol/mqtt.md § Lock commands). The publish has 15 s, the answer 20 s from the
+broker's acknowledgement. The lock answers in a device message on its response topic with
+the frame encrypted under the key its own ``time`` names, and reports its state in a status
+report the same way; :class:`~..events.LockStateChanged` carries it.
 The same refusals and waits as the station path apply (:mod:`~..lock_commands.control`).
 """
 
@@ -38,6 +41,7 @@ from ..lock_commands.control import (
     FAULT_STATES,
     LOCK_ANSWER_TIMEOUT,
     LOCK_CONFIRM_TIMEOUT,
+    LOCK_PUBLISH_TIMEOUT,
     TARGET_STATES,
     LockControl,
     LockPath,
@@ -48,6 +52,7 @@ from ..lock_commands.control import (
 )
 from ..lock_commands.mqtt_trans import decode_trans, encode_trans
 from ..lock_commands.sequence import LockSequences
+from .envelope import CMD_UPLINK_TRANS
 
 if TYPE_CHECKING:
     from ..cloud.models import CloudDevice
@@ -72,9 +77,10 @@ def mqtt_lock_control(device: CloudDevice) -> LockControl:
 
 
 def _through_data(message: MqttMessage) -> Mapping[str, Any] | None:
-    """The 1940 through-data object of a lock's message (its serial from the topic)."""
+    """The 1940 through-data object of a lock's device message (``cmd`` 8), as the eufy app
+    reads it: the lock its ``dev_sn`` names, the topic's lock when it names none."""
     trans = message.trans
-    if trans is None:
+    if trans is None or message.head.cmd_code != CMD_UPLINK_TRANS:
         return None
     try:
         command, payload = decode_trans(trans)
@@ -82,13 +88,14 @@ def _through_data(message: MqttMessage) -> Mapping[str, Any] | None:
         return None
     if command != cm2.P2P_COMMAND:
         return None
-    return {**payload, "dev_sn": message.device_sn}
+    return {"dev_sn": message.device_sn, **payload}
 
 
 class MqttLocks:
     """Lock commands and lock state of the account's MQTT locks over ``account``.
 
-    ``user_name`` is what a command names as its sender; ``emit`` receives each
+    ``user_id`` is the logged-in account's cloud user id and ``user_name`` its nickname,
+    which a command names as its sender; ``emit`` receives each
     :class:`~..events.LockStateChanged`. Call :meth:`close` to stop listening.
     """
 
@@ -96,11 +103,13 @@ class MqttLocks:
         self,
         account: EufyMqttAccount,
         *,
+        user_id: str,
         user_name: str,
         emit: Callable[[Event], None],
         clock: Callable[[], float] = time.time,
     ) -> None:
         self._account = account
+        self._user_id = user_id
         self._user_name = user_name
         self._emit = emit
         self._clock = clock
@@ -122,29 +131,32 @@ class MqttLocks:
 
     def _on_message(self, message: MqttMessage) -> None:
         payload = _through_data(message)
-        owner = self._owners.get(message.device_sn)
-        if payload is None or owner is None:
+        if payload is None:
+            return
+        serial = payload["dev_sn"]
+        owner = self._owners.get(serial) if isinstance(serial, str) else None
+        if owner is None:
             return
         try:
-            report = cm2.parse_status_report(payload, serial=message.device_sn, user_id=owner)
+            report = cm2.parse_status_report(payload, serial=serial, user_id=owner)
         except ProtocolError as err:
-            _LOGGER.debug("%s: unreadable status report: %s", redact_serial(message.device_sn), err)
+            _LOGGER.debug("%s: unreadable status report: %s", redact_serial(serial), err)
             return
         if report is None:
             return
         if report.code != 0:
-            state = self._states.get(message.device_sn)
+            state = self._states.get(serial)
             if state is not None and not state.done():
                 state.set_exception(
                     CommandRejectedError(
                         cm2.P2P_COMMAND,
                         report.code,
-                        f"{redact_serial(message.device_sn)}: status report",
-                        device_sn=message.device_sn,
+                        f"{redact_serial(serial)}: status report",
+                        device_sn=serial,
                     )
                 )
             return
-        self._take(message.device_sn, report.state_code)
+        self._take(serial, report.state_code)
 
     def _take(self, device_sn: str, state_code: int) -> None:
         reading = LockReading(
@@ -182,6 +194,11 @@ class MqttLocks:
                 f"{redact_serial(serial)}: the cloud record names no member for the lock",
                 device_sn=serial,
             )
+        if not self._user_id:
+            raise UnsupportedError(
+                f"{redact_serial(serial)}: a lock command needs the account's cloud user id",
+                device_sn=serial,
+            )
         if serial in self._busy:
             raise DeviceBusyError(
                 f"{redact_serial(serial)}: a lock command is still waiting for the lock",
@@ -191,10 +208,16 @@ class MqttLocks:
         reading = self._readings.get(serial)
         if reading is not None and reading.state is target:
             return target
-        self._owners[serial] = owner
+        user_id = cm2.key_user_id(
+            account_user_id=self._user_id,
+            admin_user_id=owner,
+            member_type=device.member_type,
+            member_user_id=device.member_user_id,
+        )
+        self._owners[serial] = user_id
         self._busy.add(serial)
         try:
-            return await self._run(device, owner, action, target, timeout)
+            return await self._run(device, user_id, action, target, timeout)
         finally:
             self._busy.discard(serial)
             self._watchers.pop(serial, None)
@@ -203,7 +226,7 @@ class MqttLocks:
     async def _run(
         self,
         device: CloudDevice,
-        owner: str,
+        user_id: str,
         action: LockAction,
         target: LockState,
         timeout: float | None,
@@ -215,17 +238,11 @@ class MqttLocks:
         request = cm2.build_on_off_request(
             serial,
             action,
-            cm2.Cm2User(owner, self._user_name, device.short_user_id),
+            cm2.Cm2User(user_id, self._user_name, device.short_user_id),
             seq_num=self._sequences.next(serial),
             time_value=cm2.lock_time(now, secrets.randbelow(100)),
             timestamp=int(now),
         )
-        payload = {
-            "lock_payload": request.payload["lock_payload"],
-            "seq_num": request.payload["seq_num"],
-            "apiCommand": cm2.P2P_COMMAND,
-            "time": request.time_value,
-        }
         state: asyncio.Future[LockState] = loop.create_future()
 
         def on_reading(taken: LockReading) -> None:
@@ -249,13 +266,20 @@ class MqttLocks:
                 return False
             return True
 
-        budget = LOCK_ANSWER_TIMEOUT if deadline is None else deadline - loop.time()
+        if deadline is None:  # the app's waits: the publish, then the answer from its ack
+            publish_wait: float | None = LOCK_PUBLISH_TIMEOUT
+            budget = LOCK_ANSWER_TIMEOUT
+        else:
+            publish_wait, budget = None, deadline - loop.time()
         asking = loop.create_task(
             self._account.async_request(
                 serial,
-                encode_trans(cm2.P2P_COMMAND, payload),
+                encode_trans(cm2.P2P_COMMAND, request.payload),
                 match=match,
                 timeout=max(0.0, budget),
+                publish_timeout=publish_wait,
+                account_id=user_id,
+                extra_fields=False,
             )
         )
         ends: set[asyncio.Future[Any]] = {asking, state}
@@ -268,7 +292,7 @@ class MqttLocks:
             if asking.done() and not asking.cancelled():
                 asking.exception()  # retrieved: the state may decide instead
         if not state.done():  # the state decides when it is in
-            if isinstance(asking.exception(), DeviceTimeoutError):
+            if deadline is not None and isinstance(asking.exception(), DeviceTimeoutError):
                 raise DeviceTimeoutError(
                     f"{redact_serial(serial)}: no answer within {budget:.0f} s", device_sn=serial
                 )
