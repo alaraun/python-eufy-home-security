@@ -1767,13 +1767,28 @@ for any setting.
 A device graded `Capability.LOCK` (*declared (eufy app)*: every bundled lock model whose
 settings file names its lock-state parameter, see the [support
 matrix](../reference/devices.md#locks-and-garage-doors); a smart safe has none) has a lock
-state. This release reads it only: there is no lock or unlock command, so make a read-only
-entity (a `lock` entity whose `async_lock`/`async_unlock` raise, or a sensor) and no
-service.
+state. Whether this client can also lock and unlock it is per unit:
+`eufy.lock_control(device_sn)` answers from the lock's command route, firmware and cloud
+record, without a session or network, with `writable`, `path` (`station` or `mqtt`),
+`reason` (a text for the UI when not writable) and `guest`. Give the `lock` entity lock and
+unlock where `writable`, and make it read-only otherwise.
+
+`await eufy.async_lock(device_sn)` / `async_unlock(device_sn)` send the command over that
+path and return the `LockState` once the lock reports the asked state, never on an
+acknowledgement ([protocol/locks.md](../protocol/locks.md#commands)). Before sending they
+raise `GuestAccessError` (the account is a guest of the lock), `UnsupportedError` (no
+route the library sends), `MqttAccountRequiredError` (an MQTT lock: call
+`eufy.use_mqtt(account)` with the account's `EufyMqttAccount`) or `DeviceBusyError`
+(a command for that lock still waits). After sending they raise `CommandRejectedError`
+(`err.code`; -151 is a refused sequence number), `LockNotMovedError` (`err.state`: jammed
+or stopped between positions) or `DeviceTimeoutError`. A lock already in the asked state
+returns at once. The default wait is the app's 20 s for the answer plus 30 s for the
+state, and `timeout` bounds the whole call; run it as a task and let `LockStateChanged`
+drive the entity. Declared from the eufy app, not tested on hardware.
 
 `station.lock_state(device_sn)` gives a `LockReading` (None before anything was reported,
 and for a device that is no lock): `state`, a `LockState`, `source` (`p2p`, `notify`,
-`cloud` or `push`), `raw` (the parameter's value) or `event_type` (the push's). Every change
+`cloud`, `push` or `lock`, the lock's own status report after a command), `raw` (the parameter's value) or `event_type` (the push's). Every change
 of `state` emits `LockStateChanged(device_sn, state, source, station_sn, raw, event_type)`
 on the client's stream, the first state included; read the state from the event or from
 `lock_state`. The state is the lock-state code as the eufy app's lock controls read the
@@ -1801,7 +1816,8 @@ report ([events.md](../protocol/events.md#lock-pushes-declared-app)). Keep `stat
 `raw`) as attributes when the entity maps passage and privacy mode to unlocked and
 locked.
 A lock the library reaches through no station (a Wi-Fi lock without a P2P id is skipped,
-`SkippedDevice`) has no state here.
+`SkippedDevice`) has no `lock_state`; once served through `use_mqtt` its status reports
+arrive as `LockStateChanged` with `station_sn` None.
 
 ### Garage doors
 
@@ -3615,7 +3631,7 @@ pins ([protocol/mqtt.md](../protocol/mqtt.md) § The client). Without it the lib
 imports and serves stations as before; constructing
 `eufy_home_security.mqtt.account.EufyMqttAccount` (or a single scope's `EufyMqttClient`)
 raises `MissingDependencyError` (its `extra` is `"mqtt"`). The transport is declared from the eufy app and not yet tested
-against the broker, and lock commands are not part of it yet; see
+against the broker; lock commands go through `eufy.use_mqtt(account)` (§ Locks); see
 [protocol/mqtt.md](../protocol/mqtt.md). Its loggers are under `eufy_home_security.mqtt`;
 `aiomqtt` logs each MQTT packet under `mqtt`, outside the library's tree and unredacted
 (the client id carries the account's user id), so leave `mqtt` out of `loggers`; its

@@ -637,7 +637,8 @@ account's stations (`Station.note_lock_push`, called for every delivered push), 
 | 517, 519 (mechanical fault) | `jammed` |
 | 516 (the lock went offline) | `unknown`: the app sets a code its card shows as its fault state; the library does not call an offline lock jammed |
 
-Other lock pushes (low battery, a door left open, tamper) set no state. Between pushes
+Other lock pushes (low battery, a door left open, tamper) set no state. A lock's own status
+report after a lock command sets it with `source` `lock` ([locks.md](locks.md#commands)). Between pushes
 the lock state comes from its lock-state parameter (1912 behind a station, 6000 for a lock
 that is its own station; the `lock` block of its settings file), from a dump, a parameter
 notify or the device list's copy. Both are ordered by time, with the guard mode's bounds:

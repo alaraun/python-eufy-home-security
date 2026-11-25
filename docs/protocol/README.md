@@ -14,9 +14,9 @@ how-to and reference docs.
 | [session-crypto.md](session-crypto.md) | the static serial key, the CONN_INIT and ECIES handshake, AES-GCM command and broadcast frames, how each frame picks its cipher, legacy ECB scalar frames |
 | [commands.md](commands.md) | the DeviceMsgBean envelope, arming and how to confirm it, writing settings, the parameter dump, the event database, image fetch, result codes |
 | [events.md](events.md) | local P2P pushes, parameter-change pushes, guard-mode announcements and ordering, liveness, cloud FCM push, P2P vs cloud |
-| [mqtt.md](mqtt.md) | the eufy security MQTT broker the app uses for its Wi-Fi locks: which devices, the client certificate and its reuse, connecting, topics, the message envelope, the client |
+| [mqtt.md](mqtt.md) | the eufy security MQTT broker the app uses for its Wi-Fi locks: which devices, the client certificate and its reuse, connecting, topics, the message envelope, the client, lock commands |
 | [media.md](media.md) | still images, live stream open, video/audio frame headers, keyframe decryption, recording download, what is proven |
-| [locks.md](locks.md) | lock and unlock command forms per lock family (1940 cm2 frame with a time or HKDF key, 1961 JSON with an ECIES-wrapped key or plain, 1930 cm frame with an ECIES or ECDH key), which form a lock takes, how its answer is read; declared, not tested on hardware |
+| [locks.md](locks.md) | lock and unlock command forms per lock family (1940 cm2 frame with a time or HKDF key, 1961 JSON with an ECIES-wrapped key or plain, 1930 cm frame with an ECIES or ECDH key), which form a lock takes, how its answer is read, how a command is sent and confirmed by the lock's state; declared, not tested on hardware |
 
 ## The layers
 

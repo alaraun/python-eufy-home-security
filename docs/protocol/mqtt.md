@@ -212,3 +212,20 @@ too) does nothing until the next start.
 `eufy-security mqtt` lists the account's MQTT devices and their topics; with `--connect`
 it fetches the certificate, connects, subscribes and counts what arrives, and never
 publishes ([cli.md](../reference/cli.md)).
+
+## Lock commands
+
+`EufySecurity.use_mqtt(account)` serves the locks whose route is MQTT
+([locks.md](locks.md#routes)) through an `EufyMqttAccount` the consumer started for the
+account (`None` stops). `async_lock`/`async_unlock` then publish the 1940 cm2 frame
+([locks.md](locks.md#1940-cm2-frame-in-through-data)) as the `trans` of a command message,
+`{"cmd": 1940, "payload": {"lock_payload", "seq_num", "apiCommand": 1940, "time"}}`, keyed by
+the member record's `admin_user_id` and a time value. The lock answers on its response topic
+under the key its own `time` names; an answer to another request is skipped. The refusals,
+waits and sequence numbers of [locks.md](locks.md#commands) apply.
+
+The lock's status reports on its response topic set its state: each change emits
+`LockStateChanged` with `source` `lock` and `station_sn` None. They are read for a lock that
+took a command from this client (the member record's key opens them). A status report with
+a non-zero code ends no command on this path: the state wait runs out. Declared from the
+eufy app, not tested against the broker.
