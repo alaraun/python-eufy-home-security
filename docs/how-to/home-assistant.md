@@ -1833,7 +1833,8 @@ that door (its door notify, or a report of a new state), at most `GARAGE_CONFIRM
 after the camera took it (then it reads its last report again, with a `GarageDoorChanged`,
 as the app's wait ends), and meanwhile the next open or close of the
 door is sent even where its last report is the asked state (a close after a cancelled open
-of a door last reported closed). A call cancelled before the camera took its command
+of a door last reported closed). "Took" means the library has processed the camera's
+receipt: a call cancelled before that, or in the same instant as the receipt arrives,
 leaves the door at its last reported state. A door in an `unknown` state raises
 `DoorStateUnknownError` (an `UnsupportedError`), since open and close cannot be told
 apart: pass `operate=True` for the app's operate command, which runs the motor whichever
