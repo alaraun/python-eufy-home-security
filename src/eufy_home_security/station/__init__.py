@@ -1336,8 +1336,9 @@ class Station:
 
         Sends the eufy app's door command (the model's ``garage`` command: a body with the
         door's ``type`` and the account's nickname) on the device's channel. It confirms
-        by the door's report, as the app does: the receipt only says the device took it,
-        so the call waits for the door's next state notify (meanwhile the door reads
+        by a state report, as the app does (the app ends its wait on any door report of
+        the device; the library on a report of this door): the receipt only says the
+        device took it, so the call waits for the door's next state notify (meanwhile the door reads
         closing, or opening, with a :class:`~..events.GarageDoorChanged`). That report
         ends the wait whatever it says, and the door reads the reported state at once: the
         asked state returns it, another state (the door did not get there, or reads

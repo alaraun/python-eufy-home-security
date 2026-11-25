@@ -635,17 +635,24 @@ async def test_a_garage_camera_behind_a_station_takes_the_notify_on_its_channel(
     station = Station(STATION, _session(fake, SYNTHETIC.station_sn), sub_devices=[device])
     try:
         await station.async_update()
+        assert station.state is not None
+        own = station.state.setting_params.get(7500)
         events = _events(station)
         for other in ({"mChannel": 3}, {}):  # another channel, none on a HomeBase
             fake.send_json(0x0547, {"cmd": 7500, **other, "payload": {"door_id": 1, "type": 9}})
         fake.send_json(0x0547, {"cmd": 7500, "mChannel": 2, "payload": {"door_id": 2, "type": 6}})
         await _notified(events, 1)
+        held = station.session.params.get((2, 7500))
+        assert station.state is not None
+        own_after = station.state.setting_params.get(7500)
         station.update_sub_devices([device])
         states = [d.state for d in station.garage_doors(device.device_sn)]
     finally:
         await station.async_close()
     assert _doors(events) == [(2, GarageDoorState.OPEN, GarageDoorSource.NOTIFY)]
     assert states == [GarageDoorState.CLOSED, GarageDoorState.OPEN]
+    assert held == "6"  # filed on the camera's channel
+    assert own_after == own  # the station's own parameter is untouched
 
 
 async def test_a_garage_camera_without_a_dump_reads_the_cloud_copy(fake: FakeStation) -> None:
