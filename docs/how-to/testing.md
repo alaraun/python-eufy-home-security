@@ -99,6 +99,11 @@ async def test_warm_start_needs_no_cloud() -> None:
   answers the 1700 recipes: `preset_points` (the 6034 answer), `preset_gotos`,
   `doorbell_payloads`, `bare_stops` and `pings` record what arrived, and
   `live_ends_unpinged_after` ends a live stream that gets no ping, as the camera does.
+  A garage-door camera fake (a T8452 or T8453 serial) moves its doors when `garage_moves`
+  is set: a door command changes the door-state bits (param 7500) and reports them in a
+  7500 notify after `garage_report_delay` seconds; with `garage_moves` off the command
+  gets its receipt and is dropped. It answers the storage query (`SDINFO_EX`) by default
+  (`SYNTHETIC_SD_INFO`); any other model answers it only when `sd_info` is set.
   `push_camera_event(cipher=...)` sends a camera event under either frame cipher, and
   `send_alarm_frame(FrameType.ALARM_TONE_NOTIFY, 3, 30, channel=1)` an alarm frame.
 - **Station configuration.** Seed the guard modes and the schedule a

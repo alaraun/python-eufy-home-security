@@ -36,7 +36,9 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from ..cloud.const import CIPHER_ID_P2P
+from ..devices.capabilities import Capability, profile_for_serial
 from ..devices.recipes import MAX_PRESET_SLOTS, ConnectType, connect_type
+from ..devices.support import Support
 from ..devices.types import model_for_serial
 from ..models import STATION_CHANNEL, GuardMode
 from ..p2p.alarm import ALARM_FRAME_VALUES
@@ -284,6 +286,18 @@ def v2_still(
     return header + ciphertext + image[V2_ENCRYPTED_LEN:]
 
 
+SYNTHETIC_SD_INFO: tuple[int, int, int] = (0, 32000, 16000)
+"""The ``SDINFO_EX`` answer of a garage-door camera left at its default ``sd_info``:
+status normal, 32000 MB, half of it free."""
+
+
+def _garage_camera(serial: str) -> bool:
+    """Whether ``serial``'s model has garage doors (graded
+    :attr:`~..devices.capabilities.Capability.GARAGE_DOOR`)."""
+    profile = profile_for_serial(serial)
+    return profile is not None and profile.support(Capability.GARAGE_DOOR) is not Support.UNKNOWN
+
+
 def synthetic_hub_storage() -> dict[str, Any]:
     """A HomeBase 2 ``55000`` reply without its ``cmd``, with synthetic figures (MB): a
     16 GB eMMC 4000 MB used and a 1 TB disk 250000 MB used."""
@@ -483,7 +497,9 @@ class FakeStation:
     HomeBase 2 storage query is answered with; None: no answer."""
     sd_info: tuple[int, ...] | None = None
     """``(status, total, free)`` a ``SDINFO_EX`` (``1144``) is answered with, each an
-    ``int32`` (fewer values: a short body); None: no answer (the frame is ignored)."""
+    ``int32`` (fewer values: a short body); None: the model's default, a garage-door
+    camera's :data:`SYNTHETIC_SD_INFO`, no answer from any other model (the frame is
+    ignored)."""
     sd_info_queries: int = 0
     """``SDINFO_EX`` frames received."""
     storage_reply_code: int = 0
@@ -654,7 +670,8 @@ class FakeStation:
     garage_moves: bool = False
     """Answer a door command (1700 / 7500) as a garage-door camera: apply its ``type`` to
     the door-state bits (param 7500 of the subheader's channel), then report them in a
-    7500 notify after :attr:`garage_report_delay` seconds. False: receipt only."""
+    7500 notify after :attr:`garage_report_delay` seconds. False: receipt only, the
+    command dropped."""
     garage_report_delay: float = 0.0
     live_ends_unpinged_after: float | None = None
     """End a live stream when no 1139 ping arrived for this many seconds (a T8170: about
@@ -1019,8 +1036,11 @@ class FakeStation:
             # The local-medium query: answer with a frame of the same type on
             # channel 0, three int32 (status, total, free), GCM-tagged but clear.
             self.sd_info_queries += 1
-            if self.sd_info is not None:
-                body = struct.pack(f"<{len(self.sd_info)}i", *self.sd_info)
+            answer = self.sd_info
+            if answer is None and _garage_camera(self.serial):
+                answer = SYNTHETIC_SD_INFO
+            if answer is not None:
+                body = struct.pack(f"<{len(answer)}i", *answer)
                 subheader = bytes([FrameCipher.GCM, 0, 0, 0, 1, 0])
                 self.send_frame(
                     CMD_SD_INFO, body, cipher=FrameCipher.GCM, channel=0, subheader=subheader
@@ -1088,8 +1108,9 @@ class FakeStation:
         if command == 1000:
             self.live_opens.append(subheader[2])
             self._start_media(data["encryptkey"], live=True, camera=subheader[2])
-        elif command == 7500 and self.garage_moves:
-            self._move_garage_door(int(data["type"]), subheader[2])
+        elif command == 7500:
+            if self.garage_moves:
+                self._move_garage_door(int(data["type"]), subheader[2])
         elif command == 6034:
             self.send_json(
                 FrameType.NOTIFY_PAYLOAD,
