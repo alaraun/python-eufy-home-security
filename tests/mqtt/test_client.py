@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import functools
+import gc
 import json
 import logging
 import subprocess
@@ -714,13 +715,22 @@ async def test_a_stop_during_a_connack_wait_that_times_out_leaves_nothing_open(
 ) -> None:
     monkeypatch.setattr(client_module, "PUBLISH_TIMEOUT_SECONDS", 0.6)
     rig.broker.connack_delay = None
-    before = asyncio.all_tasks()
-    await rig.client.async_start([lock()])
-    await until(lambda: len(rig.broker.connects) == 1)
-    await rig.client.async_stop()  # waits for the CONNACK wait to end
-    await asyncio.sleep(0.1)
+    loop = asyncio.get_running_loop()
+    loop_errors: list[dict[str, Any]] = []
+    loop.set_exception_handler(lambda _loop, context: loop_errors.append(context))
+    try:
+        before = asyncio.all_tasks()
+        await rig.client.async_start([lock()])
+        await until(lambda: len(rig.broker.connects) == 1)
+        await rig.client.async_stop()  # waits for the CONNACK wait to end
+        await asyncio.sleep(0.1)
+        gc.collect()
+        await asyncio.sleep(0)
+    finally:
+        loop.set_exception_handler(None)
     assert rig.broker.open_sockets == 0
     assert _left_tasks(before) == []
+    assert loop_errors == []  # the connect's error is the client's, not the loop's
 
 
 # ── the optional dependency ──────────────────────────────────────────────────

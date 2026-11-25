@@ -536,7 +536,9 @@ async def _open(client: aiomqtt.Client) -> None:
     A connect that fails has its socket closed (:func:`_drop`)."""
     connect = asyncio.ensure_future(client.__aenter__())
     try:
-        await asyncio.shield(connect)
+        # asyncio.wait, not shield: a shield hands a step that fails after a cancel to the
+        # loop's exception handler, although _settle retrieves the error.
+        await asyncio.wait({connect})
     except asyncio.CancelledError:
         if await _settle(connect):
             await _close(client, connect)
@@ -545,7 +547,9 @@ async def _open(client: aiomqtt.Client) -> None:
                 "MQTT connect step still running after %g s; leaving it", CONNECT_SETTLE_SECONDS
             )
         raise
-    except Exception:
+    try:
+        connect.result()
+    except BaseException:
         _drop(client)
         raise
 
