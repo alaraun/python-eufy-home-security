@@ -469,6 +469,9 @@ class StationLockControl:
             self._pending.pop(serial, None)
             for task in pending.resends:
                 task.cancel()
+            for future in (pending.answer, pending.state):
+                if future.done() and not future.cancelled():
+                    future.exception()  # retrieved: another outcome decided the command
 
     async def _send(self, sent: _Sent, channel: int, pending: _Pending) -> bool:
         """Send ``sent``; whether the station gave a result. A non-zero result raises,

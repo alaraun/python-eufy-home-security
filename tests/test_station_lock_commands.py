@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import gc
 from collections.abc import AsyncIterator, Callable
 from types import MappingProxyType
 
@@ -510,6 +511,39 @@ async def test_an_explicit_timeout_bounds_the_steps_before_the_send(
     finally:
         await station.async_close()
     assert lock.received == []
+
+
+async def test_a_failed_state_is_retrieved_when_the_send_raises_first(
+    fake: FakeStation, lock_1940: FakeLock
+) -> None:
+    """A refusing status report fails the state wait before the station refuses the send:
+    the command raises the station's refusal and leaves no unretrieved exception."""
+    seen: list[dict[str, object]] = []
+    loop = asyncio.get_running_loop()
+    loop.set_exception_handler(lambda _loop, context: seen.append(context))
+    try:
+        station = await _hub(fake, _lock(LOCK_1940), lock_1940)
+
+        async def send(command: int, **_: object) -> None:
+            state = station._lock_control._pending[LOCK_1940].state
+            state.set_exception(CommandRejectedError(command, 2, "status report"))
+            raise CommandRejectedError(command, 1, "refused by the station")
+
+        station.session.async_send_command = send  # type: ignore[method-assign,assignment]
+        try:
+            with pytest.raises(CommandRejectedError) as raised:
+                await station.async_lock(LOCK_1940)
+        finally:
+            await station.async_close()
+        code = raised.value.code
+        del raised
+        for _ in range(3):
+            await asyncio.sleep(0)
+        gc.collect()
+    finally:
+        loop.set_exception_handler(None)
+    assert code == 1
+    assert seen == []
 
 
 def test_the_waits_are_the_apps() -> None:

@@ -6,7 +6,9 @@ from __future__ import annotations
 import asyncio
 import base64
 import dataclasses
+import gc
 import json
+from collections.abc import Callable
 from types import MappingProxyType
 
 import pytest
@@ -26,6 +28,7 @@ from eufy_home_security.exceptions import (
 from eufy_home_security.lock_commands.actions import LockAction
 from eufy_home_security.lock_commands.control import LockPath
 from eufy_home_security.mqtt.account import EufyMqttAccount
+from eufy_home_security.mqtt.locks import MqttLocks, mqtt_lock_control
 from eufy_home_security.testing.mqtt import FakeMqttLock
 
 from .conftest import LOCK_SN, OWNER, SHORT_USER, Rig, lock
@@ -124,6 +127,44 @@ async def test_a_status_report_before_the_answer_confirms_the_mqtt_command(
             assert await rig.eufy.async_lock(LOCK_SN) is LockState.LOCKED
     finally:
         await account.async_stop()
+
+
+class _StateThenFailure:
+    """An MQTT account whose request ends in an error in the turn the lock's state
+    arrives."""
+
+    def __init__(self) -> None:
+        self.locks: MqttLocks | None = None
+
+    def add_listener(self, _callback: object) -> Callable[[], None]:
+        return lambda: None
+
+    async def async_request(self, device_sn: str, *_: object, **__: object) -> None:
+        assert self.locks is not None
+        self.locks._states[device_sn].set_result(LockState.LOCKED)
+        raise DeviceTimeoutError("no MQTT answer", device_sn=device_sn)
+
+
+async def test_a_request_error_beside_the_state_is_retrieved() -> None:
+    """The state decides when it is in; the request's error beside it is retrieved, so
+    the loop reports no unretrieved exception."""
+    seen: list[dict[str, object]] = []
+    loop = asyncio.get_running_loop()
+    loop.set_exception_handler(lambda _loop, context: seen.append(context))
+    try:
+        account = _StateThenFailure()
+        locks = MqttLocks(account, user_name="Nick", emit=lambda _e: None)  # type: ignore[arg-type]
+        account.locks = locks
+        device = lock()
+        control = mqtt_lock_control(device)
+        state = await locks.async_command(device, LockAction.LOCK, control=control, timeout=5)
+        for _ in range(3):
+            await asyncio.sleep(0)
+        gc.collect()
+    finally:
+        loop.set_exception_handler(None)
+    assert state is LockState.LOCKED
+    assert seen == []
 
 
 async def test_no_status_report_over_mqtt_times_out(rig: Rig, wifi_lock: FakeMqttLock) -> None:
