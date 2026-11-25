@@ -477,9 +477,12 @@ async def test_a_status_report_with_an_error_code_fails_the_command(
         async with asyncio.timeout(5):  # at the report, not after the state wait
             with pytest.raises(CommandRejectedError) as raised:
                 await station.async_lock(LOCK_1940)
+        reading = station.lock_state(LOCK_1940)
     finally:
         await station.async_close()
     assert raised.value.code == 2
+    assert reading is not None
+    assert reading.source is not LockStateSource.LOCK  # the refusing report sets no state
 
 
 class _SlowCloud(_Cloud):
@@ -490,7 +493,7 @@ class _SlowCloud(_Cloud):
         return await super().async_get_lock_public_key(device_sn, key_type)
 
 
-@pytest.mark.parametrize("slow", ["public key", "connect"])
+@pytest.mark.parametrize("slow", ["public key", "connect", "send"])
 async def test_an_explicit_timeout_bounds_the_steps_before_the_send(
     fake: FakeStation, monkeypatch: pytest.MonkeyPatch, slow: str
 ) -> None:
@@ -504,6 +507,12 @@ async def test_an_explicit_timeout_bounds_the_steps_before_the_send(
             await asyncio.sleep(30)
 
         monkeypatch.setattr(station.session, "async_connect", connect)
+    if slow == "send":
+
+        async def send(*_: object, **__: object) -> None:
+            await asyncio.sleep(30)
+
+        monkeypatch.setattr(station.session, "async_send_command", send)
     try:
         async with asyncio.timeout(3):
             with pytest.raises(DeviceTimeoutError, match=r"not sent within 0\.3 s"):

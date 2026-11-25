@@ -106,6 +106,7 @@ async def test_a_status_report_with_an_error_code_fails_the_mqtt_command(
 ) -> None:
     wifi_lock.status_code = 2
     account = await _served(rig)
+    events = _events(rig)
     try:
         async with asyncio.timeout(5):  # at the report, not after the state wait
             with pytest.raises(CommandRejectedError) as raised:
@@ -113,6 +114,7 @@ async def test_a_status_report_with_an_error_code_fails_the_mqtt_command(
     finally:
         await account.async_stop()
     assert (raised.value.command, raised.value.code) == (1940, 2)
+    assert not [e for e in events if isinstance(e, LockStateChanged)]  # it sets no state
 
 
 async def test_a_status_report_before_the_answer_confirms_the_mqtt_command(
