@@ -44,7 +44,6 @@ from ..lock_commands import anker, cm2
 from ..lock_commands.actions import LockAction, LockReply, LockResult
 from ..lock_commands.control import (
     FAULT_STATES,
-    GUEST_MEMBER_TYPE,
     LOCK_ANSWER_TIMEOUT,
     LOCK_CONFIRM_TIMEOUT,
     SEQUENCE_REFUSED,
@@ -53,6 +52,7 @@ from ..lock_commands.control import (
     LockPath,
     check_control,
     ends_wait,
+    is_guest,
     lock_control,
 )
 from ..lock_commands.sequence import LockSequences, SharedSequence
@@ -198,7 +198,7 @@ class StationLockControl:
 
     def control(self, device_sn: str) -> LockControl:
         device = self._station.sub_device(device_sn)
-        return lock_control(self.form(device), guest=device.member_type == GUEST_MEMBER_TYPE)
+        return lock_control(self.form(device), guest=is_guest(device))
 
     # ── inbound ─────────────────────────────────────────────────────────────
 

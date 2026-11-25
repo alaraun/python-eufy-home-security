@@ -215,7 +215,8 @@ class CloudDevice:
     local_ip: str | None = None
     owner_user_id: str | None = None
     member_type: int | None = None
-    """``member.member_type``: 0 guest, 1 admin, 2 owner. A guest gets no lock control."""
+    """``member.member_type``: 0 guest, 1 admin, 2 owner. A guest gets no lock control
+    (:func:`~..lock_commands.control.is_guest`)."""
     member_user_id: str | None = None
     """``member.member_user_id``: the account the member record names."""
     short_user_id: str | None = None

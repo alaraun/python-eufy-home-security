@@ -8,13 +8,16 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final, NoReturn
+from typing import TYPE_CHECKING, Final, NoReturn
 
 from .._logging import redact_serial
 from ..devices.lock_routes import LockForm
 from ..devices.locks import LockState
 from ..exceptions import GuestAccessError, UnsupportedError
 from .actions import LockAction
+
+if TYPE_CHECKING:
+    from ..cloud.models import CloudDevice
 
 LOCK_ANSWER_TIMEOUT: Final = 20.0
 """Seconds a command waits for the lock's answer once the station took it, as the eufy app
@@ -63,6 +66,15 @@ class LockControl:
     @property
     def writable(self) -> bool:
         return self.path is not None
+
+
+def is_guest(device: CloudDevice) -> bool:
+    """Whether the account is a guest of ``device``: its member record names
+    ``member_type`` 0, or names none, which the eufy app reads as 0. No member record: not
+    a guest."""
+    if device.member_type is not None:
+        return device.member_type == GUEST_MEMBER_TYPE
+    return device.has_member_relation
 
 
 def lock_control(form: LockForm | None, *, guest: bool) -> LockControl:

@@ -168,7 +168,8 @@ acknowledgement alone never counts. In order:
    from the route, the firmware and the cloud record, without a session: no route, the
    1911 form, or a station route whose station this client does not run raise
    `UnsupportedError`; an account whose member record for the lock names a
-   guest (`member_type` 0) raises `GuestAccessError`, as the app refuses guests. A record
+   guest (`member_type` 0, or none named, which the app reads as 0) raises
+   `GuestAccessError`, as the app refuses guests. A record
    without the owner's `admin_user_id` raises `UnsupportedError`; an MQTT route with no
    account given to `use_mqtt()` raises `MqttAccountRequiredError`; a command still waiting
    for the same lock raises `DeviceBusyError`. A lock whose last reading already is the

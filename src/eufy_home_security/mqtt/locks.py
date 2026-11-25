@@ -36,7 +36,6 @@ from ..lock_commands import cm2
 from ..lock_commands.actions import LockAction, LockReply, LockResult
 from ..lock_commands.control import (
     FAULT_STATES,
-    GUEST_MEMBER_TYPE,
     LOCK_ANSWER_TIMEOUT,
     LOCK_CONFIRM_TIMEOUT,
     TARGET_STATES,
@@ -44,6 +43,7 @@ from ..lock_commands.control import (
     LockPath,
     check_control,
     ends_wait,
+    is_guest,
     lock_control,
 )
 from ..lock_commands.mqtt_trans import decode_trans, encode_trans
@@ -68,7 +68,7 @@ def mqtt_lock_control(device: CloudDevice) -> LockControl:
         sec_sw_version=device.sec_sw_version or "",
         params={p.param_id: p.value for p in device.cloud_params},
     )
-    return lock_control(form, guest=device.member_type == GUEST_MEMBER_TYPE)
+    return lock_control(form, guest=is_guest(device))
 
 
 def _through_data(message: MqttMessage) -> Mapping[str, Any] | None:
