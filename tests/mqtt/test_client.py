@@ -151,6 +151,15 @@ async def test_no_mqtt_device_means_no_certificate_and_no_connection(rig: Rig) -
     assert not rig.client.connected
 
 
+async def test_a_check_without_mqtt_devices_can_connect_subscribing_nothing(rig: Rig) -> None:
+    await rig.client.async_start([CAMERA], connect_without_devices=True)
+    await rig.client.async_wait_connected(5)
+    await asyncio.sleep(0.1)
+    assert len(rig.broker.connects) == 1
+    assert rig.broker.subscriptions == []
+    assert rig.registers() == 1
+
+
 async def test_a_refused_subscription_is_retried_until_the_broker_takes_it(rig: Rig) -> None:
     topic = response_topic("T85D0", LOCK_SN)
     rig.broker.refused_topics.add(topic)

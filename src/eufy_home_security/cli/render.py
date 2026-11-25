@@ -149,6 +149,27 @@ def render_devices(devices: Sequence[CloudDevice], *, show_serials: bool) -> str
     return "\n".join(_table(rows, indent=""))
 
 
+def render_mqtt_devices(
+    devices: Sequence[CloudDevice], topics: Mapping[str, str], *, show_serials: bool
+) -> str:
+    """The account's MQTT devices with the answer topic each is subscribed on."""
+    if not devices:
+        return "The account has no MQTT device."
+    rows: list[tuple[str, ...]] = [("NAME", "SERIAL", "MODEL", "REGION", "TOPIC")]
+    for device in devices:
+        serial = fmt_serial(device.device_sn, show_serials)
+        rows.append(
+            (
+                device.name or "(unnamed)",
+                serial,
+                device.model_name or device.device_sn[:5],
+                device.region or "",
+                topics[device.device_sn].replace(device.device_sn, serial),
+            )
+        )
+    return f"MQTT devices ({len(devices)}):\n" + "\n".join(_table(rows, indent=""))
+
+
 def invite_refs(invites: Sequence[CloudInvite]) -> list[str]:
     """The id ``invites accept`` takes for each invitation: ``H`` (a home) or ``D`` (a
     device) and its id, since the two lists number their entries apart; ``@<region>`` is

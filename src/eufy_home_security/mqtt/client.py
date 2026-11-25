@@ -155,8 +155,12 @@ class EufyMqttClient:
     def _keys(self) -> frozenset[str]:
         return frozenset(device_key(device) for device in self._devices.values())
 
-    async def async_start(self, devices: Iterable[CloudDevice]) -> None:
-        """Serve the MQTT devices among ``devices`` (none: nothing connects, as in the app).
+    async def async_start(
+        self, devices: Iterable[CloudDevice], *, connect_without_devices: bool = False
+    ) -> None:
+        """Serve the MQTT devices among ``devices``. With none, nothing connects, as in the
+        app, unless ``connect_without_devices`` (a connection check: certificate, TLS and
+        CONNECT with no subscription).
 
         The connection runs in a background task that reconnects by itself; use
         :meth:`async_wait_connected` to wait for it.
@@ -165,7 +169,7 @@ class EufyMqttClient:
             raise RuntimeError("the MQTT client is already started")
         self._stopping = False
         self._devices = await self._select(devices)
-        if not self._devices:
+        if not self._devices and not connect_without_devices:
             _LOGGER.debug("no MQTT device: no broker connection")
             return
         self._run_task = asyncio.create_task(self._run(), name="eufy-mqtt")

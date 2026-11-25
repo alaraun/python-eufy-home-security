@@ -184,6 +184,31 @@ def build_parser() -> argparse.ArgumentParser:
         "(default: prompt)",
     )
     command("network", "each station's LAN path and what a firewall must allow")
+    mqtt = command("mqtt", "the account's MQTT devices (Wi-Fi locks); --connect checks the broker")
+    mqtt.add_argument("action", nargs="?", choices=("check",), default="check")
+    mqtt.add_argument(
+        "--device",
+        metavar="SN",
+        action="append",
+        dest="devices",
+        help="only this MQTT device (repeatable; default: every MQTT device)",
+    )
+    mqtt.add_argument(
+        "--connect",
+        action="store_true",
+        help="fetch the certificate, connect and subscribe the answer topics; never publishes",
+    )
+    mqtt.add_argument(
+        "--connect-empty",
+        action="store_true",
+        help="with --connect on an account without MQTT devices: connect, subscribing nothing",
+    )
+    mqtt.add_argument(
+        "--seconds",
+        type=float,
+        default=10.0,
+        help="with --connect: seconds to listen after subscribing (default 10)",
+    )
 
     status = command("status", "station snapshot: guard mode, firmware, sub-devices")
     shape = status.add_mutually_exclusive_group()
