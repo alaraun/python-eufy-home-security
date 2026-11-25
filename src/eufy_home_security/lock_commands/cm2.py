@@ -91,11 +91,12 @@ def key_user_id(
 @dataclass(frozen=True, slots=True)
 class Cm2User:
     """Who a 1940 command names: the key user id (:func:`key_user_id`), the account's
-    nickname and the member's ``short_user_id`` (hex text)."""
+    nickname and the member's ``short_user_id`` (hex text; absent or empty sends an empty
+    entry)."""
 
     user_id: str
     user_name: str
-    short_user_id: str = "0000"
+    short_user_id: str | None = None
 
 
 def on_off_body(action: LockAction, user: Cm2User, *, timestamp: int) -> bytes:
@@ -107,7 +108,7 @@ def on_off_body(action: LockAction, user: Cm2User, *, timestamp: int) -> bytes:
             user.user_id.encode(),
             bytes([operation]),
             user.user_name.encode(),
-            hex_bytes(user.short_user_id, "short user id"),
+            hex_bytes(user.short_user_id or "", "short user id"),
         ]
     )
 

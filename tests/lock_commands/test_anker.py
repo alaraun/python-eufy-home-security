@@ -169,6 +169,31 @@ def test_1961_plain_form_sends_the_json_object_without_seq_or_key() -> None:
     assert list(info) == ["account_id", "cmd", "mChannel", "mValue3", "payload"]
 
 
+def test_1961_leaves_out_an_absent_short_user_id() -> None:
+    user = anker.AnkerUser(admin_user_id=ADMIN, user_name="Synth User")
+    assert user.short_user_id is None
+    request = anker.build_1961_request(
+        SERIAL_1961, LockAction.LOCK, user, seq_num=7, lock_public_key=LOCK_PUB64, aes_key=AES_KEY
+    )
+    assert isinstance(request.payload, str)
+    plain = _open(AES_KEY, _iv(SERIAL_1961), base64.b64decode(request.payload))
+    assert plain == (
+        b'{"slOperation":1,"userId":"' + ADMIN.encode() + b'","userName":"Synth User","seq_num":7}'
+    )
+    assert anker.build_1961_plain_request(LockAction.LOCK, user).payload == {
+        "slOperation": 1,
+        "userId": ADMIN,
+        "userName": "Synth User",
+    }
+
+
+def test_1961_keeps_an_empty_short_user_id() -> None:
+    user = anker.AnkerUser(admin_user_id=ADMIN, user_name="x", short_user_id="")
+    payload = anker.build_1961_plain_request(LockAction.LOCK, user).payload
+    assert isinstance(payload, dict)
+    assert payload["shortUserId"] == ""
+
+
 @pytest.mark.parametrize(
     ("code", "result"),
     [(0, LockResult.ACCEPTED), (1, LockResult.REFUSED), (-1, LockResult.REFUSED)],
@@ -190,7 +215,7 @@ def test_1930_cm_body_layout() -> None:
 
 
 def test_1930_cm_body_needs_a_two_byte_short_user_id() -> None:
-    for short in ("0a", "0a1b2c"):
+    for short in ("0a", "0a1b2c", "", None):
         user = anker.AnkerUser(admin_user_id=ADMIN, user_name="x", short_user_id=short)
         with pytest.raises(ValueError, match="2 bytes"):
             anker.cm_on_off_body(LockAction.LOCK, user, timestamp=NOW)

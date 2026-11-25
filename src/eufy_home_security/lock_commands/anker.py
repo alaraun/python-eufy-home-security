@@ -3,11 +3,11 @@
 Declared, eufy app; not tested on hardware (docs/protocol/locks.md § 1961, § 1930).
 
 **1961** ``{"shortUserId", "slOperation", "userId", "userName"}`` (``slOperation`` 1 =
-lock, 0 = unlock; ``userId`` the member's ``admin_user_id``). In the encrypted form the
-object gains ``seq_num``, is AES-128-CBC encrypted under a random 16-byte key and the
-serial IV, and travels base64 as ``payload``; ``key`` is the hex of the ECIES (P-256, the
-lock's public key) of that AES key's upper-case hex text. The plain form sends the
-object itself.
+lock, 0 = unlock; ``userId`` the member's ``admin_user_id``; an absent ``shortUserId`` is
+left out). In the encrypted form the object gains ``seq_num``, is AES-128-CBC encrypted
+under a random 16-byte key and the serial IV, and travels base64 as ``payload``; ``key``
+is the hex of the ECIES (P-256, the lock's public key) of that AES key's upper-case hex
+text. The plain form sends the object itself.
 
 **1930** a cm on/off body ``A1 02 <short user id> A2 01 <slOperation> A3 04 <u32 LE
 time> A4 <len> <name>``, AES-128-CBC under the serial IV, in an Anker cm frame
@@ -65,11 +65,12 @@ _GSON_ESCAPES: Final = {c: f"\\u{ord(c):04x}" for c in "<>&='\u2028\u2029"}
 @dataclass(frozen=True, slots=True)
 class AnkerUser:
     """Who an Anker lock command names: the lock member's ``admin_user_id``, the account's
-    nickname and the member's ``short_user_id`` (hex text)."""
+    nickname and the member's ``short_user_id`` (hex text; 1961 leaves an absent one out,
+    1930 needs 2 bytes)."""
 
     admin_user_id: str
     user_name: str
-    short_user_id: str = "0000"
+    short_user_id: str | None = None
 
 
 def parse_lock_public_key(raw: bytes) -> ec.EllipticCurvePublicKey:
@@ -89,8 +90,10 @@ def gson_json(obj: Mapping[str, object]) -> str:
 
 
 def _on_off_object(action: LockAction, user: AnkerUser) -> dict[str, object]:
-    return {
-        "shortUserId": user.short_user_id,
+    obj: dict[str, object] = (
+        {} if user.short_user_id is None else {"shortUserId": user.short_user_id}
+    )
+    return obj | {
         "slOperation": int(action),
         "userId": user.admin_user_id,
         "userName": user.user_name,
@@ -161,7 +164,7 @@ def parse_1961_result(code: int) -> LockReply:
 
 def cm_on_off_body(action: LockAction, user: AnkerUser, *, timestamp: int) -> bytes:
     """The cm on/off body of the 1930 form; ``timestamp`` is the Unix time in seconds."""
-    short = hex_bytes(user.short_user_id, "short user id")
+    short = hex_bytes(user.short_user_id or "", "short user id")
     if len(short) != _SHORT_USER_ID_LEN:
         raise ValueError(f"a cm short user id must be 2 bytes, got {len(short)}")
     return frames.tlv(

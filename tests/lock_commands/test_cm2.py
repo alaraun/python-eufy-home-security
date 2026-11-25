@@ -105,6 +105,14 @@ def test_body_takes_the_short_user_id_as_hex_and_the_name_as_utf8() -> None:
         cm2.on_off_body(LockAction.LOCK, cm2.Cm2User(USER_ID, "x", short_user_id="zz"), timestamp=0)
 
 
+@pytest.mark.parametrize("short", [None, ""])
+def test_body_without_a_short_user_id_sends_an_empty_entry(short: str | None) -> None:
+    user = cm2.Cm2User(user_id=USER_ID, user_name="x", short_user_id=short)
+    body = cm2.on_off_body(LockAction.LOCK, user, timestamp=0)
+    assert body.endswith(bytes.fromhex("A401") + b"x" + bytes.fromhex("A500"))
+    assert cm2.Cm2User(user_id=USER_ID, user_name="x").short_user_id is None
+
+
 # ── time and keys ────────────────────────────────────────────────────────────
 
 

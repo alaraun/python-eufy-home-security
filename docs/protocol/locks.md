@@ -54,8 +54,9 @@ or parameter picks between them, and the library ports both.
 - **AES**: AES-128-CBC with PKCS#7 padding, under the serial IV.
 - **Sequence number**: `seq_num` is the lock's last sequence number plus one (the station
   reports it); the codec takes the value to send.
-- **User fields**: the lock member record's `admin_user_id` and `short_user_id` (hex text,
-  `0000` when absent) and the account's nickname.
+- **User fields**: the lock member record's `admin_user_id` and `short_user_id` (hex text)
+  and the account's nickname. An absent `short_user_id` is sent as each form sends it: 1940
+  as an empty `A5` entry, 1961 by leaving the field out; 1930 needs its 2 bytes.
 - **Result**: an answer code 0 is accepted (the state change follows), anything else is
   refused; the 1940 answer also names "already unlocked" (48) and "already locked" (49).
   A well-formed answer for another lock, another command or another time value raises
@@ -72,7 +73,7 @@ Body, a TLV of `[tag, length u8, value]` entries, tags from `A1`:
 | A2 | the key user id, UTF-8 |
 | A3 | operation u8: **0 lock, 1 unlock** |
 | A4 | the account's nickname, UTF-8 |
-| A5 | `short_user_id` as bytes |
+| A5 | `short_user_id` as bytes (empty when absent) |
 
 The **key user id** is the member record's `admin_user_id` when the record names this
 account (`member_user_id`), holds an admin id and its `member_type` is not 2; otherwise the
@@ -109,8 +110,8 @@ the body is the result code.
 ## 1961: JSON
 
 `{"shortUserId", "slOperation", "userId", "userName"}` with `slOperation` **1 lock, 0
-unlock** and `userId` the member's `admin_user_id`, written compact with the app's JSON
-escaping (`<`, `>`, `&`, `=`, `'` as `\u` escapes).
+unlock** and `userId` the member's `admin_user_id` (`shortUserId` left out when absent),
+written compact with the app's JSON escaping (`<`, `>`, `&`, `=`, `'` as `\u` escapes).
 
 - **ECIES form**: the object gains `seq_num`, is encrypted under a random 16-byte AES key
   and sent base64 as `payload`; `key` is the lower-case hex of the ECIES (below) of that
