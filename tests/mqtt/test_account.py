@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import json
+import logging
 from collections.abc import AsyncIterator, Callable, Coroutine
 from typing import Any
 
@@ -174,6 +176,38 @@ async def test_a_cancel_of_a_stop_still_stops_every_client(rig: Rig) -> None:
         finally:
             for client in clients:
                 await client.async_stop()
+
+
+async def test_a_client_stop_failing_after_a_cancel_is_logged_once(
+    account: EufyMqttAccount, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    await account.async_start([EU_LOCK])
+    client = account.clients["eu"]
+    real_stop = client.async_stop
+
+    async def failing_stop() -> None:
+        await real_stop()
+        await asyncio.sleep(0.3)
+        raise CommunicationError("client stop failed")
+
+    monkeypatch.setattr(client, "async_stop", failing_stop)
+    loop = asyncio.get_running_loop()
+    loop_errors: list[dict[str, Any]] = []
+    loop.set_exception_handler(lambda _loop, context: loop_errors.append(context))
+    try:
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(0.1):
+                await account.async_stop()
+        await until(lambda: not account._ending, 3.0)
+        gc.collect()
+        await asyncio.sleep(0)
+    finally:
+        loop.set_exception_handler(None)
+    assert loop_errors == []  # no "Task exception was never retrieved"
+    logged = [r for r in caplog.records if r.name == account_module.__name__]
+    assert [(r.levelno, "client stop failed" in r.getMessage()) for r in logged] == [
+        (logging.WARNING, True)
+    ]
 
 
 async def test_no_mqtt_device_starts_no_client_unless_a_check_asks(
