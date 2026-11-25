@@ -3620,4 +3620,4 @@ they opened (up to 15 s more); a connect step still running after that is closed
 ends. A device-list refresh that reaches `async_update_devices()` after the stop (queued
 behind it during an unload) starts nothing; the next `async_start()` serves updates again.
 A cancel of the unload (an `asyncio.timeout` around the stop) raises at once while the
-clients still stop.
+clients still stop; a client stop that fails after it is logged as a warning.

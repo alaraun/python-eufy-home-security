@@ -184,11 +184,18 @@ on the event loop. A stop or a device-set restart during that step waits for it 
 most, which the step normally stays within; the name lookup has no timeout of its own) and
 closes the connection it opened, a DISCONNECT that takes up to `aiomqtt`'s 15 s timeout.
 A stop therefore takes 45 s at most, plus a device update in progress; the account stops
-its clients together. A cancel of the stop's caller (an `asyncio.timeout` around it)
-propagates at once, and the stop still completes in the background.
+its clients together and logs a client stop that fails as a warning (the first one is
+also raised to a caller still waiting). A cancel of the stop's caller (an `asyncio.timeout`
+around it) propagates at once, and the stop still completes in the background. A start
+right after that cancel serves only its own connection: the stopped one, still closing,
+counts neither as connected nor for the subscribed topics, and its task ends even when
+its DISCONNECT fails.
 
 A step still running after the wait is closed when it ends; a restart past that bound
 can briefly run two connects with the same client id, the left one closed when it ends.
+So can a start right after a stop cancelled during the connect step: the stopped step's
+CONNECT can reach the broker after the new one, and a broker that then drops the newer
+session costs one lost connection, after which the client reconnects by itself (4 s).
 A connect that fails (a CONNACK timeout too) has its socket closed. A TLS handshake that
 fails can leave paho's own socket, which it never stores, to the garbage collector (an
 `aiomqtt`/paho limitation). If paho's close call itself fails, the socket is left open
