@@ -98,10 +98,13 @@ Payload of P2P command 1940:
 ```
 
 **Answer**: 1940 through-data `{"dev_sn", "lock_payload", "time"}`. The frame must be
-function type 2, command 0x23. An encrypted body opens with the key its own `time` names:
-for the time key `time` is 8 hex digits and must equal the request's `t` (a different value
-is a late answer to another request); for the HKDF key `time` opens under the fixed key to a
-40-byte user id and a 4-byte salt. The first byte of the body is the result code.
+function type 2, command 0x23. For a time-key request, an answer whose `time` reads as a
+positive hex number other than the request's `t` is a late answer to another request,
+encrypted or not; an unencrypted answer without a readable `time` is read. An encrypted body
+opens with the key its own `time` names: for the time key `time` is 8 hex digits equal to the
+request's `t`; for the HKDF key `time` opens under the fixed key to a 40-byte user id and a
+4-byte salt (further bytes are ignored), and the answer has no time check. The first byte of
+the body is the result code.
 
 ## 1961: JSON
 

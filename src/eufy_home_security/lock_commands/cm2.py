@@ -13,8 +13,9 @@ eufy app; not tested on hardware; docs/protocol/locks.md § 1940):
   ``{"apiCommand", "lock_payload", "seq_num", "time"[, "version"]}`` of P2P command 1940.
 
 The answer comes back as 1940 through-data ``{"dev_sn", "lock_payload", "time"}``; its
-own time value names the key. Builders raise :class:`ValueError` on an argument outside
-its domain; :func:`parse_on_off_reply` raises
+own time value names the key, and for a time-key request a positive time other than the
+request's marks an answer to another request, encrypted or not. Builders raise
+:class:`ValueError` on an argument outside its domain; :func:`parse_on_off_reply` raises
 :class:`~eufy_home_security.exceptions.ProtocolError` (or its subclass
 :class:`~eufy_home_security.exceptions.LockReplyMismatchError`) and nothing else.
 """
@@ -22,6 +23,7 @@ its domain; :func:`parse_on_off_reply` raises
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Final
@@ -59,6 +61,7 @@ _TIME_FIELD_IV: Final = b"OCK_WORLD'S_NO.1"
 _TIME_FIELD_USER_LEN: Final = 40
 _MEMBER_TYPE_OWN_KEY: Final = 2
 _MAX_NOISE: Final = 99
+_HEX: Final = re.compile(r"[0-9a-fA-F]+")
 
 _RESULTS: Final = {
     0: LockResult.ACCEPTED,
@@ -227,6 +230,13 @@ def _text(answer: Mapping[str, object], name: str) -> str:
     return value
 
 
+def _answer_time(value: object) -> int | None:
+    """The answer's ``time`` as a number; None when it is absent or not hex."""
+    if isinstance(value, str) and _HEX.fullmatch(value):
+        return int(value, 16)
+    return None
+
+
 def _answer_key(request: Cm2Request, time_text: str) -> bytes:
     if request.hkdf:
         user, salt = open_hkdf_time_field(time_text)
@@ -253,6 +263,12 @@ def parse_on_off_reply(answer: Mapping[str, object], request: Cm2Request) -> Loc
     frame = frames.parse_cm2_frame(raw)
     if (frame.function_type, frame.command) != (FUNCTION_TYPE, COMMAND_ON_OFF):
         raise LockReplyMismatchError(f"lock answer is for command {frame.command:#x}")
+    if not request.hkdf:
+        # A positive time other than the request's marks an answer to another request,
+        # whether or not the answer is encrypted; an absent or unreadable one is no mark.
+        answer_time = _answer_time(answer.get("time"))
+        if answer_time and answer_time != request.time_value:
+            raise LockReplyMismatchError("lock answer carries another time value than the request")
     body = frame.body
     if frame.encrypted:
         key = _answer_key(request, _text(answer, "time"))

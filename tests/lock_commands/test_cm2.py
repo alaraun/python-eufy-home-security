@@ -261,6 +261,33 @@ def test_plain_answer_is_read_without_a_key() -> None:
     assert reply == LockReply(49, LockResult.ALREADY_LOCKED)
 
 
+@pytest.mark.parametrize("time_field", [f"{TIME ^ 0x40:08x}", "1234"])
+def test_plain_answer_with_another_time_is_not_ours(time_field: str) -> None:
+    answer = _answer(0, encrypted=False, time_field=time_field)
+    with pytest.raises(LockReplyMismatchError, match="time"):
+        cm2.parse_on_off_reply(answer, _request())
+
+
+@pytest.mark.parametrize("time_field", [None, "", "xyz", "00000000", f"00{TIME:08X}"])
+def test_plain_answer_without_another_usable_time_is_read(time_field: str | None) -> None:
+    answer = _answer(0, encrypted=False)
+    answer["time"] = time_field
+    assert cm2.parse_on_off_reply(answer, _request()) == LockReply(0, LockResult.ACCEPTED)
+    del answer["time"]
+    assert cm2.parse_on_off_reply(answer, _request()) == LockReply(0, LockResult.ACCEPTED)
+
+
+def test_encrypted_answer_with_time_zero_is_not_ours() -> None:
+    answer = _answer(0, time_field="00000000")
+    with pytest.raises(LockReplyMismatchError, match="time"):
+        cm2.parse_on_off_reply(answer, _request())
+
+
+def test_plain_answer_to_an_hkdf_request_has_no_stale_check() -> None:
+    answer = _answer(0, encrypted=False, time_field=f"{TIME ^ 0x40:08x}")
+    assert cm2.parse_on_off_reply(answer, _request(hkdf=True)).result is LockResult.ACCEPTED
+
+
 def test_answer_for_another_command_is_not_ours() -> None:
     with pytest.raises(LockReplyMismatchError, match="command"):
         cm2.parse_on_off_reply(_answer(0, command=0x4A), _request())
