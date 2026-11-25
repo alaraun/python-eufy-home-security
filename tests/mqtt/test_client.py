@@ -348,6 +348,58 @@ async def test_a_stop_ends_a_pending_request_before_its_disconnect_completes(
     await stop
 
 
+async def test_a_stop_ends_a_request_still_waiting_for_its_connection(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(client_module, "PUBLISH_TIMEOUT_SECONDS", 0.6)
+    rig.broker.connack_delay = None  # the connection never comes up
+    loop = asyncio.get_running_loop()
+    loop_errors: list[dict[str, Any]] = []
+    loop.set_exception_handler(lambda _loop, context: loop_errors.append(context))
+    try:
+        await rig.client.async_start([lock()])
+        await until(lambda: len(rig.broker.connects) == 1)
+        request = asyncio.create_task(rig.client.async_request(LOCK_SN, "ask", timeout=10))
+        await asyncio.sleep(0.05)
+        stop = asyncio.create_task(rig.client.async_stop())
+        async with asyncio.timeout(0.5):
+            with pytest.raises(CommunicationError, match="stopped"):
+                await request
+        await stop
+        del request
+        gc.collect()
+        await asyncio.sleep(0)
+    finally:
+        loop.set_exception_handler(None)
+    assert rig.broker.published == []
+    assert loop_errors == []
+
+
+async def test_a_connection_lost_during_the_publish_fails_the_request_as_lost(rig: Rig) -> None:
+    rig.broker.publish_acks = False  # the publish waits for its PUBACK
+    loop = asyncio.get_running_loop()
+    loop_errors: list[dict[str, Any]] = []
+    loop.set_exception_handler(lambda _loop, context: loop_errors.append(context))
+    before = asyncio.all_tasks()
+    try:
+        await rig.client.async_start([lock()])
+        await rig.client.async_wait_connected(5)
+        request = asyncio.create_task(rig.client.async_request(LOCK_SN, "ask", timeout=10))
+        await until(lambda: len(rig.broker.published) == 1)
+        rig.broker.drop_connections()
+        async with asyncio.timeout(2):
+            with pytest.raises(CommunicationError, match="connection lost"):
+                await request
+        await rig.client.async_stop()
+        del request
+        gc.collect()
+        await asyncio.sleep(0)
+    finally:
+        loop.set_exception_handler(None)
+    assert _left_tasks(before) == []  # the unanswered publish ended with its request
+    assert loop_errors == []
+
+
 async def test_a_lost_connection_ends_a_pending_request_at_once(rig: Rig) -> None:
     await rig.client.async_start([lock()])
     await rig.client.async_wait_connected(5)

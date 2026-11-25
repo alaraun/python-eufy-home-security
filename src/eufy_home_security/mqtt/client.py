@@ -556,9 +556,15 @@ class EufyMqttClient:
 
         entry = (match or default, future)
         self._waiters.setdefault(device_sn, []).append(entry)
+        publish = asyncio.ensure_future(self.async_publish(device_sn, trans))
         try:
             async with asyncio.timeout(timeout):
-                sent.append(await self.async_publish(device_sn, trans))
+                ends: set[asyncio.Future[Any]] = {publish, future}
+                await asyncio.wait(ends, return_when=asyncio.FIRST_COMPLETED)
+                if future.done() and future.exception() is not None:
+                    # a stop or a lost connection ended the request, sent or not
+                    return future.result()
+                sent.append(await publish)
                 return await future
         except TimeoutError:
             raise DeviceTimeoutError(
@@ -566,6 +572,8 @@ class EufyMqttClient:
                 device_sn=device_sn,
             ) from None
         finally:
+            if not publish.done():
+                publish.cancel()
             waiters = self._waiters.get(device_sn, [])
             if entry in waiters:
                 waiters.remove(entry)

@@ -200,6 +200,8 @@ class FakeMqttBroker:
         self.refused_topics: set[str] = set()
         self.connack_code = 0
         self.connack_delay: float | None = 0.0
+        self.publish_acks = True
+        """False: a QoS 1 PUBLISH gets no PUBACK (the client's publish keeps waiting)."""
         self.open_sockets = 0
         """TLS connections open now, with or without a CONNACK."""
         self.port = 0
@@ -389,7 +391,8 @@ class FakeMqttBroker:
         if qos:
             packet_id = body[offset : offset + 2]
             offset += 2
-            writer.write(_packet(_PUBACK, 0, packet_id))
+            if self.publish_acks:
+                writer.write(_packet(_PUBACK, 0, packet_id))
         self.published.append(
             BrokerPublish(connection.client_id, topic, body[offset:], qos, bool(flags & 0x01))
         )
