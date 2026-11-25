@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from types import MappingProxyType
 
 import pytest
 
+from eufy_home_security.client import EufySecurity
 from eufy_home_security.cloud.models import CloudDevice
+from eufy_home_security.devices._lock_routes_data import LOCK_ROUTES
 from eufy_home_security.devices.lock_routes import LockForm
 from eufy_home_security.devices.locks import LockState, LockStateSource
 from eufy_home_security.events import Event, LockStateChanged
@@ -26,6 +28,7 @@ from eufy_home_security.exceptions import (
 from eufy_home_security.lock_commands import control
 from eufy_home_security.lock_commands.actions import LockAction
 from eufy_home_security.lock_commands.control import LockPath
+from eufy_home_security.mqtt.locks import MqttLocks
 from eufy_home_security.p2p.session import P2PCredentials, StationSession
 from eufy_home_security.station import Station
 from eufy_home_security.station import lock_control as lock_control_module
@@ -529,15 +532,103 @@ async def test_the_client_routes_a_station_lock_to_its_station(
     assert [a for _, a, _ in lock_1940.received] == [LockAction.LOCK, LockAction.UNLOCK]
 
 
-async def test_the_client_refuses_a_station_lock_whose_station_it_does_not_run() -> None:
+def _client() -> EufySecurity:
     cloud = FakeCloud()
-    eufy = build_eufy_security(
+    return build_eufy_security(
         email=SYNTHETIC.email, store=warm_store(email=SYNTHETIC.email, cloud=cloud), cloud=cloud
     )
-    eufy.listed_devices = MappingProxyType({LOCK_1940: _lock(LOCK_1940)})
+
+
+@pytest.mark.parametrize(
+    ("serial", "path"),
+    [(LOCK_1940, LockPath.STATION), ("T85D0P2000000001", LockPath.MQTT)],
+)
+async def test_the_client_offers_a_listed_lock_only_on_a_path_it_serves(
+    serial: str, path: LockPath
+) -> None:
+    """A lock no station of this client serves: its station route is not writable, with the
+    reason its command raises; its MQTT route stays writable."""
+    eufy = _client()
+    eufy.listed_devices = MappingProxyType({serial: _lock(serial, station_sn=serial)})
     try:
-        assert eufy.lock_control(LOCK_1940).path is LockPath.STATION
-        with pytest.raises(UnsupportedError, match="no station session"):
-            await eufy.async_lock(LOCK_1940)
+        control = eufy.lock_control(serial)
+        if path is LockPath.MQTT:
+            assert (control.writable, control.path) == (True, LockPath.MQTT)
+            return
+        assert (control.writable, control.path, control.form) == (False, None, LockForm.P2P_1940)
+        assert control.reason == "no station session of this client serves the lock"
+        with pytest.raises(UnsupportedError, match=control.reason):
+            await eufy.async_lock(serial)
     finally:
         await eufy.async_close()
+
+
+def _lock_serials() -> list[str]:
+    """One serial per lock product and serial-character variant of the route table."""
+    return [
+        f"{code}P{char.split(':')[1] if char else '2'}000000001"
+        for code, rows in LOCK_ROUTES.items()
+        for char, *_ in rows
+    ]
+
+
+@pytest.mark.parametrize("guest", [False, True])
+@pytest.mark.parametrize("behind", [True, False])
+@pytest.mark.parametrize("served", [True, False])
+async def test_lock_control_and_the_command_agree_for_every_lock(
+    monkeypatch: pytest.MonkeyPatch, served: bool, behind: bool, guest: bool
+) -> None:
+    """For every lock product in every context, a command reaches a sender exactly when
+    ``lock_control`` says writable; otherwise it raises ``UnsupportedError`` first."""
+    reached: list[str] = []
+
+    async def run(self: object, device: object, *_: object) -> LockState:
+        reached.append(getattr(device, "device_sn", device))  # type: ignore[arg-type]
+        return LockState.LOCKED
+
+    monkeypatch.setattr(lock_control_module.StationLockControl, "_run", run)
+    monkeypatch.setattr(MqttLocks, "_run", run)
+    eufy = _client()
+    eufy._mqtt_locks = MqttLocks(_NoBroker(), user_name="Nick", emit=lambda _e: None)  # type: ignore[arg-type]
+    writable = 0
+    try:
+        for serial in _lock_serials():
+            device = _lock(
+                serial,
+                station_sn=SYNTHETIC.station_sn if behind else serial,
+                member_type=0 if guest else 2,
+            )
+            eufy.stations.clear()
+            eufy.listed_devices = MappingProxyType({serial: device})
+            if served:
+                hub = STATION if behind else dataclasses.replace(device, p2p_did=SYNTHETIC.did)
+                eufy.stations[hub.device_sn] = Station(
+                    hub,
+                    StationSession(hub.device_sn, _no_credentials, host="127.0.0.1", port=9),
+                    sub_devices=[device] if behind else [],
+                    lock_cloud=_Cloud(),
+                )
+            control = eufy.lock_control(serial)
+            reached.clear()
+            if control.writable:
+                await eufy.async_lock(serial)
+            else:
+                with pytest.raises(UnsupportedError) as raised:
+                    await eufy.async_lock(serial)
+                assert isinstance(raised.value, GuestAccessError) is control.guest, serial
+            assert reached == ([serial] if control.writable else []), serial
+            writable += control.writable
+    finally:
+        await eufy.async_close()
+    assert (writable > 0) is not guest  # each non-guest context offers some lock
+
+
+class _NoBroker:
+    """An MQTT account stand-in that is never asked to publish."""
+
+    def add_listener(self, _callback: object) -> Callable[[], None]:
+        return lambda: None
+
+
+async def _no_credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    raise AssertionError("no session is opened")

@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final
+from typing import Final, NoReturn
 
 from .._logging import redact_serial
 from ..devices.lock_routes import LockForm
@@ -87,14 +87,21 @@ def lock_control(form: LockForm | None, *, guest: bool) -> LockControl:
     return LockControl(form=form, path=LockPath.MQTT if form is LockForm.MQTT else LockPath.STATION)
 
 
-def check_control(control: LockControl, device_sn: str, path: LockPath) -> LockForm:
-    """``control``'s form when ``path`` can send it; else the typed refusal, before sending:
-    :class:`GuestAccessError` for a guest, :class:`UnsupportedError` otherwise."""
+def refuse(control: LockControl, device_sn: str) -> NoReturn:
+    """Raise the refusal of a control that cannot send: :class:`GuestAccessError` for a
+    guest, :class:`UnsupportedError` with ``control.reason`` otherwise."""
     name = redact_serial(device_sn)
     if control.guest:
         raise GuestAccessError(f"{name}: {control.reason}", device_sn=device_sn)
+    raise UnsupportedError(f"{name}: {control.reason}", device_sn=device_sn)
+
+
+def check_control(control: LockControl, device_sn: str, path: LockPath) -> LockForm:
+    """``control``'s form when ``path`` can send it; else the typed refusal, before sending
+    (:func:`refuse`, or :class:`UnsupportedError` for another path)."""
     if control.path is None or control.form is None:
-        raise UnsupportedError(f"{name}: {control.reason}", device_sn=device_sn)
+        refuse(control, device_sn)
+    name = redact_serial(device_sn)
     if control.path is not path:
         raise UnsupportedError(
             f"{name} takes its commands over {control.path.value}, not {path.value}",

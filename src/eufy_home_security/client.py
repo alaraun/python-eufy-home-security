@@ -20,7 +20,7 @@ from collections.abc import Awaitable, Callable, Collection, Iterable, Mapping, 
 from dataclasses import dataclass, fields, replace
 from ipaddress import IPv4Network
 from types import MappingProxyType, TracebackType
-from typing import TYPE_CHECKING, Any, Literal, Self, cast
+from typing import TYPE_CHECKING, Any, Final, Literal, Self, cast
 
 from ._logging import Identifier, LogThrottle, Secret, redact_serial, register_secret_bytes
 from .cloud import arming
@@ -82,7 +82,7 @@ from .identity import StationClaims, is_device_serial
 from .images import PushImage, picture_content_type
 from .inclusion import Reach, StationChoice
 from .lock_commands.actions import LockAction
-from .lock_commands.control import LockControl, LockPath, check_control
+from .lock_commands.control import LockControl, LockPath, refuse
 from .models import GuardMode
 from .network import (
     LanPath,
@@ -117,6 +117,9 @@ if TYPE_CHECKING:
     from .push.fcm import PushListener
 
 _LOGGER = logging.getLogger(__name__)
+
+_UNSERVED_LOCK: Final = "no station session of this client serves the lock"
+"""Why a listed lock whose route is its station's session takes no command here."""
 
 RENDEZVOUS_PROBE_TIMEOUT = 5.0
 """Seconds a setup probe waits for one station's punch through its rendezvous servers
@@ -1308,13 +1311,17 @@ class EufySecurity:
             )
         from .mqtt.locks import mqtt_lock_control  # noqa: PLC0415 - no aiomqtt needed
 
-        return None, listed, mqtt_lock_control(listed)
+        control = mqtt_lock_control(listed)
+        if control.path is LockPath.STATION:
+            control = LockControl(form=control.form, path=None, reason=_UNSERVED_LOCK)
+        return None, listed, control
 
     def lock_control(self, device_sn: str) -> LockControl:
         """Whether this client can lock and unlock ``device_sn``, over which path (its
         station's session or the MQTT broker), or why not; decided from the lock's command
         route as the eufy app picks it. A lock on the MQTT path also needs
-        :meth:`use_mqtt`. Sync; raises ``UnsupportedError`` for a device not listed."""
+        :meth:`use_mqtt`; a lock on the station path whose station this client does not run
+        is not writable. Sync; raises ``UnsupportedError`` for a device not listed."""
         return self._lock_of(device_sn)[2]
 
     async def async_lock(self, device_sn: str, *, timeout: float | None = None) -> LockState:
@@ -1343,12 +1350,8 @@ class EufySecurity:
             return await self._mqtt_locks.async_command(
                 device, action, control=control, timeout=timeout
             )
-        if station is None:
-            check_control(control, device_sn, LockPath.STATION)
-            raise UnsupportedError(
-                f"{redact_serial(device_sn)}: no station session of this client serves the lock",
-                device_sn=device_sn,
-            )
+        if station is None:  # an unserved lock's control names no station path
+            refuse(control, device_sn)
         if action is LockAction.LOCK:
             return await station.async_lock(device_sn, timeout=timeout)
         return await station.async_unlock(device_sn, timeout=timeout)

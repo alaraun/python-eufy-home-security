@@ -165,8 +165,9 @@ alone) and return the `LockState` once the lock reports the asked state. A stati
 acknowledgement alone never counts. In order:
 
 1. **Before sending** (nothing goes out on a refusal). `lock_control(device_sn)` decides
-   from the route, the firmware and the cloud record, without a session: no route or the
-   1911 form raise `UnsupportedError`; an account whose member record for the lock names a
+   from the route, the firmware and the cloud record, without a session: no route, the
+   1911 form, or a station route whose station this client does not run raise
+   `UnsupportedError`; an account whose member record for the lock names a
    guest (`member_type` 0) raises `GuestAccessError`, as the app refuses guests. A record
    without the owner's `admin_user_id` raises `UnsupportedError`; an MQTT route with no
    account given to `use_mqtt()` raises `MqttAccountRequiredError`; a command still waiting
