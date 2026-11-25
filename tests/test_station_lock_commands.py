@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 from collections.abc import AsyncIterator
+from types import MappingProxyType
 
 import pytest
 
@@ -28,7 +29,14 @@ from eufy_home_security.lock_commands.control import LockPath
 from eufy_home_security.p2p.session import P2PCredentials, StationSession
 from eufy_home_security.station import Station
 from eufy_home_security.station import lock_control as lock_control_module
-from eufy_home_security.testing import SYNTHETIC, FakeLock, FakeStation
+from eufy_home_security.testing import (
+    SYNTHETIC,
+    FakeCloud,
+    FakeLock,
+    FakeStation,
+    build_eufy_security,
+    warm_store,
+)
 
 STATION = CloudDevice(
     device_sn=SYNTHETIC.station_sn,
@@ -400,3 +408,39 @@ async def test_a_1961_sequence_refusal_fails_as_the_app_does(fake: FakeStation) 
     finally:
         await station.async_close()
     assert raised.value.code == -151
+
+
+# ── the client's entry point ─────────────────────────────────────────────────
+
+
+async def test_the_client_routes_a_station_lock_to_its_station(
+    fake: FakeStation, lock_1940: FakeLock
+) -> None:
+    station = await _hub(fake, _lock(LOCK_1940), lock_1940)
+    cloud = FakeCloud()
+    eufy = build_eufy_security(
+        email=SYNTHETIC.email, store=warm_store(email=SYNTHETIC.email, cloud=cloud), cloud=cloud
+    )
+    eufy.stations[SYNTHETIC.station_sn] = station
+    try:
+        assert eufy.lock_control(LOCK_1940).path is LockPath.STATION
+        assert await eufy.async_lock(LOCK_1940) is LockState.LOCKED
+        assert await eufy.async_unlock(LOCK_1940) is LockState.UNLOCKED
+    finally:
+        await station.async_close()
+        await eufy.async_close()
+    assert [a for _, a, _ in lock_1940.received] == [LockAction.LOCK, LockAction.UNLOCK]
+
+
+async def test_the_client_refuses_a_station_lock_whose_station_it_does_not_run() -> None:
+    cloud = FakeCloud()
+    eufy = build_eufy_security(
+        email=SYNTHETIC.email, store=warm_store(email=SYNTHETIC.email, cloud=cloud), cloud=cloud
+    )
+    eufy.listed_devices = MappingProxyType({LOCK_1940: _lock(LOCK_1940)})
+    try:
+        assert eufy.lock_control(LOCK_1940).path is LockPath.STATION
+        with pytest.raises(UnsupportedError, match="no station session"):
+            await eufy.async_lock(LOCK_1940)
+    finally:
+        await eufy.async_close()

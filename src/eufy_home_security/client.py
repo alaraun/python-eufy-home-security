@@ -28,6 +28,7 @@ from .cloud.api import CipherKeys, EufyCloudApi, HttpSession, PasswordSource
 from .cloud.const import CLOUD_STATE_REFRESH, FACES_BY_IDS_PATH, firmware_ota_type
 from .cloud.models import CloudDevice, CloudInvite, FirmwareUpdate
 from .cloud.status import CloudStatus, DeviceListSource
+from .devices.locks import LockState
 from .devices.model_settings import (
     Setting,
     bundled_codes,
@@ -70,6 +71,7 @@ from .exceptions import (
     EufySecurityError,
     KeyExchangeRefusedError,
     ModelDataError,
+    MqttAccountRequiredError,
     NoCachedSessionError,
     ProtocolError,
     SessionReplacedError,
@@ -79,6 +81,8 @@ from .exceptions import (
 from .identity import StationClaims, is_device_serial
 from .images import PushImage, picture_content_type
 from .inclusion import Reach, StationChoice
+from .lock_commands.actions import LockAction
+from .lock_commands.control import LockControl, LockPath, check_control
 from .models import GuardMode
 from .network import (
     LanPath,
@@ -108,6 +112,8 @@ if TYPE_CHECKING:
     import aiohttp
 
     from .install import InstallState
+    from .mqtt.account import EufyMqttAccount
+    from .mqtt.locks import MqttLocks
     from .push.fcm import PushListener
 
 _LOGGER = logging.getLogger(__name__)
@@ -426,6 +432,7 @@ class EufySecurity:
         # Every device the last discovery's list named, by serial: stations built, served
         # elsewhere, remote, paired devices and skipped devices alike.
         self.listed_devices: Mapping[str, CloudDevice] = MappingProxyType({})
+        self._mqtt_locks: MqttLocks | None = None
         # Built stations the last discovery's list did not name (reported once each).
         self._unlisted: frozenset[str] = frozenset()
         self._discovered = False
@@ -1272,6 +1279,80 @@ class EufySecurity:
 
     # ── running ──────────────────────────────────────────────────────────────
 
+    # ── locks ────────────────────────────────────────────────────────────────
+
+    def use_mqtt(self, account: EufyMqttAccount | None) -> None:
+        """Serve the lock commands of locks the eufy app reaches over MQTT through
+        ``account`` (an :class:`~.mqtt.account.EufyMqttAccount` the consumer started for
+        this account); None stops. Their states from the broker arrive as
+        :class:`~.events.LockStateChanged` (``station_sn`` None)."""
+        if self._mqtt_locks is not None:
+            self._mqtt_locks.close()
+            self._mqtt_locks = None
+        if account is not None:
+            from .mqtt.locks import MqttLocks  # noqa: PLC0415 - the optional extra's module
+
+            self._mqtt_locks = MqttLocks(
+                account, user_name=self.cloud.user_name, emit=self._bus.emit
+            )
+
+    def _lock_of(self, device_sn: str) -> tuple[Station | None, CloudDevice, LockControl]:
+        for station in self.stations.values():
+            if any(d.device_sn == device_sn for d in station.devices):
+                device = station.sub_device(device_sn)
+                return station, device, station.lock_control(device_sn)
+        listed = self.listed_devices.get(device_sn)
+        if listed is None:
+            raise UnsupportedError(
+                f"{redact_serial(device_sn)} is not in the device list", device_sn=device_sn
+            )
+        from .mqtt.locks import mqtt_lock_control  # noqa: PLC0415 - no aiomqtt needed
+
+        return None, listed, mqtt_lock_control(listed)
+
+    def lock_control(self, device_sn: str) -> LockControl:
+        """Whether this client can lock and unlock ``device_sn``, over which path (its
+        station's session or the MQTT broker), or why not; decided from the lock's command
+        route as the eufy app picks it. A lock on the MQTT path also needs
+        :meth:`use_mqtt`. Sync; raises ``UnsupportedError`` for a device not listed."""
+        return self._lock_of(device_sn)[2]
+
+    async def async_lock(self, device_sn: str, *, timeout: float | None = None) -> LockState:
+        """Lock ``device_sn`` over the path its route takes and return its state once the
+        lock reports it locked (:meth:`~.station.Station.async_lock`: the waits, a lock
+        already locked, every error). An MQTT lock without :meth:`use_mqtt` raises
+        :class:`~.exceptions.MqttAccountRequiredError`; a lock on the station path whose
+        station this client does not run raises ``UnsupportedError``."""
+        return await self._lock_command(device_sn, LockAction.LOCK, timeout)
+
+    async def async_unlock(self, device_sn: str, *, timeout: float | None = None) -> LockState:
+        """Unlock ``device_sn``; as :meth:`async_lock`, confirmed by the unlocked state."""
+        return await self._lock_command(device_sn, LockAction.UNLOCK, timeout)
+
+    async def _lock_command(
+        self, device_sn: str, action: LockAction, timeout: float | None
+    ) -> LockState:
+        station, device, control = self._lock_of(device_sn)
+        if control.path is LockPath.MQTT:
+            if self._mqtt_locks is None:
+                raise MqttAccountRequiredError(
+                    f"{redact_serial(device_sn)} takes its commands over MQTT: start an "
+                    "EufyMqttAccount and pass it to use_mqtt()",
+                    device_sn=device_sn,
+                )
+            return await self._mqtt_locks.async_command(
+                device, action, control=control, timeout=timeout
+            )
+        if station is None:
+            check_control(control, device_sn, LockPath.STATION)
+            raise UnsupportedError(
+                f"{redact_serial(device_sn)}: no station session of this client serves the lock",
+                device_sn=device_sn,
+            )
+        if action is LockAction.LOCK:
+            return await station.async_lock(device_sn, timeout=timeout)
+        return await station.async_unlock(device_sn, timeout=timeout)
+
     def subscribe(self, callback: EventCallback) -> Unsubscribe:
         """Receive events from every station and from cloud push."""
         return self._bus.subscribe(callback)
@@ -1356,6 +1437,7 @@ class EufySecurity:
         running, and the cache is saved regardless.
         """
         try:
+            self.use_mqtt(None)
             if self._cloud_state_task is not None:
                 task, self._cloud_state_task = self._cloud_state_task, None
                 task.cancel()

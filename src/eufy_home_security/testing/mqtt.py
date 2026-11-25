@@ -13,9 +13,11 @@ import asyncio
 import contextlib
 import datetime as dt
 import ipaddress
+import json
 import ssl
 import struct
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -25,6 +27,12 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
+from ..lock_commands import cm2
+from ..lock_commands.actions import LockAction, cbc_decrypt, serial_iv
+from ..lock_commands.frames import cm2_frame, parse_cm2_frame
+from ..lock_commands.mqtt_trans import decode_trans, encode_trans
+from ..mqtt.envelope import request_topic, response_topic
+from .locks import tlv_entries
 from .synthetic import SYNTHETIC
 
 _CONNECT, _CONNACK, _PUBLISH, _PUBACK = 1, 2, 3, 4
@@ -197,6 +205,8 @@ class FakeMqttBroker:
         """(client id, topic filter, requested QoS) of every SUBSCRIBE entry."""
         self.unsubscriptions: list[tuple[str, str]] = []
         self.published: list[BrokerPublish] = []
+        self.publish_hooks: list[Callable[[BrokerPublish], None]] = []
+        """Called with every PUBLISH the broker receives (a fake device answering it)."""
         self.refused_topics: set[str] = set()
         self.connack_code = 0
         self.connack_delay: float | None = 0.0
@@ -393,9 +403,12 @@ class FakeMqttBroker:
             offset += 2
             if self.publish_acks:
                 writer.write(_packet(_PUBACK, 0, packet_id))
-        self.published.append(
-            BrokerPublish(connection.client_id, topic, body[offset:], qos, bool(flags & 0x01))
+        received = BrokerPublish(
+            connection.client_id, topic, body[offset:], qos, bool(flags & 0x01)
         )
+        self.published.append(received)
+        for hook in list(self.publish_hooks):
+            hook(received)
 
 
 def _string(text: str) -> bytes:
@@ -435,3 +448,88 @@ async def _read_packet(reader: asyncio.StreamReader) -> tuple[int, bytes]:
         if not byte & 0x80:
             break
     return header, await reader.readexactly(length)
+
+
+@dataclass(slots=True, kw_only=True)
+class FakeMqttLock:
+    """A Wi-Fi lock on a :class:`FakeMqttBroker`: it answers each lock command published to
+    its request topic on its response topic, as a lock is declared to (docs/protocol/
+    mqtt.md § Lock commands), then reports its new state in a status report.
+
+    ``owner_user_id`` is the member record's ``admin_user_id`` the commands are keyed by.
+    ``answer_code`` is the lock's answer (0 accepted); an accepted command moves the lock to
+    the asked state, or to ``move_to`` (a lock-state code), reported unless ``report`` is
+    False. ``mismatch_first`` sends an answer to another request first. ``received``
+    records each command as decrypted: ``(action, seq_num)``. Call :meth:`attach`.
+    """
+
+    broker: FakeMqttBroker
+    serial: str
+    product_code: str
+    owner_user_id: str
+    state_code: int = 3
+    answer_code: int = 0
+    move_to: int | None = None
+    report: bool = True
+    mismatch_first: bool = False
+    received: list[tuple[LockAction, int]] = field(default_factory=list)
+    _tasks: set[asyncio.Task[None]] = field(default_factory=set)
+
+    def attach(self) -> None:
+        self.broker.publish_hooks.append(self._on_publish)
+
+    def _on_publish(self, published: BrokerPublish) -> None:
+        if published.topic != request_topic(self.product_code, self.serial):
+            return
+        body = json.loads(published.payload)
+        trans = json.loads(body["payload"])["trans"]
+        command, payload = decode_trans(trans)
+        if command != cm2.P2P_COMMAND:
+            return
+        time_value = int(payload["time"])
+        key = cm2.time_key(self.owner_user_id, time_value)
+        iv = serial_iv(self.serial)
+        frame = parse_cm2_frame(bytes.fromhex(payload["lock_payload"]))
+        entries = tlv_entries(cbc_decrypt(frame.body, key, iv))
+        action = LockAction.LOCK if entries[0xA3] == b"\x00" else LockAction.UNLOCK
+        self.received.append((action, int(payload["seq_num"])))
+        task = asyncio.get_running_loop().create_task(
+            self._answer(body["head"], key, iv, time_value, action)
+        )
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    async def _answer(
+        self, head: dict[str, Any], key: bytes, iv: bytes, time_value: int, action: LockAction
+    ) -> None:
+        topic = response_topic(self.product_code, self.serial)
+
+        def message(sealed_key: bytes, command: int, plain: bytes, time_text: str) -> bytes:
+            frame = cm2_frame(
+                cm2.seal_body(plain, sealed_key, iv),
+                command=command,
+                function_type=cm2.FUNCTION_TYPE,
+                version=cm2.FRAME_VERSION,
+                encrypted=True,
+            )
+            trans = encode_trans(cm2.P2P_COMMAND, {"time": time_text, "lock_payload": frame.hex()})
+            payload = {"account_id": self.owner_user_id, "device_sn": self.serial, "trans": trans}
+            answer_head = {"cmd": 8, "msg_seq": head["msg_seq"] + 1000, "sess_id": "beef"}
+            return json.dumps({"head": answer_head, "payload": json.dumps(payload)}).encode()
+
+        if self.mismatch_first:
+            other = time_value ^ 0x40
+            stale = message(
+                cm2.time_key(self.owner_user_id, other), 0x23, b"\x00\x00", f"{other:08x}"
+            )
+            await self.broker.send(topic, stale)
+        time_text = f"{time_value:08x}"
+        await self.broker.send(topic, message(key, 0x23, bytes([self.answer_code, 0]), time_text))
+        if self.answer_code != 0:
+            return
+        self.state_code = (
+            self.move_to if self.move_to is not None else (4 if action is LockAction.LOCK else 3)
+        )
+        if self.report:
+            report = bytes([0, 0xA1, 1, 90, 0xA2, 1, self.state_code])
+            await self.broker.send(topic, message(key, cm2.STATUS_COMMAND, report, time_text))

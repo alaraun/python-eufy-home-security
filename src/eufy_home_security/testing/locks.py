@@ -32,7 +32,8 @@ UNLOCKED: Final = 3
 _SEQ_REPORT: Final = 1916
 
 
-def _tlv(body: bytes) -> dict[int, bytes]:
+def tlv_entries(body: bytes) -> dict[int, bytes]:
+    """A TLV body's values by tag."""
     entries: dict[int, bytes] = {}
     index = 0
     while index + 1 < len(body):
@@ -138,7 +139,7 @@ class FakeLock:
         else:
             key, time_text = cm2.time_key(self.user_id, int(time_field)), f"{int(time_field):08x}"
         frame = frames.parse_cm2_frame(bytes.fromhex(payload["lock_payload"]))
-        body = _tlv(cbc_decrypt(frame.body, key, serial_iv(self.serial)))
+        body = tlv_entries(cbc_decrypt(frame.body, key, serial_iv(self.serial)))
         action = LockAction.LOCK if body[0xA3] == b"\x00" else LockAction.UNLOCK
         self.received.append((cm2.P2P_COMMAND, action, int(payload["seq_num"])))
         if self.seq_report is not None:
@@ -209,7 +210,7 @@ class FakeLock:
             key = self.ecdh_key.exchange(ec.ECDH(), peer)[:16]
         else:
             key = ecies_decrypt(key_field, _private_hex(self.ecc_key))
-        body = _tlv(cbc_decrypt(cipher, key, serial_iv(self.serial)))
+        body = tlv_entries(cbc_decrypt(cipher, key, serial_iv(self.serial)))
         action = LockAction(body[0xA2][0])
         self.received.append((anker.COMMAND_1930, action, int(payload["seq_num"])))
         self._result(station, anker.COMMAND_1930, self.result_code)

@@ -548,6 +548,12 @@ class GuestAccessError(UnsupportedError):
     anything is sent."""
 
 
+class MqttAccountRequiredError(UnsupportedError):
+    """The device takes its commands over the eufy MQTT broker and no MQTT account serves
+    this client: start an :class:`~.mqtt.account.EufyMqttAccount` and pass it to
+    :meth:`~.client.EufySecurity.use_mqtt`. Raised before anything is sent."""
+
+
 class ModeInUseError(UnsupportedError):
     """A guard mode cannot be changed or removed while it is in use.
 
