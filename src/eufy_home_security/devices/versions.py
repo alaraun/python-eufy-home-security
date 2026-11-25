@@ -89,7 +89,7 @@ def _remote_fields(version: str) -> list[int] | None:
         parts.pop()  # a trailing dot splits off nothing
     if not parts:
         return None
-    fields = [_int_or_none(p) if p.isdigit() else None for p in parts]
+    fields = [_int_or_none(p) for p in parts]
     return None if any(f is None for f in fields) else [f for f in fields if f is not None]
 
 
