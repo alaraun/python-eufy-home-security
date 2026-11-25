@@ -394,6 +394,18 @@ async def test_a_store_warmed_with_the_clients_country_needs_no_login() -> None:
     assert cloud.calls == []
 
 
+async def test_the_fake_clouds_login_answers_the_nickname() -> None:
+    cloud = FakeCloud(nick_name="Kim R")
+    store = warm_store(email=SYNTHETIC.email, cloud=cloud)
+    eufy = build_eufy_security(email=SYNTHETIC.email, store=store, cloud=cloud)
+    try:
+        await eufy.async_login()
+    finally:
+        await eufy.async_close()
+    assert eufy.cloud.nick_name == "Kim R"
+    assert cloud.calls == []  # the login gave it: no profile read
+
+
 def test_warming_a_store_leaves_the_planned_call_errors() -> None:
     planned = [CommunicationError("planned for the test")]
     cloud = FakeCloud(call_errors=list(planned))

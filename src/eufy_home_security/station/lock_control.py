@@ -82,6 +82,9 @@ class LockCloud(Protocol):
     @property
     def user_id(self) -> str | None: ...
 
+    @property
+    def display_name(self) -> str: ...
+
     async def async_get_lock_public_key(self, device_sn: str, key_type: int) -> bytes: ...
 
 
@@ -301,7 +304,9 @@ class StationLockControl:
 
     async def _build(self, device: CloudDevice, form: LockForm, action: LockAction) -> _Sent:
         serial = device.device_sn
-        user_name = self._station.session.user_name
+        user_name = (
+            self._station.session.user_name if self._cloud is None else self._cloud.display_name
+        )
         now = self._clock()
         if form in (LockForm.P2P_1940, LockForm.P2P_1940_HKDF):
             if self._cloud is None or not self._cloud.user_id:

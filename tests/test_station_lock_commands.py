@@ -73,6 +73,7 @@ class _Cloud:
 
     def __init__(self, *locks: FakeLock) -> None:
         self.user_id: str | None = SYNTHETIC.account_id
+        self.display_name = "Synthetic Nick"
         self.keys = {k: v for lock in locks for k, v in lock.public_keys().items()}
         self.asked: list[tuple[str, int]] = []
 
@@ -675,6 +676,36 @@ async def test_a_1961_sequence_report_moves_the_shared_counter(fake: FakeStation
     finally:
         await station.async_close()
     assert lock.received[-1][2] == 701
+
+
+@pytest.mark.parametrize(
+    "serial", ["T8502P2000000001", "T8520P2000000001", "T8530P2000000001", "T8501P2000000001"]
+)
+async def test_a_lock_command_names_the_accounts_nickname(fake: FakeStation, serial: str) -> None:
+    """Every form names the cloud's display name, not the session's e-mail name ("Nick")."""
+    lock = FakeLock(serial=serial, channel=1, user_id=SYNTHETIC.account_id)
+    station = await _hub(fake, _lock(serial), lock)
+    try:
+        assert await station.async_lock(serial) is LockState.LOCKED
+    finally:
+        await station.async_close()
+    assert lock.names == ["Synthetic Nick"]
+
+
+async def test_without_a_cloud_client_a_lock_command_names_the_sessions_user(
+    fake: FakeStation,
+) -> None:
+    serial = "T8530P2000000001"
+    lock = FakeLock(serial=serial, channel=1)
+    fake.locks[1] = lock
+    fake.params.setdefault(1, {})[1912] = str(lock.state_code)
+    station = Station(STATION, _session(fake), sub_devices=[_lock(serial)], lock_cloud=None)
+    try:
+        await station.async_update()
+        assert await station.async_lock(serial) is LockState.LOCKED
+    finally:
+        await station.async_close()
+    assert lock.names == ["Nick"]
 
 
 # ── the client's entry point ─────────────────────────────────────────────────

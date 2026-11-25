@@ -89,6 +89,23 @@ async def test_a_lock_over_mqtt_is_confirmed_by_its_status_report(
     assert (sent["head"]["cmd"], sent["head"]["cmd_status"]) == (9, 2)
 
 
+@pytest.mark.parametrize(
+    ("nick_name", "sender"),
+    [("Kim R", "Kim R"), (None, SYNTHETIC.email.split("@")[0])],
+)
+async def test_an_mqtt_lock_command_names_the_accounts_nickname(
+    rig: Rig, wifi_lock: FakeMqttLock, nick_name: str | None, sender: str
+) -> None:
+    """The sender entry is the login's nickname, the e-mail's local part without one."""
+    assert nick_name != SYNTHETIC.email.split("@")[0]
+    account = await _served(rig)
+    try:
+        assert await rig.eufy.async_lock(LOCK_SN) is LockState.LOCKED
+    finally:
+        await account.async_stop()
+    assert wifi_lock.names == [sender]
+
+
 # The app's lock message for LOCK_SN, key user OWNER, nickname "Synthetic Nick", short id
 # 0a1b, lock, at 1700000000 with time noise 37 and no stored sequence number.
 VECTOR_LOCK_PAYLOAD = (

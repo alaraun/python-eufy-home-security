@@ -1050,8 +1050,9 @@ class Station:
         ``cloud_refresh`` reads the cloud device list and applies it
         (:meth:`async_get_config` with ``refresh``); None reads no cloud.
         ``login_country`` gives the country the account logs in with (None: unknown).
-        ``lock_cloud`` gives lock commands the account's user id and the locks' public
-        keys (the cloud client); None sends no lock command that needs them.
+        ``lock_cloud`` gives lock commands the account's user id, its display name (the
+        sender they name) and the locks' public keys (the cloud client); None sends no lock
+        command that needs them, and names the session's user as the sender.
         """
         self.device = device
         self.session = session

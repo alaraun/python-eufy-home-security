@@ -420,8 +420,8 @@ class FakeCloud:
     last_login_ab: dict[str, str] = field(default_factory=dict)
     """The ``ab`` of the last login per region (``get_last_login_code``)."""
     nick_name: str | None = None
-    """The account's nickname, which the profile (``get_profile``, recorded as
-    ``"profile"``) answers; None answers a profile without one."""
+    """The account's nickname, which a login and the profile (``get_profile``, recorded
+    as ``"profile"``) answer; None answers them without one."""
     arming_groups: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     """Each house id's raw arming groups; the arming-group requests change them."""
     arming_guided: int = 2
@@ -534,7 +534,8 @@ class FakeCloud:
             if self.login_error is not None:
                 raise _Refusal(self.login_error)
             self.last_login_ab[region] = str(payload.get("ab"))
-            return {"auth_token": _AUTH_TOKEN, "user_id": self.user_id}
+            nick = {} if self.nick_name is None else {"nick_name": self.nick_name}
+            return {"auth_token": _AUTH_TOKEN, "user_id": self.user_id, **nick}
         if path == const.LAST_LOGIN_CODE_PATH:
             note("last_login_code")
             self._raise_call_error()

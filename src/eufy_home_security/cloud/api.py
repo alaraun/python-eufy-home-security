@@ -542,11 +542,17 @@ class EufyCloudApi:
         return None
 
     @property
-    def activation_user_name(self) -> str:
-        """The name an arming-group activation is recorded under: :attr:`nick_name`, as
-        the app sends it, else :attr:`user_name`. No request: see
-        :meth:`async_activation_user_name`."""
+    def display_name(self) -> str:
+        """The account's name as the app sends it (an arming-group activation's
+        ``user_name``, a lock command's sender): :attr:`nick_name`, else
+        :attr:`user_name`. No request."""
         return self.nick_name or self.user_name
+
+    @property
+    def activation_user_name(self) -> str:
+        """The name an arming-group activation is recorded under: :attr:`display_name`.
+        No request: see :meth:`async_activation_user_name`."""
+        return self.display_name
 
     async def async_get_nick_name(self, region: str, *, login: bool = True) -> str | None:
         """The account's nickname from its profile (``get_profile``, read-only) on

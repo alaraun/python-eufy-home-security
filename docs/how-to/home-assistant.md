@@ -1786,7 +1786,9 @@ or stopped between positions) or `DeviceTimeoutError`. A lock already in the ask
 returns at once. The default wait is the app's 20 s for the answer (over MQTT after up to
 15 s for the broker to take the command) plus 30 s for the
 state, and `timeout` bounds the whole call; run it as a task and let `LockStateChanged`
-drive the entity. Declared from the eufy app, not tested on hardware.
+drive the entity. A command names the account's nickname as its sender, as the app does
+(`eufy.cloud.display_name`: the e-mail's local part only when the account has none).
+Declared from the eufy app, not tested on hardware.
 
 `station.lock_state(device_sn)` gives a `LockReading` (None before anything was reported,
 and for a device that is no lock): `state`, a `LockState`, `source` (`p2p`, `notify`,
@@ -2992,8 +2994,8 @@ The models are exported from the package root: `ArmingGroupList`, `ArmingGroup`,
   name an activation was recorded under: the library sends the account's nickname, as
   the app does: the login answer's `nick_name`, else the account profile's, read once on
   the first activation without a login and kept with the cached session
-  (`EufyCloudApi.async_activation_user_name`); the e-mail's local part only when neither
-  names one. The members' guard-mode writes still carry the e-mail's local part.
+  (`EufyCloudApi.async_activation_user_name`; `display_name` reads it without a request);
+  the e-mail's local part only when neither names one. The members' guard-mode writes still carry the e-mail's local part.
 
 ### Station configuration
 

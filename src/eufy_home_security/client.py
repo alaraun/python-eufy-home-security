@@ -1298,7 +1298,7 @@ class EufySecurity:
             self._mqtt_locks = MqttLocks(
                 account,
                 user_id=self.cloud.user_id or "",
-                user_name=self.cloud.user_name,
+                user_name=self.cloud.display_name,
                 emit=self._bus.emit,
             )
 

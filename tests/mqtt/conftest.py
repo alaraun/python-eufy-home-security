@@ -88,10 +88,20 @@ SCOPE = f"eu{const.SCOPE_SEPARATOR}FR"
 
 
 @pytest.fixture
-async def rig(pki: MqttTestPki, short_waits: None) -> AsyncIterator[Rig]:
+def nick_name() -> str | None:
+    """The account's nickname the fake cloud's login answers (parametrize to set one)."""
+    return None
+
+
+@pytest.fixture
+async def rig(pki: MqttTestPki, short_waits: None, nick_name: str | None) -> AsyncIterator[Rig]:
     """The client of the default scope, ``eu``; the account also logs in to :data:`SCOPE`."""
     countries = ["EE", "FR"]
-    cloud = FakeCloud(mqtt_answer=pki.register_answer(), country_regions={"EE": "eu", "FR": "eu"})
+    cloud = FakeCloud(
+        mqtt_answer=pki.register_answer(),
+        country_regions={"EE": "eu", "FR": "eu"},
+        nick_name=nick_name,
+    )
     store = warm_store(email=SYNTHETIC.email, cloud=cloud, country=countries)
     eufy = build_eufy_security(email=SYNTHETIC.email, store=store, cloud=cloud, country=countries)
     await eufy.async_login()

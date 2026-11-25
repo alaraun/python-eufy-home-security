@@ -66,7 +66,8 @@ class FakeLock:
     ``seq_after_answer`` sends a sequence report of that number naming the on/off command
     right after a 1940 answer.
     ``status_code`` is the code of a 1940 lock's status report (0: a state).
-    ``received`` records each command as decrypted: ``(command, action, seq_num)``.
+    ``received`` records each command as decrypted: ``(command, action, seq_num)``;
+    ``names`` its sender name (the account's nickname).
     """
 
     serial: str
@@ -91,6 +92,7 @@ class FakeLock:
         default_factory=lambda: ec.generate_private_key(ec.SECP256R1())
     )
     received: list[tuple[int, LockAction, int | None]] = field(default_factory=list)
+    names: list[str] = field(default_factory=list)
 
     def public_keys(self) -> dict[tuple[str, int], bytes]:
         """The lock's keys as the cloud's public-key query serves them (types 2 and 3)."""
@@ -150,6 +152,7 @@ class FakeLock:
         body = tlv_entries(cbc_decrypt(frame.body, key, serial_iv(self.serial)))
         action = LockAction.LOCK if body[0xA3] == b"\x00" else LockAction.UNLOCK
         self.received.append((cm2.P2P_COMMAND, action, int(payload["seq_num"])))
+        self.names.append(body[0xA4].decode())
         if self.seq_report is not None:
             seq, self.seq_report = self.seq_report, None
             self._result(station, cm2.P2P_COMMAND, -151)
@@ -207,6 +210,7 @@ class FakeLock:
             payload = json.loads(plain)
         action = LockAction(int(payload["slOperation"]))
         self.received.append((anker.COMMAND_1961, action, payload.get("seq_num")))
+        self.names.append(str(payload["userName"]))
         if self.seq_report is not None:
             seq, self.seq_report = self.seq_report, None
             self._through(station, _SEQ_REPORT, {"seq_num": seq, "bus_type": 0, "lock_cmd": 0})
@@ -232,6 +236,7 @@ class FakeLock:
         body = tlv_entries(cbc_decrypt(cipher, key, serial_iv(self.serial)))
         action = LockAction(body[0xA2][0])
         self.received.append((anker.COMMAND_1930, action, int(payload["seq_num"])))
+        self.names.append(body[0xA4].decode())
         self._result(station, anker.COMMAND_1930, self.result_code)
         if self.result_code not in (0, -151) or not self.answer:
             return

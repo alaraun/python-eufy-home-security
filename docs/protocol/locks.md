@@ -61,7 +61,8 @@ or parameter picks between them, and the library ports both.
   incremented after each command.
 - **User fields**: the lock member record's `admin_user_id` (1940: the key user id, below)
   and `short_user_id` (hex text)
-  and the account's nickname. An absent `short_user_id` is sent as each form sends it: 1940
+  and the account's nickname as the sender (`EufyCloudApi.display_name`: the login's or the
+  profile's `nick_name`, the e-mail's local part only without one). An absent `short_user_id` is sent as each form sends it: 1940
   as an empty `A5` entry, 1961 by leaving the field out; 1930 needs its 2 bytes.
 - **Result**: an answer code 0 is accepted (the state change follows), anything else is
   refused; the 1940 answer also names "already unlocked" (48) and "already locked" (49).

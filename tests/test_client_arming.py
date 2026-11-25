@@ -356,8 +356,9 @@ async def test_activation_is_recorded_under_the_profile_nickname_read_once() -> 
     """A warm store's session carries no nickname: the first activation reads the
     profile, later ones reuse the cached nickname."""
     cloud = _cloud()
-    cloud.nick_name = "Kim R"
-    eufy = _client(cloud)
+    store = warm_store(email=SYNTHETIC.email, cloud=cloud)
+    cloud.nick_name = "Kim R"  # set after the login: only the profile answers it
+    eufy = build_eufy_security(email=SYNTHETIC.email, store=store, cloud=cloud)
     _install(eufy, StubStation(SYNTHETIC.station_sn, cloud, mode=GuardMode.AWAY))
     await eufy.async_activate_arming_group(GROUP)
     await eufy.async_activate_arming_group(GROUP)

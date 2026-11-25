@@ -501,7 +501,7 @@ class FakeMqttLock:
     ``admin_user_id`` when the record names the sending account), which the message's
     ``account_id`` must carry too.
     ``users`` records each command's sender entries as decrypted: ``(A2 user id, A5 short
-    user id as hex)``.
+    user id as hex)``; ``names`` its sender name (A4, the account's nickname).
     ``answer_code`` is the lock's answer (0 accepted); an accepted command moves the lock to
     the asked state, or to ``move_to`` (a lock-state code), reported unless ``report`` is
     False; ``answer`` False: the lock sends nothing back. ``mismatch_first`` sends an answer
@@ -530,6 +530,7 @@ class FakeMqttLock:
     answer_dev_sn: str | None = None
     received: list[tuple[LockAction, int]] = field(default_factory=list)
     users: list[tuple[str, str]] = field(default_factory=list)
+    names: list[str] = field(default_factory=list)
     refused: list[str] = field(default_factory=list)
     _tasks: set[asyncio.Task[None]] = field(default_factory=set)
 
@@ -546,6 +547,7 @@ class FakeMqttLock:
             return
         self.received.append((command.action, command.seq_num))
         self.users.append((command.entries[0xA2].decode(), command.entries[0xA5].hex()))
+        self.names.append(command.entries[0xA4].decode())
         if not self.answer and not self.report_first:
             return
         task = asyncio.get_running_loop().create_task(
