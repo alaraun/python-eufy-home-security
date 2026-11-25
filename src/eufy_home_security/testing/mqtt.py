@@ -153,6 +153,8 @@ class BrokerConnect:
     clean_session: bool
     protocol_level: int
     username: str | None
+    password: bool
+    """Whether the CONNECT carried a password."""
     client_certificate: bool
     """Whether the TLS peer presented a certificate the broker's CA signed."""
 
@@ -332,6 +334,7 @@ class FakeMqttBroker:
                 clean_session=bool(flags & 0x02),
                 protocol_level=level,
                 username=username,
+                password=bool(flags & 0x40),
                 client_certificate=bool(peer),
             )
         )

@@ -137,7 +137,8 @@ async def test_it_connects_with_the_app_client_id_and_subscribes_each_mqtt_devic
     assert connect.clean_session
     assert connect.protocol_level == 4  # MQTT 3.1.1
     assert connect.client_certificate
-    assert connect.username is None
+    assert connect.username == "?SDK=Android&Version=2.81.0"
+    assert not connect.password
     assert sorted(_subscribed(rig)) == [
         (response_topic("T85D0", LOCK_SN), 1),
         (response_topic("T85L0", LOCK2_SN), 1),

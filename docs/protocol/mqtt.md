@@ -76,7 +76,8 @@ in a repr.
 | broker | `endpoint_addr`, port 8883, TLS 1.2 or newer, the server verified with the system's trust store |
 | client certificate | `certificate_pem` + `private_key` |
 | client id | `android-<app_name>-<user_id>-<openudid>`, the `openudid` being this install's own (the one the library sends the cloud) |
-| protocol | MQTT 3.1.1, clean session, keepalive 300 s, no user name or password |
+| protocol | MQTT 3.1.1, clean session, keepalive 300 s |
+| user name | `?SDK=Android&Version=2.81.0`, as the eufy app's MQTT SDK sends it; no password |
 | subscriptions | the answer topic of every MQTT device, QoS 1 |
 
 The PEM pair is written to a private temporary directory (mode 0700, files 0600) only for

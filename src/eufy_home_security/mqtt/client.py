@@ -48,6 +48,8 @@ _LOGGER = logging.getLogger(__name__)
 
 MQTT_PORT: Final = 8883
 KEEPALIVE_SECONDS: Final = 300
+CONNECT_USERNAME: Final = "?SDK=Android&Version=2.81.0"
+"""The CONNECT user name the eufy app sends (its MQTT SDK's tag); no password."""
 RECONNECT_MIN_SECONDS: float = 4.0
 """The first wait before a reconnect; doubled per failed try up to the maximum."""
 RECONNECT_MAX_SECONDS: float = 64.0
@@ -301,6 +303,7 @@ class EufyMqttClient:
             certificate.endpoint,
             self._port,
             identifier=self._client_id,
+            username=CONNECT_USERNAME,
             keepalive=self._keepalive,
             tls_context=context,
             protocol=mqtt.ProtocolVersion.V311,
