@@ -7,4 +7,35 @@ from typing import Final
 
 LOCK_ROUTES: Final[
     dict[str, tuple[tuple[str, str | None, str, int | None, tuple[str, str] | None], ...]]
-] = {}
+] = {
+    "T8500": (("", "1911", "never", None, None),),
+    "T8501": (("", "1930", "never", 6610, None),),
+    "T8502": (("", "1940", "never", None, ("2.2.0.0", "0.3.0.0")),),
+    "T8503": (("", "1930", "never", 6610, None),),
+    "T8506": (
+        ("", "1940", "never", None, None),
+        ("6:8", None, "always", None, None),
+    ),
+    "T8510": (("", "1911", "never", None, None),),
+    "T8520": (
+        ("", "1961", "never", None, None),
+        ("6:8", "1940", "never", None, None),
+        ("6:9", "1940", "never", None, None),
+    ),
+    "T8530": (("", "1961-plain", "never", None, None),),
+    "T8531": (("", "1940", "standalone", None, None),),
+    "T8532": (("", "1940", "standalone", None, None),),
+    "T85D0": (("", "1940", "always", None, None),),
+    "T85D2": (("", "1940", "always", None, None),),
+    "T85F0": (("", "1940", "always", None, None),),
+    "T85F1": (("", "1940", "always", None, None),),
+    "T85F2": (("", "1940", "always", None, None),),
+    "T85F3": (("", None, "always", None, None),),
+    "T85L0": (("", "1940", "always", None, None),),
+    "T85L1": (("", "1940", "always", None, None),),
+    "T85M0": (("", "1940", "standalone", None, None),),
+    "T85M1": (("", "1940", "standalone", None, None),),
+    "T85P0": (("", "1940", "always", None, None),),
+    "T85P1": (("", "1940", "always", None, None),),
+    "T85V0": (("", "1940", "standalone", None, None),),
+}
