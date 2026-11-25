@@ -9,6 +9,7 @@ call to the client of its device's scope. See docs/protocol/mqtt.md § The clien
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Callable, Iterable, Mapping
 from types import MappingProxyType
 from typing import TYPE_CHECKING
@@ -31,6 +32,8 @@ if TYPE_CHECKING:
     from ..cloud.api import EufyCloudApi
     from ..cloud.models import CloudDevice
     from .envelope import MqttHead, MqttMessage
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class EufyMqttAccount:
@@ -57,6 +60,8 @@ class EufyMqttAccount:
         self._clients: dict[str, EufyMqttClient] = {}
         self._listeners: list[Listener] = []
         self._subscribe: frozenset[str] | None = None
+        self._stopped = False
+        """Set by :meth:`async_stop`, cleared by :meth:`async_start`: device updates are ignored."""
         self._lifecycle = asyncio.Lock()
         """Held by start, device update and stop, so a stop never interleaves with them."""
 
@@ -146,6 +151,7 @@ class EufyMqttAccount:
         async with self._lifecycle:
             if self._clients:
                 raise RuntimeError("the MQTT account is already started")
+            self._stopped = False
             listed = list(devices)
             self._subscribe = None if subscribe is None else frozenset(subscribe)
             scopes = await self._scopes(listed)
@@ -157,8 +163,12 @@ class EufyMqttAccount:
     async def async_update_devices(self, devices: Iterable[CloudDevice]) -> None:
         """Follow a new device list: a scope without MQTT devices left has its client
         stopped, a new one gets a client, and the others follow the list
-        (:meth:`.EufyMqttClient.async_update_devices`)."""
+        (:meth:`.EufyMqttClient.async_update_devices`). After :meth:`async_stop` it does
+        nothing until the next :meth:`async_start`."""
         async with self._lifecycle:
+            if self._stopped:
+                _LOGGER.debug("MQTT account stopped: device update ignored")
+                return
             listed = list(devices)
             scopes = await self._scopes(listed)
             for scope in [s for s in self._clients if s not in scopes]:
@@ -172,8 +182,10 @@ class EufyMqttAccount:
 
     async def async_stop(self) -> None:
         """Stop every client; their pending requests get a :class:`CommunicationError`.
-        A start or device update in progress finishes first, then is stopped."""
+        A start or device update in progress finishes first, then is stopped; a later
+        device update is ignored until the next :meth:`async_start`."""
         async with self._lifecycle:
+            self._stopped = True
             clients, self._clients = list(self._clients.values()), {}
             for client in clients:
                 await client.async_stop()

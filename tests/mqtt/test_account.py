@@ -123,6 +123,39 @@ async def test_a_stop_during_a_start_or_device_update_leaves_no_client(
     assert mqtt_tasks() == []
 
 
+@pytest.mark.parametrize("queued", [True, False], ids=["queued-behind-the-stop", "after-the-stop"])
+async def test_a_device_update_after_a_stop_starts_no_client(
+    rig: Rig, account: EufyMqttAccount, queued: bool
+) -> None:
+    await account.async_start([EU_LOCK])
+    await account.async_wait_connected(5)
+    stop = asyncio.create_task(account.async_stop())
+    await asyncio.sleep(0)
+    assert account._lifecycle.locked()  # the stop holds the lifecycle
+    if not queued:
+        await stop
+    update = asyncio.create_task(account.async_update_devices([EU_LOCK, SCOPE_LOCK]))
+    async with asyncio.timeout(5):
+        await stop
+        await update
+    await asyncio.sleep(0.3)
+    assert account.clients == {}
+    assert rig.broker.connected_clients == []
+    assert len(rig.broker.connects) == 1
+    assert mqtt_tasks() == []
+
+
+async def test_a_start_after_a_stop_follows_device_updates_again(
+    rig: Rig, account: EufyMqttAccount
+) -> None:
+    await account.async_start([CAMERA])
+    await account.async_stop()
+    await account.async_start([CAMERA])
+    await account.async_update_devices([EU_LOCK])
+    await account.async_wait_connected(5)
+    assert list(account.clients) == ["eu"]
+
+
 async def test_no_mqtt_device_starts_no_client_unless_a_check_asks(
     rig: Rig, account: EufyMqttAccount
 ) -> None:

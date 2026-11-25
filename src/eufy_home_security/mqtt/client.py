@@ -144,6 +144,8 @@ class EufyMqttClient:
         self._run_task: asyncio.Task[None] | None = None
         self._connection_task: asyncio.Task[bool] | None = None
         self._stopping = False
+        self._stopped = False
+        """Set by :meth:`async_stop`, cleared by :meth:`async_start`: device updates are ignored."""
         self._lifecycle = asyncio.Lock()
         """Held by start, device update and stop, so a stop never interleaves with them."""
         self._throttle = LogThrottle()
@@ -214,6 +216,7 @@ class EufyMqttClient:
         async with self._lifecycle:
             if self._run_task is not None:
                 raise RuntimeError("the MQTT client is already started")
+            self._stopped = False
             self._subscribe = None if subscribe is None else frozenset(subscribe)
             self._devices = await self._select(devices)
             if not self._devices and not connect_without_devices:
@@ -227,8 +230,12 @@ class EufyMqttClient:
 
     async def async_update_devices(self, devices: Iterable[CloudDevice]) -> None:
         """Follow a new device list: a changed MQTT device set asks for a new certificate
-        and reconnects with it (the app's rule); an unchanged one keeps the connection."""
+        and reconnects with it (the app's rule); an unchanged one keeps the connection.
+        After :meth:`async_stop` it does nothing until the next :meth:`async_start`."""
         async with self._lifecycle:
+            if self._stopped:
+                _LOGGER.debug("MQTT client stopped: device update ignored")
+                return
             selected = await self._select(devices)
             before = self._keys()
             self._devices = selected
@@ -245,8 +252,10 @@ class EufyMqttClient:
 
     async def async_stop(self) -> None:
         """Disconnect and end the background task; the waiters get a CommunicationError.
-        A start or device update in progress finishes first, then is stopped."""
+        A start or device update in progress finishes first, then is stopped; a later
+        device update is ignored until the next :meth:`async_start`."""
         async with self._lifecycle:
+            self._stopped = True
             await self._stop()
 
     async def _stop(self) -> None:

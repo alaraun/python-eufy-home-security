@@ -603,6 +603,35 @@ async def test_a_stop_during_a_start_or_device_update_leaves_nothing_running(
     assert mqtt_tasks() == []
 
 
+@pytest.mark.parametrize("queued", [True, False], ids=["queued-behind-the-stop", "after-the-stop"])
+async def test_a_device_update_after_a_stop_starts_nothing(rig: Rig, queued: bool) -> None:
+    await rig.client.async_start([lock()])
+    await rig.client.async_wait_connected(5)
+    stop = asyncio.create_task(rig.client.async_stop())
+    await asyncio.sleep(0)
+    assert rig.client._lifecycle.locked()  # the stop holds the lifecycle
+    if not queued:
+        await stop
+    update = asyncio.create_task(rig.client.async_update_devices([lock(), lock(LOCK2_SN, "T85L0")]))
+    async with asyncio.timeout(5):
+        await stop
+        await update
+    await asyncio.sleep(0.3)
+    assert not rig.client.connected
+    assert rig.broker.connected_clients == []
+    assert len(rig.broker.connects) == 1
+    assert mqtt_tasks() == []
+
+
+async def test_a_start_after_a_stop_follows_device_updates_again(rig: Rig) -> None:
+    await rig.client.async_start([CAMERA])
+    await rig.client.async_stop()
+    await rig.client.async_start([CAMERA])
+    await rig.client.async_update_devices([lock()])
+    await rig.client.async_wait_connected(5)
+    assert len(rig.broker.connects) == 1
+
+
 class _SlowProxy:
     """A TCP proxy to the broker that holds each new connection ``delay`` seconds, so the
     client's connect step is still running when the test stops or restarts it."""
