@@ -1299,7 +1299,10 @@ waits as long, ends the wait on the commanded door's notify (one naming the othe
 taken and the wait goes on; one without `door_id` counts for both) and keeps the notify's
 bits as the held parameter 7500: it returns when the report is the asked state and raises
 `DoorNotMovedError` with the reported state otherwise (an operate command waits for a
-known state). A parameter report of the asked state also ends the wait.
+known state). A parameter report of the asked state also ends the wait. When the call is
+cancelled after the camera took an open or close, the door reads opening or closing until a
+report of that door (its notify, or a report of a new state), and the next open or close
+of that door is sent whatever the last report says.
 
 ## Result codes
 

@@ -8,7 +8,7 @@ import asyncio
 import dataclasses
 import time
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, Final
 
 import pytest
 
@@ -593,6 +593,212 @@ async def test_a_report_before_the_receipt_shows_no_movement(
     monkeypatch.setattr(garage.session, "async_run_recipe", run_then_report)
     assert await garage.async_open_garage_door(GARAGE_SN, 1) is GarageDoorState.OPEN
     assert _doors(events) == [(1, GarageDoorState.OPEN, GarageDoorSource.NOTIFY)]
+
+
+async def _cancelled_while_moving(garage: Station, fake: FakeStation, door: int = 1) -> None:
+    """Open ``door`` against a camera that only takes the command, then cancel the call
+    once the command is taken (the door reads opening)."""
+    fake.garage_moves = False
+    task = asyncio.create_task(garage.async_open_garage_door(GARAGE_SN, door))
+    async with asyncio.timeout(3):
+        while garage.garage_doors()[door - 1].state is not GarageDoorState.OPENING:
+            await asyncio.sleep(0.01)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+async def test_a_cancelled_open_keeps_the_door_opening_and_a_close_is_sent(
+    garage: Station, fake: FakeStation
+) -> None:
+    """A taken command whose call is cancelled leaves the door moving until its report, and
+    the next close of the door (last reported closed) is sent, not answered at once."""
+    events = _events(garage)
+    await _cancelled_while_moving(garage, fake)
+    assert garage.garage_doors()[0].state is GarageDoorState.OPENING
+    fake.garage_moves = True
+    fake.garage_report_delay = 0.1
+    closing = asyncio.create_task(garage.async_close_garage_door(GARAGE_SN, 1))
+    async with asyncio.timeout(3):
+        while len(fake.doorbell_payloads) < 2:
+            await asyncio.sleep(0.01)
+    assert await closing is GarageDoorState.CLOSED
+    assert [p["data"]["type"] for p in fake.doorbell_payloads] == [1, 0]
+    assert _doors(events) == [
+        (1, GarageDoorState.OPENING, GarageDoorSource.COMMAND),
+        (1, GarageDoorState.CLOSING, GarageDoorSource.COMMAND),
+        (1, GarageDoorState.CLOSED, GarageDoorSource.NOTIFY),
+    ]
+
+
+def _door_param(value: str) -> dict[str, Any]:
+    return {"params": [{"dev_type": 255, "param_type": 7500, "param_value": value}]}
+
+
+# (report, door 1 after it): a report of door 1, or one that changes door 1, ends the hold
+_HOLD_REPORTS: Final = (
+    ((0x0547, {"cmd": 7500, "payload": {"door_id": 1, "type": 1 | 8}}), GarageDoorState.OPEN),
+    ((0x0547, {"cmd": 7500, "payload": {"door_id": 1, "type": 2 | 8}}), GarageDoorState.CLOSED),
+    ((0x0547, {"cmd": 7500, "payload": {"door_id": 2, "type": 1 | 4}}), GarageDoorState.OPEN),
+    ((0x0547, {"cmd": 7500, "payload": {"door_id": 2, "type": 2 | 4}}), GarageDoorState.OPENING),
+    (
+        (FrameType.PARAM_NOTIFY, _door_param("5")),
+        GarageDoorState.OPEN,
+    ),
+    (
+        (FrameType.PARAM_NOTIFY, _door_param("6")),
+        GarageDoorState.OPENING,
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    ("report", "after"),
+    _HOLD_REPORTS,
+    ids=[
+        "door-notify-open",
+        "door-notify-closed",
+        "other-notify-door-changed",
+        "other-notify-door-unchanged",
+        "param-door-changed",
+        "param-door-unchanged",
+    ],
+)
+async def test_a_cancelled_doors_moving_state_lasts_until_its_report(
+    garage: Station,
+    fake: FakeStation,
+    monkeypatch: pytest.MonkeyPatch,
+    report: tuple[int, dict[str, Any]],
+    after: GarageDoorState,
+) -> None:
+    monkeypatch.setattr(session_module, "PARAM_SETTLE", 30.0)
+    await _cancelled_while_moving(garage, fake)
+    events = _events(garage)
+    fake.send_json(*report)
+    await _notified(events, 1)  # door 1 changes, else door 2 opens
+    assert garage.garage_doors()[0].state is after
+    assert (1, after, GarageDoorSource.COMMAND) not in _doors(events)
+    if after is GarageDoorState.OPENING:
+        assert [e[0] for e in _doors(events)] == [2]
+    else:
+        assert _doors(events)[0][:2] == (1, after)
+
+
+async def test_a_cancel_before_the_command_is_taken_leaves_the_reported_state(
+    garage: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cancelled before the receipt: the door reads its report and a close of the closed
+    door sends nothing."""
+    events = _events(garage)
+    entered = asyncio.Event()
+
+    async def never_taken(*args: Any, **kwargs: Any) -> Any:
+        entered.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(garage.session, "async_run_recipe", never_taken)
+    task = asyncio.create_task(garage.async_open_garage_door(GARAGE_SN, 1))
+    async with asyncio.timeout(3):
+        await entered.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert garage.garage_doors()[0].state is GarageDoorState.CLOSED
+    assert await garage.async_close_garage_door(GARAGE_SN, 1) is GarageDoorState.CLOSED
+    assert _doors(events) == []
+
+
+async def test_a_later_command_that_is_not_taken_keeps_the_earlier_moving_state(
+    garage: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A refused close after a cancelled open: the open is still unconfirmed, so the door
+    reads opening."""
+    await _cancelled_while_moving(garage, fake)
+    events = _events(garage)
+    monkeypatch.setattr(fake, "doorbell_receipt_code", lambda: -1)
+    with pytest.raises(CommandRejectedError):
+        await garage.async_close_garage_door(GARAGE_SN, 1)
+    assert garage.garage_doors()[0].state is GarageDoorState.OPENING
+    assert _doors(events) == []
+
+
+async def test_a_new_state_while_a_later_command_is_sent_ends_the_earlier_moving_state(
+    garage: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A report that changes the door before the next command is taken ends the cancelled
+    command's moving state, though it does not end the new command's wait."""
+    monkeypatch.setattr(session_module, "PARAM_SETTLE", 30.0)
+    await _cancelled_while_moving(garage, fake)
+    events = _events(garage)
+    entered = asyncio.Event()
+
+    async def never_taken(*args: Any, **kwargs: Any) -> Any:
+        entered.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(garage.session, "async_run_recipe", never_taken)
+    task = asyncio.create_task(garage.async_close_garage_door(GARAGE_SN, 1))
+    async with asyncio.timeout(3):
+        await entered.wait()
+    fake.send_json(FrameType.PARAM_NOTIFY, _door_param("24"))  # door 1 unknown
+    await _notified(events, 1)
+    assert not task.done()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert garage.garage_doors()[0].state is GarageDoorState.UNKNOWN
+    assert _doors(events) == [(1, GarageDoorState.UNKNOWN, GarageDoorSource.P2P)]
+
+
+async def test_a_new_state_that_does_not_end_a_taken_commands_wait_keeps_it_moving(
+    garage: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(session_module, "PARAM_SETTLE", 30.0)
+    fake.garage_moves = False
+    events = _events(garage)
+    task = asyncio.create_task(garage.async_open_garage_door(GARAGE_SN, 1))
+    await _notified(events, 1)  # opening: taken
+    fake.send_json(FrameType.PARAM_NOTIFY, _door_param("20"))  # door 1 unknown, door 2 open
+    await _notified(events, 2)
+    assert garage.garage_doors()[0].state is GarageDoorState.OPENING
+    assert not task.done()
+    fake.send_json(0x0547, {"cmd": 7500, "payload": {"door_id": 1, "type": 1 | 4}})
+    async with asyncio.timeout(3):
+        assert await task is GarageDoorState.OPEN
+
+
+async def test_a_timeout_after_a_cancelled_command_falls_back_to_the_report(
+    garage: Station, fake: FakeStation
+) -> None:
+    await _cancelled_while_moving(garage, fake)
+    events = _events(garage)
+    with pytest.raises(DeviceTimeoutError):
+        await garage.async_close_garage_door(GARAGE_SN, 1, timeout=0.2)
+    assert garage.garage_doors()[0].state is GarageDoorState.CLOSED
+    assert _doors(events) == [
+        (1, GarageDoorState.CLOSING, GarageDoorSource.COMMAND),
+        (1, GarageDoorState.CLOSED, GarageDoorSource.P2P),
+    ]
+
+
+async def test_a_cancelled_operate_leaves_the_reported_state(
+    garage: Station, fake: FakeStation
+) -> None:
+    """An operate command shows no movement, so its cancel leaves the door unknown and the
+    next operate is sent."""
+    fake.params[0][7500] = fake.params[255][7500] = "16"  # door 1 unknown
+    await garage.async_update()
+    fake.garage_moves = False
+    task = asyncio.create_task(garage.async_open_garage_door(GARAGE_SN, 1, operate=True))
+    await _sent(fake)
+    await asyncio.sleep(0.1)  # the receipt is in: the command is taken
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert garage.garage_doors()[0].state is GarageDoorState.UNKNOWN
+    fake.garage_moves = True
+    assert await garage.async_open_garage_door(GARAGE_SN, 1, operate=True) is (GarageDoorState.OPEN)
+    assert [p["data"]["type"] for p in fake.doorbell_payloads] == [4, 4]
 
 
 async def test_a_pushed_dump_block_moves_the_lock_before_the_dump_completes(

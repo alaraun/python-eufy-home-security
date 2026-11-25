@@ -163,7 +163,8 @@ class GarageDoor:
     bound motor cannot be moved. ``sensor_calibrated`` is the sensor's calibration as the
     eufy app's door card reads it. ``state`` is the last reported state, or
     :attr:`GarageDoorState.OPENING` / ``CLOSING`` while a command of this client waits for
-    the next report.
+    the next report, and after a cancelled call whose command the device took, until the
+    door's next report.
     """
 
     device_sn: str

@@ -1347,7 +1347,7 @@ class Station:
         is shown while the wait goes on. No report within ``timeout`` seconds (default
         :data:`~.garage.GARAGE_CONFIRM_TIMEOUT`, the app's wait) raises
         ``DeviceTimeoutError``. A door already in the asked state returns at once; nothing
-        is sent.
+        is sent, unless a cancelled command still moves it (below).
 
         A door whose state is unknown raises ``DoorStateUnknownError`` unless ``operate``
         is set: then the app's operate command is sent, which runs the motor whichever way
@@ -1356,9 +1356,12 @@ class Station:
         Raises before anything is sent: ``UnsupportedError`` for a device without garage
         doors or a door without a bound motor, ``ValueError`` for another door number,
         ``DeviceBusyError`` while another door command of this client waits on the device
-        (to reverse a moving door, cancel the waiting call first; cancelling sends nothing
-        and the door reads its last reported state again). A refused command raises as
-        :meth:`~..p2p.session.StationSession.async_run_recipe` does
+        (to reverse a moving door, cancel the waiting call first). Cancelling sends nothing:
+        once the device took the open or close, the door reads opening or closing until a
+        report of it (its notify, or a report of a new state), and the next open or close
+        of that door is sent even where the last report is the asked state; cancelled
+        before the device took it, the door reads its last reported state. A refused
+        command raises as :meth:`~..p2p.session.StationSession.async_run_recipe` does
         (``CommandRejectedError`` and its subclasses).
         """
         return await self._garage.async_move(
