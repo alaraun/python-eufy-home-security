@@ -4144,11 +4144,13 @@ class Station:
         ``time_zone``, else the host's), in an hour that zone repeats as the reading
         nearer the event, and the days asked are the station's.
 
-        The answer is ``SETTLED`` (the row's end lies ``quiet`` or more in the past, as
-        :meth:`recording_settled` says), ``RECORDING`` (``retry_at``: the row's end plus
-        ``quiet``, or :data:`RECORDING_MATCH_RETRY` from now while it has no end; a row
-        that ended before the event, which only matches when no other row in the window
-        does, stays ``RECORDING``, asked again every :data:`RECORDING_MATCH_RETRY`, until
+        The answer is ``SETTLED`` (the row's end lies ``quiet`` or more before the listing
+        that read it began, as :meth:`recording_settled` says for that time: a listing
+        slower than ``quiet`` settles no row that grew while it ran), ``RECORDING``
+        (``retry_at``: the row's end plus ``quiet``, or :data:`RECORDING_MATCH_RETRY` from
+        now while it has no end or once that time has passed; a row that ended before the
+        event, which only matches when no other row in the window does, stays
+        ``RECORDING``, asked again every :data:`RECORDING_MATCH_RETRY`, until
         :data:`RECORDING_MATCH_GIVE_UP` after the event, since the event's own row may
         still be listed; then it is ``SETTLED``) or
         ``NOT_LISTED`` (``retry_at``: :data:`RECORDING_MATCH_RETRY` from now; ``offset_s``:

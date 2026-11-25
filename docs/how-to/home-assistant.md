@@ -2476,16 +2476,18 @@ its trigger frame. The library finds it:
   same look without waiting: a `DetectionRecording(state, record, retry_at, offset_s)`
   whose `state` is `SETTLED`, `RECORDING` (the row is listed, its clip may still grow) or
   `NOT_LISTED`, and `retry_at` when asking again can give another answer (None: it
-  cannot). `offset_s` is the matched row's start minus the event's time; for
-  `NOT_LISTED` the camera's nearest listed recording's, before or after the event (a
-  whole number of hours off shows the station's clock read in the wrong zone). For a
-  scheduler of its own instead of a waiting task, or to show the trigger frame before
-  the clip is done: fetch the frame at the first answer that has a `record` (on a
-  HomeBase 3 the trigger frame of a clip still recording was shown 5 s after the push;
-  not tried on a HomeBase 2), fetch it again if a later answer names another row
-  (another `ref`: the first was the camera's previous clip), and copy the clip at
-  `SETTLED`. This loop raises what the look raises; the waiting call is the one that
-  rides out a `CommunicationError`.
+  cannot). A row settles only by a listing that began `quiet` or more after its end, so
+  a listing slower than `quiet` (many pages) settles no row that grew while it ran; its
+  answer is due again a `RECORDING_MATCH_RETRY` later. `offset_s` is the matched row's
+  start minus the event's time; for `NOT_LISTED` the camera's nearest listed
+  recording's, before or after the event (a whole number of hours off shows the
+  station's clock read in the wrong zone). For a scheduler of its own instead of a
+  waiting task, or to show the trigger frame before the clip is done: fetch the frame at
+  the first answer that has a `record` (on a HomeBase 3 the trigger frame of a clip
+  still recording was shown 5 s after the push; not tried on a HomeBase 2), fetch it
+  again if a later answer names another row (another `ref`: the first was the camera's
+  previous clip), and copy the clip at `SETTLED`. This loop raises what the look raises;
+  the waiting call is the one that rides out a `CommunicationError`.
 
 ```python
 if station.needs_recording_match(event):

@@ -1871,10 +1871,9 @@ async def test_a_wait_takes_the_detections_own_row_over_the_clip_before_it(
 # ── the answer's clock and the predicate's edges ─────────────────────────────
 
 
-async def test_retry_at_counts_from_the_end_of_the_look(
-    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A listing that takes 3 s: the next look is due the retry after it ended."""
+def _ticking(monkeypatch: pytest.MonkeyPatch) -> list[datetime]:
+    """Set the station's clock to :data:`NOW`, moved on by assigning the returned list's
+    only item."""
     clock = [NOW]
 
     class Ticking(datetime, metaclass=_AnyDatetime):
@@ -1883,6 +1882,14 @@ async def test_retry_at_counts_from_the_end_of_the_look(
             return clock[0].astimezone(tz)
 
     monkeypatch.setattr(station_history, "datetime", Ticking)
+    return clock
+
+
+async def test_retry_at_counts_from_the_end_of_the_look(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A listing that takes 3 s: the next look is due the retry after it ended."""
+    clock = _ticking(monkeypatch)
     real = station.session.async_list_history
 
     async def slow(*args: Any, **kwargs: Any) -> list[HistoryRecord]:
@@ -1895,6 +1902,80 @@ async def test_retry_at_counts_from_the_end_of_the_look(
     found = await station.async_recording_for_detection(_detection(NOW - timedelta(seconds=20)))
     assert found.state is DetectionRecordingState.NOT_LISTED
     assert found.retry_at == NOW + timedelta(seconds=3 + RECORDING_MATCH_RETRY)
+
+
+async def test_a_slow_listing_settles_a_row_by_when_it_began(
+    host_utc: None, station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A two-page listing whose pages take half of ``quiet`` each, of a row whose end
+    grows with the clock: the row's end is read as of the listing's start, so neither its
+    own look nor a look sharing it (in flight, or just done) settles the row; each is due
+    again a retry after the listing ended."""
+    clock = _ticking(monkeypatch)
+    event = _whole(NOW, 60)
+    own = _at(event, SYNTHETIC.camera_sn, _dayed(event, 2000))
+    busy = [event - timedelta(seconds=n) for n in range(1, 61)]  # a 50-row page, then 11
+    fake.rows = [
+        own,
+        *(_at(s, SYNTHETIC.camera_sn, _dayed(s, 1000 - n)) for n, s in enumerate(busy)),
+    ]
+    answer = fake._answer_history
+
+    def growing(inner: dict[str, Any]) -> None:
+        own["end_time"] = clock[0].astimezone().strftime(FORMAT)
+        answer(inner)
+        clock[0] += timedelta(seconds=RECORDING_QUIET / 2)
+
+    monkeypatch.setattr(fake, "_answer_history", growing)
+    real = station.session.async_list_history
+    listed, joined = asyncio.Event(), asyncio.Event()
+
+    async def held(*args: Any, **kwargs: Any) -> list[HistoryRecord]:
+        rows = await real(*args, **kwargs)
+        listed.set()
+        await joined.wait()
+        return rows
+
+    monkeypatch.setattr(station.session, "async_list_history", held)
+    holder = asyncio.create_task(station.async_recording_for_detection(_detection(event)))
+    async with asyncio.timeout(5.0):
+        await listed.wait()
+    sharing = asyncio.create_task(
+        station.async_recording_for_detection(_detection(event + timedelta(seconds=1)))
+    )
+    for _ in range(5):
+        await asyncio.sleep(0)
+    joined.set()
+    answers = [*await asyncio.gather(holder, sharing)]
+    answers.append(await station.async_recording_for_detection(_detection(event)))
+    assert len(fake.history_queries) == 2
+    due = NOW + timedelta(seconds=RECORDING_QUIET + RECORDING_MATCH_RETRY)
+    assert [(a.state, a.retry_at) for a in answers] == [
+        (DetectionRecordingState.RECORDING, due)
+    ] * 3
+
+
+async def test_a_slow_lookup_by_id_settles_a_row_by_when_it_began(
+    host_utc: None, station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A row looked up by the event's ``record_id`` in a query that takes ``quiet``: its
+    end, read as of the query's start, does not settle it."""
+    clock = _ticking(monkeypatch)
+    started = _whole(NOW, 60)
+    record_id = _dayed(started, 4)
+    end = NOW.astimezone().strftime(FORMAT)
+    fake.rows = [_at(started, SYNTHETIC.camera_sn, record_id, end_time=end)]
+    real = station.session.async_history_record
+
+    async def slow(*args: Any, **kwargs: Any) -> HistoryRecord | None:
+        row = await real(*args, **kwargs)
+        clock[0] += timedelta(seconds=RECORDING_QUIET)
+        return row
+
+    monkeypatch.setattr(station.session, "async_history_record", slow)
+    found = await station.async_recording_for_detection(_detection(started, record_id=record_id))
+    due = NOW + timedelta(seconds=RECORDING_QUIET + RECORDING_MATCH_RETRY)
+    assert (found.state, found.retry_at) == (DetectionRecordingState.RECORDING, due)
 
 
 async def test_a_detection_just_after_midnight_lists_the_day_before_too(

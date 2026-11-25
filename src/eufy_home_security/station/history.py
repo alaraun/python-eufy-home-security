@@ -100,6 +100,9 @@ class _MatchClock:
     """When a detection's recording is looked at, and the bounds its answer follows."""
 
     now: datetime
+    """After the rows were listed: retries count from it."""
+    asked: datetime
+    """When the rows' listing began: a row's end is read as of then."""
     event_at: datetime | None
     retry: float
     give_up: float
@@ -136,13 +139,13 @@ class _MatchClock:
                     retry_at=retry_at,
                     offset_s=offset,
                 )
-        if ended is not None and (self.now - ended).total_seconds() >= self.quiet:
+        if ended is not None and (self.asked - ended).total_seconds() >= self.quiet:
             return DetectionRecording(
                 state=DetectionRecordingState.SETTLED, record=row, offset_s=offset
             )
         wanted = self.now + timedelta(seconds=self.retry)
-        if ended is not None:
-            wanted = ended + timedelta(seconds=self.quiet)
+        if ended is not None and ended + timedelta(seconds=self.quiet) > self.now:
+            wanted = ended + timedelta(seconds=self.quiet)  # a listing begun then settles it
         return DetectionRecording(
             state=DetectionRecordingState.RECORDING,
             record=row,
@@ -170,6 +173,8 @@ class _Look:
     """The oldest start it lists down to."""
     last_day: date
     """The newest day it lists."""
+    asked: datetime
+    """When it began."""
     rows: asyncio.Future[list[HistoryRecord]]
     """The rows it listed, or its error."""
     done_at: float | None = None
@@ -419,8 +424,9 @@ class StationHistory:
         )
         record_id = event.record_id
         if record_id and record_id_day(record_id) is not None:
+            asked = datetime.now(UTC)
             row = await self._station.session.async_history_record(record_id, timeout=timeout)
-            clock = _MatchClock(datetime.now(UTC), event_at, retry, give_up, quiet)
+            clock = _MatchClock(datetime.now(UTC), asked, event_at, retry, give_up, quiet)
             if row is not None and row.device_sn is not None and row.device_sn != device_sn:
                 raise RecordNotFoundError(
                     "the event's record_id names another camera's row", device_sn=device_sn
@@ -439,14 +445,14 @@ class StationHistory:
         )
         searches = self._searches.setdefault(device_sn, _Searches())
         floor = searches.floor(first, event_at + timedelta(seconds=give_up), asked)
-        rows = await self._shared_look(
+        rows, listed_from = await self._shared_look(
             searches,
-            _Look(floor, last_day, asyncio.get_running_loop().create_future()),
+            _Look(floor, last_day, asked, asyncio.get_running_loop().create_future()),
             first,
             fresh,
             lambda: self._camera_recordings(device_sn, floor, last_day, zone, timeout),
         )
-        clock = _MatchClock(datetime.now(UTC), event_at, retry, give_up, quiet)  # after it
+        clock = _MatchClock(datetime.now(UTC), listed_from, event_at, retry, give_up, quiet)
         listed = _timed_rows(rows, event_at, zone)
         # a row that started before the detection's own bound is never its recording
         timed = [c for c in listed if c.offset >= -give_up]
@@ -470,15 +476,15 @@ class StationHistory:
         since: datetime,
         fresh: float,
         listing: Callable[[], Awaitable[list[HistoryRecord]]],
-    ) -> list[HistoryRecord]:
-        """The camera's rows down to ``since`` and up to ``look``'s last day: from the
-        camera's last listing when it serves (see
+    ) -> tuple[list[HistoryRecord], datetime]:
+        """The camera's rows down to ``since`` and up to ``look``'s last day, and when
+        their listing began: from the camera's last listing when it serves (see
         :meth:`_Look.serves`), else from ``listing``, run as ``look`` and shared with
         the looks that come while it runs (its error too)."""
         while (last := searches.look) is not None and last.serves(since, look.last_day, fresh):
             await asyncio.wait((last.rows,))
             if not last.rows.cancelled():
-                return last.rows.result()
+                return last.rows.result(), last.asked
         searches.look = look
         try:
             rows = await listing()
@@ -491,7 +497,7 @@ class StationHistory:
         finally:
             if not look.rows.done():
                 look.rows.cancel()
-        return look.rows.result()
+        return look.rows.result(), look.asked
 
     async def _camera_recordings(
         self,
