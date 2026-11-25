@@ -61,6 +61,9 @@ PUBLISH_TIMEOUT_SECONDS: Final = 15.0
 """How long a publish waits for the broker's acknowledgement."""
 REQUEST_TIMEOUT_SECONDS: Final = 20.0
 """How long :meth:`EufyMqttClient.async_request` waits for the device's answer."""
+CONNECT_SETTLE_SECONDS: float = 30.0
+"""How long a stop or restart waits for a connect step it interrupts: the name lookup, the
+socket connect and the TLS handshake (5 s each at most) and the CONNACK wait (15 s)."""
 _QOS: Final = 1
 _SUBACK_FAILURE: Final = 0x80
 
@@ -126,7 +129,8 @@ class EufyMqttClient:
         self._run_task: asyncio.Task[None] | None = None
         self._connection_task: asyncio.Task[bool] | None = None
         self._stopping = False
-        self._bad_messages = LogThrottle()
+        self._throttle = LogThrottle()
+        """Repeated lines: dropped messages, failing listeners, connect failures."""
 
     # ── state ────────────────────────────────────────────────────────────────
 
@@ -172,11 +176,14 @@ class EufyMqttClient:
         """
         if self._run_task is not None:
             raise RuntimeError("the MQTT client is already started")
-        self._stopping = False
         self._devices = await self._select(devices)
         if not self._devices and not connect_without_devices:
             _LOGGER.debug("no MQTT device: no broker connection")
             return
+        self._start_task()
+
+    def _start_task(self) -> None:
+        self._stopping = False
         self._run_task = asyncio.create_task(self._run(), name="eufy-mqtt")
 
     async def async_update_devices(self, devices: Iterable[CloudDevice]) -> None:
@@ -187,7 +194,7 @@ class EufyMqttClient:
         self._devices = selected
         if self._run_task is None:
             if selected:
-                self._run_task = asyncio.create_task(self._run(), name="eufy-mqtt")
+                self._start_task()
             return
         if not selected:
             await self.async_stop()
@@ -204,7 +211,7 @@ class EufyMqttClient:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
-        self._fail_waiters(CommunicationError("the MQTT client stopped"))
+        self._fail_waiters("the MQTT client stopped")
 
     async def async_wait_connected(self, timeout: float) -> None:
         """Wait until the broker connection is up; :class:`CommunicationError` when it is
@@ -238,12 +245,19 @@ class EufyMqttClient:
                 if current is not None and current.cancelling():
                     raise
             except Exception:
-                _LOGGER.exception("MQTT connection ended unexpectedly; reconnecting")
+                if self._throttle.should_log("unexpected"):
+                    _LOGGER.exception("MQTT connection ended unexpectedly; reconnecting")
+                else:
+                    _LOGGER.debug("MQTT connection ended unexpectedly; reconnecting", exc_info=True)
             finally:
+                lost = self._client is not None and not self._stopping
                 self._connection_task = None
                 self._client = None
                 self._connected.clear()
                 self._subscribed.clear()
+                if lost:
+                    # The answers of an ended connection never arrive.
+                    self._fail_waiters("MQTT connection lost")
             if established:
                 delay = RECONNECT_MIN_SECONDS
                 await self._count_loss()
@@ -253,6 +267,14 @@ class EufyMqttClient:
                 async with asyncio.timeout(delay):
                     await self._wake.wait()
             delay = next_reconnect_delay(delay)
+
+    def _log_repeated(self, key: str, msg: str, *args: object) -> None:
+        """Log a line the retry loop repeats: a WARNING once per :class:`LogThrottle`
+        interval and key, DEBUG in between."""
+        if self._throttle.should_log(key):
+            _LOGGER.warning(msg, *args)
+        else:
+            _LOGGER.debug(msg, *args)
 
     async def _count_loss(self) -> None:
         self._losses += 1
@@ -270,7 +292,7 @@ class EufyMqttClient:
             )
             context = await async_tls_context(certificate, cadata=self._server_ca_pem)
         except EufySecurityError as err:
-            _LOGGER.warning("MQTT certificate unavailable: %s", err)
+            self._log_repeated("certificate", "MQTT certificate unavailable: %s", err)
             return False
         self._certificate = certificate
         self._client_id = self._cloud.mqtt_client_id(certificate, self._region)
@@ -287,7 +309,8 @@ class EufyMqttClient:
         )
         established = False
         try:
-            async with client:
+            await _open(client)
+            try:
                 established = True
                 self._client = client
                 self._connected.set()
@@ -302,9 +325,11 @@ class EufyMqttClient:
                     subscriber.cancel()
                     with contextlib.suppress(asyncio.CancelledError):
                         await subscriber
+            finally:
+                await client.__aexit__(None, None, None)
         except mqtt.MqttError as err:
             state = "lost" if established else "failed"
-            _LOGGER.warning("MQTT broker connection %s: %s", state, err)
+            self._log_repeated(state, "MQTT broker connection %s: %s", state, err)
         return established
 
     async def _keep_subscribed(self, client: aiomqtt.Client) -> None:
@@ -337,7 +362,7 @@ class EufyMqttClient:
         try:
             message = parse_message(topic, data)
         except EufySecurityError as err:
-            if self._bad_messages.should_log(topic):
+            if self._throttle.should_log(("dropped", topic)):
                 _LOGGER.debug("MQTT message dropped (%s): %s", _topic_device(topic), err)
             return
         for match, future in list(self._waiters.get(message.device_sn, [])):
@@ -345,13 +370,19 @@ class EufyMqttClient:
                 future.set_result(message)
                 break
         for listener in list(self._listeners):
-            listener(message)
+            try:
+                listener(message)
+            except Exception:
+                # A consumer's bug must not end the connection nor starve the other listeners.
+                if self._throttle.should_log(("listener", id(listener))):
+                    _LOGGER.exception("MQTT message listener %r failed", listener)
 
-    def _fail_waiters(self, error: EufySecurityError) -> None:
-        for waiters in self._waiters.values():
+    def _fail_waiters(self, reason: str) -> None:
+        """End every pending request with a :class:`CommunicationError` naming ``reason``."""
+        for device_sn, waiters in self._waiters.items():
             for _match, future in waiters:
                 if not future.done():
-                    future.set_exception(error)
+                    future.set_exception(CommunicationError(reason, device_sn=device_sn))
         self._waiters.clear()
 
     # ── commands ─────────────────────────────────────────────────────────────
@@ -452,6 +483,36 @@ class EufyMqttClient:
                 waiters.remove(entry)
             if not waiters:
                 self._waiters.pop(device_sn, None)
+
+
+async def _open(client: aiomqtt.Client) -> None:
+    """Connect ``client``. The connect step runs in an executor thread that a cancel cannot
+    stop: a cancel waits for it (:data:`CONNECT_SETTLE_SECONDS` at most), closes the
+    connection it opened, then propagates, so no connection outlives a stop or a restart."""
+    connect = asyncio.ensure_future(client.__aenter__())
+    try:
+        await asyncio.shield(connect)
+    except asyncio.CancelledError:
+        if await _settle(connect) and not connect.cancelled() and connect.exception() is None:
+            await _settle(asyncio.ensure_future(client.__aexit__(None, None, None)))
+        elif not connect.done():
+            _LOGGER.warning(
+                "MQTT connect step still running after %g s; leaving it", CONNECT_SETTLE_SECONDS
+            )
+        raise
+
+
+async def _settle(future: asyncio.Future[Any]) -> bool:
+    """Wait for ``future`` (:data:`CONNECT_SETTLE_SECONDS` at most, through further cancels);
+    whether it ended. Its exception, if any, counts as retrieved."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + CONNECT_SETTLE_SECONDS
+    while not future.done() and (remaining := deadline - loop.time()) > 0:
+        with contextlib.suppress(asyncio.CancelledError):
+            await asyncio.wait({future}, timeout=remaining)
+    if future.done() and not future.cancelled():
+        future.exception()
+    return future.done()
 
 
 def _topic_device(topic: str) -> str:

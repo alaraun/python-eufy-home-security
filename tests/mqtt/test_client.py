@@ -7,8 +7,10 @@ Nothing here reaches a real broker: the client connects to :class:`FakeMqttBroke
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import functools
 import json
+import logging
 import subprocess
 import sys
 from collections.abc import AsyncIterator, Callable
@@ -289,6 +291,32 @@ async def test_a_request_without_an_answer_times_out_naming_the_device(rig: Rig)
     with pytest.raises(DeviceTimeoutError, match=r"0\.2 s") as caught:
         await rig.client.async_request(LOCK_SN, "ask", timeout=0.2)
     assert caught.value.device_sn == LOCK_SN
+    with pytest.raises(UnsupportedError):
+        await rig.client.async_request(SYNTHETIC.camera_sn, "ask", timeout=0.2)
+    assert rig.client._waiters == {}  # nothing kept per serial once a request ended
+
+
+async def test_one_answer_ends_only_the_first_request_it_matches(rig: Rig) -> None:
+    await rig.client.async_start([_lock()])
+    await rig.client.async_wait_connected(5)
+    await _until(lambda: len(rig.client.topics) == 1)
+
+    def any_report(message: MqttMessage) -> bool:
+        return (message.trans or "").startswith("report")
+
+    first = asyncio.create_task(rig.client.async_request(LOCK_SN, "a", match=any_report, timeout=5))
+    await _until(lambda: len(rig.broker.published) == 1)
+    second = asyncio.create_task(
+        rig.client.async_request(LOCK_SN, "b", match=any_report, timeout=5)
+    )
+    await _until(lambda: len(rig.broker.published) == 2)
+    topic = response_topic("T85D0", LOCK_SN)
+    await rig.broker.send(topic, _answer({"msg_seq": 50}, "report-1"))
+    assert (await first).trans == "report-1"
+    await asyncio.sleep(0.05)
+    assert not second.done()
+    await rig.broker.send(topic, _answer({"msg_seq": 51}, "report-2"))
+    assert (await second).trans == "report-2"
 
 
 async def test_stop_ends_a_pending_request_with_a_communication_error(rig: Rig) -> None:
@@ -300,6 +328,19 @@ async def test_stop_ends_a_pending_request_with_a_communication_error(rig: Rig) 
     async with asyncio.timeout(2):
         with pytest.raises(CommunicationError, match="stopped"):
             await task
+
+
+async def test_a_lost_connection_ends_a_pending_request_at_once(rig: Rig) -> None:
+    await rig.client.async_start([_lock()])
+    await rig.client.async_wait_connected(5)
+    task = asyncio.create_task(rig.client.async_request(LOCK_SN, "ask", timeout=10))
+    await _until(lambda: len(rig.broker.published) == 1)
+    rig.broker.drop_connections()
+    async with asyncio.timeout(2):
+        with pytest.raises(CommunicationError, match="connection lost") as caught:
+            await task
+    assert not isinstance(caught.value, DeviceTimeoutError)
+    assert caught.value.device_sn == LOCK_SN
 
 
 async def test_listeners_get_every_message_until_removed(rig: Rig) -> None:
@@ -318,6 +359,30 @@ async def test_listeners_get_every_message_until_removed(rig: Rig) -> None:
     await asyncio.sleep(0.1)
     assert len(seen) == 1
     assert rig.client.connected
+
+
+async def test_a_raising_listener_keeps_the_connection_and_the_other_listeners(
+    rig: Rig, caplog: pytest.LogCaptureFixture
+) -> None:
+    def broken(_message: MqttMessage) -> None:
+        raise RuntimeError("consumer bug")
+
+    seen: list[MqttMessage] = []
+    rig.client.add_listener(broken)
+    rig.client.add_listener(seen.append)
+    await rig.client.async_start([_lock()])
+    await rig.client.async_wait_connected(5)
+    await _until(lambda: len(rig.client.topics) == 1)
+    topic = response_topic("T85D0", LOCK_SN)
+    await rig.broker.send(topic, _answer({"msg_seq": 3}, "one"))
+    await rig.broker.send(topic, _answer({"msg_seq": 4}, "two"))
+    await _until(lambda: len(seen) == 2)
+    await asyncio.sleep(0.1)
+    assert len(rig.broker.connects) == 1
+    assert rig.client.connected
+    failures = [r for r in caplog.records if "listener" in r.getMessage()]
+    assert len(failures) == 1  # logged once, the repeat throttled
+    assert failures[0].exc_info is not None
 
 
 # ── losses, reconnects, certificate changes ─────────────────────────────────
@@ -353,6 +418,97 @@ async def test_a_refused_connect_is_retried_and_is_no_loss(rig: Rig) -> None:
     assert rig.registers() == 1
 
 
+def _warnings(caplog: pytest.LogCaptureFixture, text: str) -> list[logging.LogRecord]:
+    return [
+        r
+        for r in caplog.records
+        if r.name == client_module.__name__ and r.levelno >= logging.WARNING and text in r.msg
+    ]
+
+
+async def test_repeated_connect_failures_warn_once(
+    rig: Rig, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.DEBUG, logger=client_module.__name__)
+    rig.broker.connack_code = 5
+    await rig.client.async_start([_lock()])
+    await _until(lambda: len(rig.broker.connects) >= 3)
+    assert len(_warnings(caplog, "connection %s")) == 1
+    retries = [r for r in caplog.records if "connection %s" in r.msg]
+    assert len(retries) >= 2  # the repeats stay at DEBUG
+
+
+async def test_repeated_certificate_failures_warn_once(
+    rig: Rig, caplog: pytest.LogCaptureFixture
+) -> None:
+    rig.cloud.call_errors.extend([CommunicationError("cloud down")] * 3)
+    await rig.client.async_start([_lock()])
+    await _until(lambda: rig.registers() >= 3)
+    assert len(_warnings(caplog, "certificate unavailable")) == 1
+
+
+async def test_an_unexpected_error_is_logged_once_with_its_traceback_and_retried(
+    rig: Rig, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    attempts: list[object] = []
+
+    async def broken_context(*args: object, **kwargs: object) -> None:
+        attempts.append(args)
+        raise RuntimeError("bug")
+
+    monkeypatch.setattr(client_module, "async_tls_context", broken_context)
+    await rig.client.async_start([_lock()])
+    await _until(lambda: len(attempts) >= 3)
+    (record,) = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert record.exc_info is not None
+
+
+async def _gap_before_connect(rig: Rig, count: int) -> float:
+    """Seconds from now until the broker has seen ``count`` CONNECTs."""
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    await _until(lambda: len(rig.broker.connects) >= count)
+    return loop.time() - started
+
+
+async def test_an_established_connection_resets_the_back_off(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(client_module, "RECONNECT_MIN_SECONDS", 0.1)
+    monkeypatch.setattr(client_module, "RECONNECT_MAX_SECONDS", 1.6)
+    rig.broker.connack_code = 5
+    await rig.client.async_start([_lock()])
+    await _until(lambda: len(rig.broker.connects) >= 3)  # waits 0.1, 0.2; next 0.4
+    rig.broker.connack_code = 0
+    await rig.client.async_wait_connected(5)  # the back-off stands at 0.8 s now
+    await _until(lambda: len(rig.client.topics) == 1)
+    rig.broker.drop_connections()
+    assert await _gap_before_connect(rig, 5) < 0.5
+
+
+async def test_a_restart_reconnects_at_once_and_keeps_the_back_off(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(client_module, "RECONNECT_MIN_SECONDS", 0.6)
+    monkeypatch.setattr(client_module, "RECONNECT_MAX_SECONDS", 4.8)
+    await rig.client.async_start([_lock()])
+    await _until(lambda: len(rig.client.topics) == 1)
+    rig.broker.connack_code = 5
+    await rig.client.async_update_devices([_lock(), _lock(LOCK2_SN, "T85L0")])
+    assert await _gap_before_connect(rig, 2) < 0.4  # no back-off before it
+    assert 0.4 < await _gap_before_connect(rig, 3) < 1.0  # the first wait, not doubled
+
+
+async def test_a_cancel_from_outside_ends_the_background_task(rig: Rig) -> None:
+    await rig.client.async_start([_lock()])
+    await rig.client.async_wait_connected(5)
+    (task,) = [t for t in asyncio.all_tasks() if t.get_name() == "eufy-mqtt"]
+    task.cancel()  # as an event loop shutting down does
+    async with asyncio.timeout(2):
+        await asyncio.wait({task})
+    assert task.cancelled()
+
+
 async def test_a_changed_device_set_reconnects_with_a_new_certificate(rig: Rig) -> None:
     await rig.client.async_start([_lock()])
     await _until(lambda: len(rig.broker.subscriptions) == 1)
@@ -374,6 +530,28 @@ async def test_the_same_device_set_keeps_the_connection(rig: Rig) -> None:
     assert rig.registers() == 1
 
 
+async def test_a_device_set_back_after_none_connects_again(rig: Rig) -> None:
+    await rig.client.async_start([_lock()])
+    await rig.client.async_wait_connected(5)
+    await rig.client.async_update_devices([CAMERA])  # no MQTT device left: disconnects
+    assert not rig.client.connected
+    await asyncio.sleep(0.2)
+    assert rig.broker.connected_clients == []
+    assert len(rig.broker.connects) == 1
+    await rig.client.async_update_devices([_lock()])
+    await rig.client.async_wait_connected(5)
+    assert len(rig.broker.connects) == 2
+
+
+async def test_a_start_after_a_stop_connects_again(rig: Rig) -> None:
+    await rig.client.async_start([_lock()])
+    await rig.client.async_wait_connected(5)
+    await rig.client.async_stop()
+    await rig.client.async_start([_lock()])
+    await rig.client.async_wait_connected(5)
+    assert len(rig.broker.connects) == 2
+
+
 async def test_stop_disconnects_and_ends_its_task(rig: Rig) -> None:
     await rig.client.async_start([_lock()])
     await rig.client.async_wait_connected(5)
@@ -382,6 +560,79 @@ async def test_stop_disconnects_and_ends_its_task(rig: Rig) -> None:
     assert not rig.client.connected
     names = {t.get_name() for t in asyncio.all_tasks()}
     assert not any(name.startswith("eufy-mqtt") for name in names)
+
+
+class _SlowProxy:
+    """A TCP proxy to the broker that holds each new connection ``delay`` seconds, so the
+    client's connect step is still running when the test stops or restarts it."""
+
+    def __init__(self, target: int, delay: float) -> None:
+        self._target, self._delay = target, delay
+        self._server: asyncio.Server | None = None
+        self._tasks: set[asyncio.Task[None]] = set()
+        self.port = 0
+
+    async def __aenter__(self) -> _SlowProxy:
+        self._server = await asyncio.start_server(self._serve, "127.0.0.1", 0)
+        self.port = self._server.sockets[0].getsockname()[1]
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        assert self._server is not None
+        self._server.close()
+        for task in list(self._tasks):
+            task.cancel()
+        await asyncio.gather(*self._tasks, return_exceptions=True)
+        await self._server.wait_closed()
+
+    async def _serve(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        task = asyncio.current_task()
+        assert task is not None
+        self._tasks.add(task)
+        upstream: asyncio.StreamWriter | None = None
+        try:
+            await asyncio.sleep(self._delay)
+            up_reader, upstream = await asyncio.open_connection("127.0.0.1", self._target)
+            await asyncio.gather(_pipe(reader, upstream), _pipe(up_reader, writer))
+        finally:
+            for stream in (writer, upstream):
+                if stream is not None:
+                    stream.transport.abort()
+            self._tasks.discard(task)
+
+
+async def _pipe(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    with contextlib.suppress(ConnectionError):
+        while data := await reader.read(65536):
+            writer.write(data)
+            await writer.drain()
+    writer.transport.abort()
+
+
+async def test_a_stop_during_the_connect_step_leaves_no_connection(rig: Rig) -> None:
+    async with _SlowProxy(rig.broker.port, 0.5) as proxy:
+        rig.client._port = proxy.port
+        await rig.client.async_start([_lock()])
+        await asyncio.sleep(0.2)  # the connect step waits on the proxy
+        await rig.client.async_stop()
+        await _until(lambda: rig.broker.connected_clients == [], 1.0)
+        await asyncio.sleep(0.5)
+        assert rig.broker.connected_clients == []
+        assert not rig.client.connected
+    names = {t.get_name() for t in asyncio.all_tasks()}
+    assert not any(name.startswith("eufy-mqtt") for name in names)
+
+
+async def test_a_restart_during_the_connect_step_keeps_one_connection(rig: Rig) -> None:
+    async with _SlowProxy(rig.broker.port, 0.5) as proxy:
+        rig.client._port = proxy.port
+        await rig.client.async_start([_lock()])
+        await asyncio.sleep(0.2)  # the connect step waits on the proxy
+        await rig.client.async_update_devices([_lock(), _lock(LOCK2_SN, "T85L0")])
+        await _until(lambda: len(rig.client.topics) == 2)
+        await asyncio.sleep(0.3)
+        assert len(rig.broker.connected_clients) == 1
+        await rig.client.async_stop()
 
 
 # ── the optional dependency ──────────────────────────────────────────────────
