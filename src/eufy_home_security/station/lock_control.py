@@ -286,8 +286,7 @@ class StationLockControl:
                     )
                 )
             return
-        if report.state_code is not None:
-            self._locks.on_report(serial, report.state_code)
+        self._locks.on_report(serial, report.state_code)
 
     # ── commands ────────────────────────────────────────────────────────────
 

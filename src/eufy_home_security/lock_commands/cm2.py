@@ -313,12 +313,14 @@ def parse_on_off_reply(answer: Mapping[str, object], request: Cm2Request) -> Loc
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class LockStatusReport:
-    """A lock's status report: its code (0: a status) and, for code 0, the lock-state
-    code (:data:`~eufy_home_security.devices.locks.CODE_STATES`) and the battery level."""
+    """A lock's status report: its code (0: a status; another refuses the command), the
+    lock-state code (:data:`~eufy_home_security.devices.locks.CODE_STATES`) and the battery
+    level, each entry 0 when missing, as the eufy app reads them. Only a code-0 report
+    states the lock's state."""
 
     code: int
-    state_code: int | None
-    battery: int | None
+    state_code: int
+    battery: int
 
 
 def _entry(body: bytes, tag: int) -> int:
@@ -359,8 +361,6 @@ def parse_status_report(
     if (frame.function_type, frame.command) != (FUNCTION_TYPE, STATUS_COMMAND):
         return None
     body = _open_body(frame, answer, serial=serial, user_id=user_id, hkdf=hkdf)
-    if body[0] != 0:
-        return LockStatusReport(code=body[0], state_code=None, battery=None)
     return LockStatusReport(
-        code=0, state_code=_entry(body, _TAG_STATE), battery=_entry(body, _TAG_BATTERY)
+        code=body[0], state_code=_entry(body, _TAG_STATE), battery=_entry(body, _TAG_BATTERY)
     )

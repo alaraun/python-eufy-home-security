@@ -144,8 +144,6 @@ class MqttLocks:
                     )
                 )
             return
-        if report.state_code is None:
-            return
         self._take(message.device_sn, report.state_code)
 
     def _take(self, device_sn: str, state_code: int) -> None:

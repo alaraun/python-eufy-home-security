@@ -185,7 +185,9 @@ acknowledgement alone never counts. In order:
    unlocked/locked, or another) raises `CommandRejectedError(code)`. A -151 followed by
    neither an answer nor a resend within the wait raises `CommandRejectedError(-151)`.
 4. **The state**: the asked state from any source (the lock's status report, `0x4A` in the
-   1940 through data; a parameter dump or notify; a push) returns it, also when it comes
+   1940 through data: a code byte, then `A1` the battery level and `A2` the lock-state code,
+   a missing entry read as 0 as the app reads it; a parameter dump or notify; a push)
+   returns it, also when it comes
    before the lock's answer; `jammed` or
    `intermediate` raises `LockNotMovedError` (`err.state`); a status report with a non-zero
    code raises `CommandRejectedError`; another state keeps the wait, so a

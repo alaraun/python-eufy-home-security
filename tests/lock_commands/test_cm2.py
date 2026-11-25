@@ -453,10 +453,17 @@ def test_status_report_entries_in_any_order_and_missing_ones_read_0() -> None:
     assert report == cm2.LockStatusReport(code=0, state_code=7, battery=0)
 
 
-def test_status_report_with_a_non_zero_code_carries_no_state() -> None:
+def test_status_report_with_a_non_zero_code_keeps_its_code() -> None:
     body = bytes([2, 0xA1, 1, 50, 0xA2, 1, 4])
     report = cm2.parse_status_report(_report(body), serial=SERIAL, user_id=USER_ID)
-    assert report == cm2.LockStatusReport(code=2, state_code=None, battery=None)
+    assert report == cm2.LockStatusReport(code=2, state_code=4, battery=50)
+
+
+def test_status_report_without_a_state_entry_reads_the_initial_code() -> None:
+    """A code-0 report without its state entry reads state code 0, as the app reads it."""
+    body = bytes([0, 0xA1, 1, 60])
+    report = cm2.parse_status_report(_report(body), serial=SERIAL, user_id=USER_ID)
+    assert report == cm2.LockStatusReport(code=0, state_code=0, battery=60)
 
 
 def test_status_report_entry_with_a_backward_length_stops_the_scan() -> None:
