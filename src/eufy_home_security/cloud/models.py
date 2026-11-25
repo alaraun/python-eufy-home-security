@@ -13,7 +13,7 @@ from ..devices.command_types import APK_COMMAND_TYPES
 from ..devices.model_settings import product_code_of
 from ..devices.types import DeviceModel, model_for_serial, product_name, serial_prefix
 from ..exceptions import CipherUnusableError, CloudApiError, EmptyResponseError, ProtocolError
-from .const import OTA_NO_UPGRADE_CODE, OTA_ROM_PATH
+from .const import CATEGORY, OTA_NO_UPGRADE_CODE, OTA_ROM_PATH
 
 type DeviceSource = Literal["house", "security"]
 type KeyState = Literal["absent", "usable", "unusable"]
@@ -365,6 +365,20 @@ class CloudDevice:
             return ()
 
     @property
+    def bind_time(self) -> int:
+        """``bind_time``: when the device was paired (epoch s); 0 when absent or no number,
+        as the eufy app reads it. It tells a re-paired device from its earlier pairing."""
+        return _int_or_none(self.raw.get("bind_time")) or 0
+
+    @property
+    def category(self) -> str:
+        """``category``: the app family the device belongs to (``eufy_security``,
+        ``eufy_care``, ``eufy_life`` …); :data:`~.const.CATEGORY` when the entry has none,
+        as the eufy app reads it."""
+        value = self.raw.get("category")
+        return value if isinstance(value, str) else CATEGORY
+
+    @property
     def is_standalone(self) -> bool:
         """True for a device that is its own station and also the device itself (a
         standalone camera), as opposed to a hub.
@@ -707,6 +721,8 @@ CACHED_DEVICE_FIELDS: Final = (
     "app_conn",  # rendezvous_servers: how a battery station is woken
     "device_new_pn",  # the product code that keys a model's settings
     "time_zone",  # a station's time zone setting
+    "bind_time",  # the MQTT device set's key
+    "category",  # which app family (and MQTT selection) the device belongs to
     REGION_KEY,
     SOURCE_KEY,
 )

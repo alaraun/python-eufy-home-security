@@ -305,6 +305,8 @@ _FULL_ENTRY = {
     "app_conn": "EBGCEBGCEBGC",
     "device_new_pn": "T8170",
     "time_zone": "UTC0|1.1",
+    "bind_time": 1700000000,
+    "category": "eufy_care",
     "member": {
         "admin_user_id": "owner-id",
         "member_type": 2,
@@ -345,11 +347,30 @@ def test_device_cache_entry_keeps_exactly_what_the_model_reads() -> None:
         "rendezvous_servers",
         "model_id",
         "model_name",
+        "bind_time",
+        "category",
     ):
         assert getattr(full, prop) == getattr(cached, prop), prop
+    assert (cached.bind_time, cached.category) == (1700000000, "eufy_care")
     assert cached.raw["app_conn"] == _FULL_ENTRY["app_conn"]
     assert cached.raw["device_new_pn"] == _FULL_ENTRY["device_new_pn"]
     assert cached.region == "eu"
+
+
+@pytest.mark.parametrize(
+    ("entry", "bind_time", "category"),
+    [
+        ({}, 0, "eufy_security"),
+        ({"bind_time": "1700000001", "category": ""}, 1700000001, ""),
+        ({"bind_time": None, "category": None}, 0, "eufy_security"),
+        ({"bind_time": "soon", "category": "eufy_pet"}, 0, "eufy_pet"),
+    ],
+)
+def test_bind_time_and_category_default_as_the_app_reads_them(
+    entry: dict[str, object], bind_time: int, category: str
+) -> None:
+    device = CloudDevice.from_api({"device_sn": "T85D0P2000054321", "device_type": 202, **entry})
+    assert (device.bind_time, device.category) == (bind_time, category)
 
 
 def test_device_cache_entry_drops_the_params_snapshot_unless_asked() -> None:
