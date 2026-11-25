@@ -16,7 +16,7 @@ from typing import Final
 from .._logging import redact_serial
 from ..cloud.models import CloudDevice
 from ..devices import model_settings
-from ..exceptions import ModelDataError
+from ..exceptions import ModelDataError, UnsupportedError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,6 +46,18 @@ def topic_product_code(device: CloudDevice) -> str | None:
     """The product code of ``device`` as its MQTT topics name it: the entry's
     ``device_new_pn``, else the product its serial names."""
     return model_settings.product_code_of(device.raw.get("device_new_pn"), device.device_sn)
+
+
+def topic_code(device: CloudDevice) -> str:
+    """The product code an MQTT device's topics name (:func:`topic_product_code`), which
+    every device :func:`is_mqtt_device` selects has; :class:`UnsupportedError` without one."""
+    code = topic_product_code(device)
+    if code is None:
+        raise UnsupportedError(
+            f"{redact_serial(device.device_sn)} names no product: no MQTT topic",
+            device_sn=device.device_sn,
+        )
+    return code
 
 
 def is_mqtt_device(device: CloudDevice) -> bool:

@@ -14,6 +14,7 @@ from .selection import (
     is_mqtt_device,
     mqtt_devices,
     supports_mqtt,
+    topic_code,
     topic_product_code,
 )
 
@@ -24,5 +25,6 @@ __all__ = [
     "is_mqtt_device",
     "mqtt_devices",
     "supports_mqtt",
+    "topic_code",
     "topic_product_code",
 ]

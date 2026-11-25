@@ -11,13 +11,14 @@ import pytest
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.devices import model_settings
 from eufy_home_security.devices.model_settings import bundled_codes, settings_of
-from eufy_home_security.exceptions import ModelDataError
+from eufy_home_security.exceptions import ModelDataError, UnsupportedError
 from eufy_home_security.mqtt import (
     SUPPORT_PROPERTY,
     device_key,
     is_mqtt_device,
     mqtt_devices,
     supports_mqtt,
+    topic_code,
     topic_product_code,
 )
 
@@ -100,6 +101,15 @@ def test_the_product_code_comes_from_the_entry_before_the_serial() -> None:
     assert is_mqtt_device(by_entry)
     assert is_mqtt_device(by_serial)
     assert not is_mqtt_device(_device("T8030P2000054321"))
+
+
+def test_the_topic_code_of_a_device_without_a_product_is_unsupported() -> None:
+    assert topic_code(_device("T8030P2000054321", device_new_pn="T85D0")) == "T85D0"
+    nameless = _device("X0000P2000054321")
+    assert topic_product_code(nameless) is None
+    with pytest.raises(UnsupportedError) as caught:
+        topic_code(nameless)
+    assert caught.value.device_sn == "X0000P2000054321"
 
 
 def test_mqtt_devices_keeps_the_order_of_the_list() -> None:

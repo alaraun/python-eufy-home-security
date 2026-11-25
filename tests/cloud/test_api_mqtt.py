@@ -257,16 +257,20 @@ async def test_a_failed_first_fetch_raises(
 
 
 async def test_a_dropped_certificate_is_fetched_again_for_the_same_set(
-    fake_mega: FakeMega, cache: SessionCache, pki: MqttTestPki
+    fake_mega: FakeMega, pki: MqttTestPki
 ) -> None:
     fake_mega.mqtt_answer = pki.register_answer()
+    store = MemoryStore()
     with aioresponses() as mock:
         fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
-            api = await _api(session, cache)
+            api = await _api(session, SessionCache(store, SYNTHETIC.email))
             await api.async_mqtt_certificate(_KEYS)
             await api.async_drop_mqtt_certificate()
-            assert cache.mqtt_certificate("eu") is None
+            # Stored at once: a restart does not bring the dropped certificate back.
+            restarted = SessionCache(store, SYNTHETIC.email)
+            await restarted.async_load()
+            assert restarted.mqtt_certificate("eu") is None
             await api.async_mqtt_certificate(_KEYS)
     assert await _issue_count(fake_mega) == 2
 

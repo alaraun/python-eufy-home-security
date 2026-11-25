@@ -36,7 +36,7 @@ from .envelope import (
     request_topic,
     response_topic,
 )
-from .selection import device_key, mqtt_devices, topic_product_code
+from .selection import device_key, mqtt_devices, topic_code
 from .tls import async_tls_context
 
 if TYPE_CHECKING:
@@ -370,7 +370,7 @@ class EufyMqttClient:
         """Subscribe every wanted answer topic; ask again for the refused ones."""
         while True:
             wanted = {
-                response_topic(topic_product_code(d) or d.device_sn[:5], d.device_sn)
+                response_topic(topic_code(d), d.device_sn)
                 for d in self._devices.values()
                 if self._subscribe is None or d.device_sn in self._subscribe
             }
@@ -470,9 +470,9 @@ class EufyMqttClient:
             need_ack=need_ack,
             sess_id=sess_id,
         )
-        code = topic_product_code(device) or device_sn[:5]
+        topic = request_topic(topic_code(device), device_sn)
         try:
-            await client.publish(request_topic(code, device_sn), body, qos=_QOS, retain=False)
+            await client.publish(topic, body, qos=_QOS, retain=False)
         except self._aiomqtt.MqttError as err:
             raise CommunicationError(
                 f"MQTT publish to {redact_serial(device_sn)} failed: {err}", device_sn=device_sn

@@ -337,7 +337,7 @@ def mqtt_account(cloud: EufyCloudApi) -> EufyMqttAccount:
 async def cmd_mqtt(ctx: Context) -> int:
     """List the account's MQTT devices; with ``--connect``, fetch the certificate, connect,
     subscribe their answer topics and listen, never publishing anything."""
-    from ..mqtt import mqtt_devices, topic_product_code  # noqa: PLC0415
+    from ..mqtt import mqtt_devices, topic_code  # noqa: PLC0415
     from ..mqtt.envelope import response_topic  # noqa: PLC0415
 
     async with await open_account(ctx) as eufy:
@@ -354,10 +354,7 @@ async def cmd_mqtt(ctx: Context) -> int:
             # The filter narrows the subscriptions; the certificate covers every device.
             devices = [d for d in every if d.device_sn.upper() in wanted]
             subscribe = [d.device_sn for d in devices]
-        topics = {
-            d.device_sn: response_topic(topic_product_code(d) or d.device_sn[:5], d.device_sn)
-            for d in devices
-        }
+        topics = {d.device_sn: response_topic(topic_code(d), d.device_sn) for d in devices}
         print(render.render_mqtt_devices(devices, topics, show_serials=ctx.show_serials))
         if not ctx.args.connect:
             print(

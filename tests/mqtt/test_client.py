@@ -176,6 +176,17 @@ async def test_a_publish_sends_the_envelope_to_the_request_topic_with_qos_1(rig:
     assert second.msg_seq == 2
 
 
+async def test_the_topics_name_the_entrys_product_not_the_serials(rig: Rig) -> None:
+    # A unit whose serial names another product than its entry's.
+    unit = lock("T85D0P2000054329", pn="T85D2")
+    await rig.client.async_start([unit])
+    await until(lambda: len(rig.client.topics) == 1)
+    assert _subscribed(rig) == [(response_topic("T85D2", unit.device_sn), 1)]
+    await rig.client.async_publish(unit.device_sn, "x")
+    await until(lambda: len(rig.broker.published) == 1)
+    assert rig.broker.published[0].topic == request_topic("T85D2", unit.device_sn)
+
+
 async def test_a_publish_for_another_device_is_refused_before_sending(rig: Rig) -> None:
     await rig.client.async_start([lock()])
     await rig.client.async_wait_connected(5)
