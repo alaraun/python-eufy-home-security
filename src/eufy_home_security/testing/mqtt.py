@@ -183,6 +183,8 @@ class FakeMqttBroker:
 
     Exact topic filters only (no wildcards). ``refused_topics`` are answered with the SUBACK
     failure code; ``connack_code`` other than 0 refuses every CONNECT with that return code.
+    ``connack_delay`` holds the CONNACK that many seconds (None: never sends it); a client
+    that closes or sends anything before it ends the connection.
     """
 
     def __init__(self, pki: MqttTestPki) -> None:
@@ -197,6 +199,9 @@ class FakeMqttBroker:
         self.published: list[BrokerPublish] = []
         self.refused_topics: set[str] = set()
         self.connack_code = 0
+        self.connack_delay: float | None = 0.0
+        self.open_sockets = 0
+        """TLS connections open now, with or without a CONNACK."""
         self.port = 0
         self._changed = asyncio.Condition()
 
@@ -227,16 +232,17 @@ class FakeMqttBroker:
         return self.port
 
     async def async_stop(self) -> None:
-        """Close every connection and the listener."""
+        """Close every connection, answered or not, and the listener."""
         self.drop_connections()
         if self._server is not None:
             self._server.close()
-            await self._server.wait_closed()
-            self._server = None
         for task in list(self._tasks):
             task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await asyncio.gather(*self._tasks, return_exceptions=True)
+        if self._server is not None:
+            await self._server.wait_closed()
+            self._server = None
 
     def drop_connections(self) -> None:
         """Close every client connection without a DISCONNECT (a lost connection)."""
@@ -278,13 +284,14 @@ class FakeMqttBroker:
         task = asyncio.current_task()
         if task is not None:
             self._tasks.add(task)
+        self.open_sockets += 1
         connection: _Connection | None = None
         try:
             while True:
                 header, body = await _read_packet(reader)
                 kind, flags = header >> 4, header & 0x0F
                 if kind == _CONNECT:
-                    connection = await self._connect(body, writer)
+                    connection = await self._connect(body, reader, writer)
                     if connection is None:
                         break
                 elif connection is None:
@@ -308,6 +315,7 @@ class FakeMqttBroker:
         except (asyncio.IncompleteReadError, ConnectionError, ssl.SSLError):
             pass
         finally:
+            self.open_sockets -= 1
             if connection is not None and connection in self._connections:
                 self._connections.remove(connection)
             writer.transport.abort()
@@ -315,7 +323,9 @@ class FakeMqttBroker:
             if task is not None:
                 self._tasks.discard(task)
 
-    async def _connect(self, body: bytes, writer: asyncio.StreamWriter) -> _Connection | None:
+    async def _connect(
+        self, body: bytes, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> _Connection | None:
         name_len = struct.unpack(">H", body[:2])[0]
         offset = 2 + name_len
         level, flags = body[offset], body[offset + 1]
@@ -338,6 +348,12 @@ class FakeMqttBroker:
                 client_certificate=bool(peer),
             )
         )
+        if self.connack_delay != 0:
+            # Anything the client sends (or its close) before the CONNACK ends the connection.
+            with contextlib.suppress(TimeoutError):
+                async with asyncio.timeout(self.connack_delay):
+                    await reader.read(1)
+                    return None
         writer.write(_packet(_CONNACK, 0, bytes([0, self.connack_code])))
         await writer.drain()
         if self.connack_code:

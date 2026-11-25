@@ -532,18 +532,40 @@ class EufyMqttClient:
 async def _open(client: aiomqtt.Client) -> None:
     """Connect ``client``. The connect step runs in an executor thread that a cancel cannot
     stop: a cancel waits for it (:data:`CONNECT_SETTLE_SECONDS` at most), closes the
-    connection it opened, then propagates, so no connection outlives a stop or a restart."""
+    connection it opened, then propagates, so no connection outlives a stop or a restart.
+    A connect that fails has its socket closed (:func:`_drop`)."""
     connect = asyncio.ensure_future(client.__aenter__())
     try:
         await asyncio.shield(connect)
     except asyncio.CancelledError:
-        if await _settle(connect) and not connect.cancelled() and connect.exception() is None:
-            await _settle(asyncio.ensure_future(client.__aexit__(None, None, None)))
-        elif not connect.done():
+        if await _settle(connect):
+            await _close(client, connect)
+        else:
             _LOGGER.warning(
                 "MQTT connect step still running after %g s; leaving it", CONNECT_SETTLE_SECONDS
             )
         raise
+    except Exception:
+        _drop(client)
+        raise
+
+
+async def _close(client: aiomqtt.Client, connect: asyncio.Future[Any]) -> None:
+    """Close what the ended connect step ``connect`` opened: a DISCONNECT when it connected
+    (:data:`CONNECT_SETTLE_SECONDS` at most), else its socket."""
+    if not connect.cancelled() and connect.exception() is None:
+        await _settle(asyncio.ensure_future(client.__aexit__(None, None, None)))
+    else:
+        _drop(client)
+
+
+def _drop(client: aiomqtt.Client) -> None:
+    """Close the socket of a connect that failed. ``aiomqtt`` keeps it after a CONNACK
+    timeout, with its reader and keepalive task, and a late CONNACK would make it a live
+    session; paho's own close also ends those."""
+    paho = client._client
+    if paho.socket() is not None:
+        paho._sock_close()
 
 
 async def _settle(future: asyncio.Future[Any]) -> bool:

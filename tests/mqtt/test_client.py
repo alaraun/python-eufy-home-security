@@ -14,6 +14,7 @@ import logging
 import subprocess
 import sys
 from collections.abc import AsyncIterator
+from typing import Any
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -684,6 +685,42 @@ async def test_a_stop_right_after_a_restart_during_the_connect_step_leaves_no_co
         await rig.client.async_stop()
         await asyncio.sleep(0.6)
         assert rig.broker.connected_clients == []
+
+
+def _left_tasks(before: set[asyncio.Task[Any]]) -> list[str]:
+    """The names of the unfinished tasks started since ``before`` was taken."""
+    return sorted(t.get_name() for t in asyncio.all_tasks() - before if not t.done())
+
+
+@pytest.mark.parametrize("connack_delay", [None, 0.6], ids=["no-connack", "late-connack"])
+async def test_a_connack_timeout_closes_the_socket(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, connack_delay: float | None
+) -> None:
+    monkeypatch.setattr(client_module, "PUBLISH_TIMEOUT_SECONDS", 0.3)
+    monkeypatch.setattr(client_module, "RECONNECT_MIN_SECONDS", 5.0)
+    rig.broker.connack_delay = connack_delay
+    before = asyncio.all_tasks()
+    await rig.client.async_start([lock()])
+    await until(lambda: len(rig.broker.connects) == 1)
+    await asyncio.sleep(0.9)  # past the CONNACK wait and a late CONNACK
+    assert rig.broker.open_sockets == 0
+    assert rig.broker.connected_clients == []
+    assert not rig.client.connected
+    assert _left_tasks(before) == ["eufy-mqtt"]  # the back-off wait only
+
+
+async def test_a_stop_during_a_connack_wait_that_times_out_leaves_nothing_open(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(client_module, "PUBLISH_TIMEOUT_SECONDS", 0.6)
+    rig.broker.connack_delay = None
+    before = asyncio.all_tasks()
+    await rig.client.async_start([lock()])
+    await until(lambda: len(rig.broker.connects) == 1)
+    await rig.client.async_stop()  # waits for the CONNACK wait to end
+    await asyncio.sleep(0.1)
+    assert rig.broker.open_sockets == 0
+    assert _left_tasks(before) == []
 
 
 # ── the optional dependency ──────────────────────────────────────────────────
