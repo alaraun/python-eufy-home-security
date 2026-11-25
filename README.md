@@ -170,7 +170,7 @@ More in [getting started](https://github.com/alaraun/python-eufy-home-security/b
 | [Debug logging](https://github.com/alaraun/python-eufy-home-security/blob/main/docs/how-to/debug-logging.md) | loggers, wire dumps, redaction |
 | [Testing](https://github.com/alaraun/python-eufy-home-security/blob/main/docs/how-to/testing.md) | end-to-end tests with `eufy_home_security.testing` |
 | [Thing models](https://github.com/alaraun/python-eufy-home-security/blob/main/docs/reference/thing-models.md) | the app's per-model descriptions and handler recipes |
-| [Protocol reference](https://github.com/alaraun/python-eufy-home-security/blob/main/docs/protocol/README.md) | cloud, P2P transport, session crypto, commands, events, media |
+| [Protocol reference](https://github.com/alaraun/python-eufy-home-security/blob/main/docs/protocol/README.md) | cloud, P2P transport, session crypto, commands, events, media, lock commands |
 
 ## Contributing
 
