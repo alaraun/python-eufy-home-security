@@ -113,7 +113,10 @@ async def test_warm_start_needs_no_cloud() -> None:
   paged by start time, such as a HomeBase 2) that is listed from `listed_after` seconds
   after its start and runs on the host's clock, its end growing until `seconds`: not
   listed, running, then settled, as
-  `Station.async_wait_recording_for_detection` sees a cloud-pushed detection's clip.
+  `Station.async_wait_recording_for_detection` sees a cloud-pushed detection's clip. The
+  growing end time is an assumption of the fake, not measured: whether a station lists a
+  running row's `end_time` as the clip grows, leaves it empty or writes it once at the
+  end is unknown (a test that needs another shape sets `rows` by hand).
 - **Station configuration.** Seed the guard modes and the schedule a
   `StationConfig` reads with typed helpers instead of hand-built base64:
 

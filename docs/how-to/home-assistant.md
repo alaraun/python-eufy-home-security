@@ -2431,8 +2431,10 @@ its trigger frame. The library finds it:
   (`SecurityEvent.detection` in `events.DETECTION_KINDS`) of this station with a time,
   naming no recording, of a paired device whose model has a camera
   (`DeviceModel.has_camera`) or is unknown, whose station does not send its detections
-  over P2P (`local_detections_for(device_sn)` not verified). A HomeBase 3
-  detection never needs it: its P2P copy names the recording. A standalone camera lists no
+  over P2P (`local_detections_for(device_sn)` not verified). On a HomeBase 3 the
+  detection of a camera whose model the library knows never needs it: its P2P copy names
+  the recording (a model the library does not know counts as a camera whose detections
+  the station does not send, so its detections do). A standalone camera lists no
   recordings, so it never does either.
 - `await station.async_wait_recording_for_detection(event, *, quiet=RECORDING_QUIET,
   timeout=None)` returns the detection's `HistoryRecord` once it has settled
@@ -2477,7 +2479,12 @@ its trigger frame. The library finds it:
   cannot). `offset_s` is the matched row's start minus the event's time; for
   `NOT_LISTED` the camera's nearest listed recording's (a whole number of hours off
   shows the station's clock read in the wrong zone). For a scheduler of its own instead
-  of a waiting task.
+  of a waiting task, or to show the trigger frame before the clip is done: fetch the
+  frame at the first answer that has a `record` (on a HomeBase 3 the trigger frame of a
+  clip still recording was shown 5 s after the push; not tried on a HomeBase 2), fetch
+  it again if a later answer names another row (another `ref`: the first was the
+  camera's previous clip), and copy the clip at `SETTLED`. This loop raises what the
+  look raises; the waiting call is the one that rides out a `CommunicationError`.
 
 ```python
 if station.needs_recording_match(event):
@@ -2486,6 +2493,24 @@ if station.needs_recording_match(event):
         named = station.event_with_recording(event, record)
         image = await station.async_event_image(named, ImageSource.TRIGGER_FRAME)
         clip = await station.async_download_recording(record, write)
+```
+
+The same with the frame early (`async_recording_for_detection` as the loop body):
+
+```python
+shown = None
+while True:
+    found = await station.async_recording_for_detection(event)
+    if found.record is not None and found.record.ref != shown:
+        named = station.event_with_recording(event, found.record)
+        image = await station.async_event_image(named, ImageSource.TRIGGER_FRAME)
+        shown = found.record.ref
+    if found.state is DetectionRecordingState.SETTLED:
+        clip = await station.async_download_recording(found.record, write)
+        break
+    if found.retry_at is None:
+        break  # no settled row by the bound
+    await asyncio.sleep(max(0.0, (found.retry_at - datetime.now(UTC)).total_seconds()))
 ```
 
 Errors: `UnsupportedError` before anything is sent for an event of another station, one
@@ -2500,7 +2525,8 @@ has no bound: raised at once). The other errors it raises at once. In tests,
 `FakeStation.add_detection_recording(device_sn, started_at, seconds, listed_after=…)`
 adds a row in the station's own shapes that is listed from `listed_after` on and runs on
 the host's clock (its end grows until `seconds`), so a test sees it not listed, then
-running, then settled.
+running, then settled. The growing end time is the fake's assumption: how a station
+writes a running row's `end_time` is not measured.
 
 #### Playing a recording without downloading it first
 

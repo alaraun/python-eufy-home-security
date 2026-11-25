@@ -87,7 +87,9 @@ class DetectionRecording:
     ``record`` is the history row (None when ``NOT_LISTED``); ``retry_at`` (aware) is
     when asking again can give another answer, None when it cannot (``SETTLED``, or
     past the bound for a row that never came or never ends); ``offset_s`` is the row's
-    start minus the detection's time in seconds, None when the detection named its row.
+    start minus the detection's time in seconds, None when the detection's ``record_id``
+    named its row (looked up by it; a row named by ``video_path`` is listed by time and
+    carries its offset).
     ``NOT_LISTED`` gives the offset of the camera's nearest listed recording instead (None
     when none is listed): a recording that lies a whole number of hours off shows a clock
     read in the wrong zone.

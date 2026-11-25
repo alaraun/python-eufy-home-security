@@ -175,8 +175,8 @@ class _Look:
     """The oldest start it lists down to."""
     last_day: date
     """The newest day it lists."""
-    rows: asyncio.Future[tuple[list[HistoryRecord], datetime]]
-    """The rows and when they were listed (aware)."""
+    rows: asyncio.Future[list[HistoryRecord]]
+    """The rows it listed, or its error."""
     done_at: float | None = None
     """``time.monotonic()`` when it was listed; None while it runs or after it failed."""
 
@@ -423,10 +423,10 @@ class StationHistory:
             if event.event_time_ms is None
             else datetime.fromtimestamp(event.event_time_ms / 1000, UTC)
         )
-        clock = _MatchClock(datetime.now(UTC), event_at, retry, give_up, quiet)
         record_id = event.record_id
         if record_id and record_id_day(record_id) is not None:
             row = await self._station.session.async_history_record(record_id, timeout=timeout)
+            clock = _MatchClock(datetime.now(UTC), event_at, retry, give_up, quiet)
             if row is not None and row.device_sn is not None and row.device_sn != device_sn:
                 raise RecordNotFoundError(
                     "the event's record_id names another camera's row", device_sn=device_sn
@@ -438,19 +438,21 @@ class StationHistory:
             raise UnsupportedError("the event carries no time to match a recording to")
         early, late = window
         first = event_at - timedelta(seconds=give_up)  # the earliest start of a holding clip
+        asked = datetime.now(UTC)
         last_day = min(
-            clock.now.astimezone(zone).date(),
+            asked.astimezone(zone).date(),
             (event_at + timedelta(seconds=late)).astimezone(zone).date(),
         )
         searches = self._searches.setdefault(device_sn, _Searches())
-        floor = searches.floor(first, event_at + timedelta(seconds=give_up), clock.now)
-        rows, _listed_at = await self._shared_look(
+        floor = searches.floor(first, event_at + timedelta(seconds=give_up), asked)
+        rows = await self._shared_look(
             searches,
             _Look(floor, last_day, asyncio.get_running_loop().create_future()),
             first,
             fresh,
             lambda: self._camera_recordings(device_sn, floor, last_day, zone, timeout),
         )
+        clock = _MatchClock(datetime.now(UTC), event_at, retry, give_up, quiet)  # after it
         timed = _timed_rows(rows, event_at, zone, give_up)
         found = _detection_match(timed, event_at, event.video_path, early, late)
         if found is None:
@@ -472,9 +474,9 @@ class StationHistory:
         since: datetime,
         fresh: float,
         listing: Callable[[], Awaitable[list[HistoryRecord]]],
-    ) -> tuple[list[HistoryRecord], datetime]:
-        """The camera's rows down to ``since`` and up to ``look``'s last day, and when they
-        were listed: from the camera's last listing when it serves (see
+    ) -> list[HistoryRecord]:
+        """The camera's rows down to ``since`` and up to ``look``'s last day: from the
+        camera's last listing when it serves (see
         :meth:`_Look.serves`), else from ``listing``, run as ``look`` and shared with
         the looks that come while it runs (its error too)."""
         while (last := searches.look) is not None and last.serves(since, look.last_day, fresh):
@@ -485,7 +487,7 @@ class StationHistory:
         try:
             rows = await listing()
             look.done_at = time.monotonic()
-            look.rows.set_result((rows, datetime.now(UTC)))
+            look.rows.set_result(rows)
         except Exception as err:
             look.rows.set_exception(err)
             look.rows.exception()  # read: a failure no other look shares logs nothing

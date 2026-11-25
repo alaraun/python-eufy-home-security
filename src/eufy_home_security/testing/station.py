@@ -1360,7 +1360,9 @@ class FakeStation:
         station's own shapes: on a HomeBase 3 (history verb 10011) a day-prefixed id and
         a ``/zx/…/….zxvideo`` path with a thumbnail, elsewhere (10017, a HomeBase 2) a
         plain id and a ``/media/mmcblk0p1/CameraNN/<stamp>.dat`` path. Times are written
-        in the host's zone, as a station keeps local time.
+        in the host's zone, as a station keeps local time. The growing end time is the
+        fake's assumption: how a station writes a running row's ``end_time`` is not
+        measured.
         """
         local = started_at.astimezone().replace(microsecond=0)
         stamp = local.strftime("%Y%m%d%H%M%S")

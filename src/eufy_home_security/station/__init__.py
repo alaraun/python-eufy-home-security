@@ -4093,8 +4093,9 @@ class Station:
         or is unknown, whose detections this station does not send over P2P
         (:meth:`local_detections_for` not ``VERIFIED``).
 
-        A station that sends them (a HomeBase 3) delivers each detection with its
-        recording named, so its detections never need the match.
+        A catalogued camera of a HomeBase 3 sends its detections over P2P with their
+        recording named, so they never need the match; a model the library does not know
+        counts as a camera whose detections the station does not send, so they do.
         """
         if event.station_sn is not None and event.station_sn != self.serial:
             return False

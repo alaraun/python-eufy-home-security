@@ -1834,3 +1834,92 @@ async def test_a_wait_takes_the_detections_own_row_over_the_clip_before_it(
         )
     assert row is not None
     assert row.record_id == own
+
+
+# ── the answer's clock and the predicate's edges ─────────────────────────────
+
+
+async def test_retry_at_counts_from_the_end_of_the_look(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A listing that takes 3 s: the next look is due the retry after it ended."""
+    clock = [NOW]
+
+    class Ticking(datetime, metaclass=_AnyDatetime):
+        @classmethod
+        def now(cls, tz: tzinfo | None = None) -> datetime:  # type: ignore[override]
+            return clock[0].astimezone(tz)
+
+    monkeypatch.setattr(station_history, "datetime", Ticking)
+    real = station.session.async_list_history
+
+    async def slow(*args: Any, **kwargs: Any) -> list[HistoryRecord]:
+        rows = await real(*args, **kwargs)
+        clock[0] += timedelta(seconds=3)
+        return rows
+
+    monkeypatch.setattr(station.session, "async_list_history", slow)
+    fake.rows = []
+    found = await station.async_recording_for_detection(_detection(NOW - timedelta(seconds=20)))
+    assert found.state is DetectionRecordingState.NOT_LISTED
+    assert found.retry_at == NOW + timedelta(seconds=3 + RECORDING_MATCH_RETRY)
+
+
+async def test_a_detection_just_after_midnight_lists_the_day_before_too(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The clip that holds a detection 30 s into the day began on the day before."""
+    midnight = datetime.combine(NOW.astimezone().date(), datetime.min.time()).astimezone()
+    _freeze(monkeypatch, midnight + timedelta(seconds=90))
+    event = midnight + timedelta(seconds=30)
+    clip = midnight - timedelta(seconds=10)
+    fake.rows = [_at(clip, SYNTHETIC.camera_sn, _dayed(clip, 7), end_time="")]
+    found = await station.async_recording_for_detection(_detection(event))
+    assert found.record is not None
+    assert (found.record.record_id, found.offset_s) == (_dayed(clip, 7), -40.0)
+    assert [q["start_date"] for q in fake.history_queries] == [
+        midnight.strftime("%Y%m%d"),
+        clip.astimezone().strftime("%Y%m%d"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("started_ago", "retry_in"), [(30, RECORDING_MATCH_RETRY), (170, 10.0), (200, None)]
+)
+async def test_a_running_row_named_by_an_event_without_a_time_is_bounded_from_its_start(
+    station: Station, fake: FakeStation, today: datetime, started_ago: int, retry_in: float | None
+) -> None:
+    started = _whole(today, started_ago)
+    fake.rows = [_at(started, SYNTHETIC.camera_sn, _dayed(started, 4), end_time="")]
+    event = _detection(started, record_id=_dayed(started, 4), event_time_ms=None)
+    found = await station.async_recording_for_detection(event)
+    assert found.state is DetectionRecordingState.RECORDING
+    assert found.retry_at == (None if retry_in is None else today + timedelta(seconds=retry_in))
+
+
+async def test_a_detection_of_an_uncatalogued_model_needs_a_recording_match(
+    hb2: Station, today: datetime
+) -> None:
+    """A model the library does not know counts as a camera whose detections the station
+    does not send over P2P."""
+    unknown = "T9Z99P2000012345"
+    hb2.update_sub_devices(
+        [
+            *(d for d in hb2.devices),
+            dataclasses.replace(CAMERA, device_sn=unknown, station_sn=HB2_SN, channel=3),
+        ]
+    )
+    assert hb2.needs_recording_match(_detection(today, station_sn=HB2_SN, device_sn=unknown))
+
+
+async def test_a_detection_naming_its_recording_path_gives_that_rows_offset(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    """Only a row looked up by the event's ``record_id`` has no offset; one named by its
+    ``video_path`` is listed by time and carries it."""
+    event = _whole(today, 300)
+    named = event - timedelta(seconds=5)
+    fake.rows = [_at(named, SYNTHETIC.camera_sn, _dayed(named, 1))]
+    path = str(fake.rows[0]["storage_path"])
+    found = await station.async_recording_for_detection(_detection(event, video_path=path))
+    assert (found.state, found.offset_s) == (DetectionRecordingState.SETTLED, -5.0)
