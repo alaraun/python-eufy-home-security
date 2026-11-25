@@ -1783,7 +1783,8 @@ route the library sends), `MqttAccountRequiredError` (an MQTT lock: call
 (a command for that lock still waits). After sending they raise `CommandRejectedError`
 (`err.code`; -151 is a refused sequence number), `LockNotMovedError` (`err.state`: jammed
 or stopped between positions) or `DeviceTimeoutError`. A lock already in the asked state
-returns at once. The default wait is the app's 20 s for the answer plus 30 s for the
+returns at once. The default wait is the app's 20 s for the answer (over MQTT after up to
+15 s for the broker to take the command) plus 30 s for the
 state, and `timeout` bounds the whole call; run it as a task and let `LockStateChanged`
 drive the entity. Declared from the eufy app, not tested on hardware.
 

@@ -59,7 +59,8 @@ or parameter picks between them, and the library ports both.
   nothing is stored); for 1961 it comes from one
   counter shared by every lock, set to the last reported sequence number plus one and
   incremented after each command.
-- **User fields**: the lock member record's `admin_user_id` and `short_user_id` (hex text)
+- **User fields**: the lock member record's `admin_user_id` (1940: the key user id, below)
+  and `short_user_id` (hex text)
   and the account's nickname. An absent `short_user_id` is sent as each form sends it: 1940
   as an empty `A5` entry, 1961 by leaving the field out; 1930 needs its 2 bytes.
 - **Result**: an answer code 0 is accepted (the state change follows), anything else is
@@ -179,12 +180,13 @@ acknowledgement alone never counts. In order:
 2. **The station's result** (P2P): a non-zero code raises `CommandRejectedError(code)`,
    except -151 (sequence number refused) on the 1940 and 1930 forms, where the wait for the
    lock's answer goes on, as in the app. On the 1961 form the station's result is the
-   lock's answer: any non-zero code refuses, -151 included.
+   lock's answer: any non-zero code refuses, -151 included. Over MQTT the broker's
+   acknowledgement takes its place (15 s; [mqtt.md](mqtt.md#lock-commands)).
 3. **The lock's answer** (1940 and 1930: a through-data notify `{"cmd": 1940|1930,
-   "payload": {"dev_sn": ..., ...}}`; over MQTT the response topic): an answer to another
-   request (another time value) is skipped; a non-zero answer code (48/49: already
-   unlocked/locked, or another) raises `CommandRejectedError(code)`. A -151 followed by
-   neither an answer nor a resend within the wait raises `CommandRejectedError(-151)`.
+   "payload": {"dev_sn": ..., ...}}`; over MQTT a device message on the response topic): an
+   answer to another request (another time value) is skipped; a non-zero answer code (48/49:
+   already unlocked/locked, or another) raises `CommandRejectedError(code)`. A -151 followed
+   by neither an answer nor a resend within the wait raises `CommandRejectedError(-151)`.
 4. **The state**: the asked state from any source (the lock's status report, `0x4A` in the
    1940 through data: a code byte, then `A1` the battery level and `A2` the lock-state code,
    a missing entry read as 0 as the app reads it; a parameter dump or notify; a push)
@@ -195,7 +197,8 @@ acknowledgement alone never counts. In order:
    stale dump does not end it. This last rule is the library's: the app ends on the first
    status report with code 0, whatever state it names.
 
-The waits are the app's: 20 s for the lock's answer, then 30 s for its state; a `timeout`
+The waits are the app's: 20 s for the lock's answer (over MQTT counted from the broker's
+acknowledgement, which has 15 s), then 30 s for its state; a `timeout`
 bounds the whole command, the public-key query, the connect and the send included. Nothing
 within it raises `DeviceTimeoutError`.
 
