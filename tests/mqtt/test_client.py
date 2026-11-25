@@ -14,7 +14,7 @@ import json
 import logging
 import subprocess
 import sys
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Coroutine
 from typing import Any
 
 import pytest
@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
 from eufy_home_security.cloud import const
+from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.exceptions import (
     CommunicationError,
     DeviceTimeoutError,
@@ -574,26 +575,27 @@ async def test_stop_disconnects_and_ends_its_task(rig: Rig) -> None:
     assert not any(name.startswith("eufy-mqtt") for name in names)
 
 
-@pytest.mark.parametrize("running", [True, False], ids=["running", "stopped-to-empty"])
-async def test_a_stop_during_a_device_update_leaves_nothing_running(
-    rig: Rig, monkeypatch: pytest.MonkeyPatch, running: bool
+@pytest.mark.parametrize("case", ["start", "update-running", "update-stopped-to-empty"])
+async def test_a_stop_during_a_start_or_device_update_leaves_nothing_running(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, case: str
 ) -> None:
-    await rig.client.async_start([lock()])
-    await rig.client.async_wait_connected(5)
-    if not running:
+    call: Callable[[list[CloudDevice]], Coroutine[Any, Any, None]] = rig.client.async_start
+    if case != "start":
+        await rig.client.async_start([lock()])
+        await rig.client.async_wait_connected(5)
+        call = rig.client.async_update_devices
+    if case == "update-stopped-to-empty":
         await rig.client.async_update_devices([CAMERA])
     held = hold_selection(monkeypatch, client_module)
     try:
-        update = asyncio.create_task(
-            rig.client.async_update_devices([lock(), lock(LOCK2_SN, "T85L0")])
-        )
+        started = asyncio.create_task(call([lock(), lock(LOCK2_SN, "T85L0")]))
         await until(held.entered.is_set)
         stop = asyncio.create_task(rig.client.async_stop())
-        await asyncio.sleep(0.05)  # the stop arrives while the update reads the list
+        await asyncio.sleep(0.05)  # the stop arrives while the call reads the list
     finally:
         held.release.set()
     async with asyncio.timeout(5):
-        await update
+        await started
         await stop
     await asyncio.sleep(0.3)
     assert not rig.client.connected

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Coroutine
+from typing import Any
 
 import pytest
 
+from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.exceptions import CommunicationError, UnsupportedError
 from eufy_home_security.mqtt import account as account_module
 from eufy_home_security.mqtt.account import EufyMqttAccount
@@ -95,21 +97,25 @@ async def test_the_clients_follow_the_scopes_of_the_device_list(
     await until(lambda: rig.broker.connected_clients == [])
 
 
-async def test_a_stop_during_a_device_update_leaves_no_client(
-    rig: Rig, account: EufyMqttAccount, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("case", ["start", "update"])
+async def test_a_stop_during_a_start_or_device_update_leaves_no_client(
+    rig: Rig, account: EufyMqttAccount, monkeypatch: pytest.MonkeyPatch, case: str
 ) -> None:
-    await account.async_start([EU_LOCK])
-    await account.async_wait_connected(5)
+    call: Callable[[list[CloudDevice]], Coroutine[Any, Any, None]] = account.async_start
+    if case == "update":
+        await account.async_start([EU_LOCK])
+        await account.async_wait_connected(5)
+        call = account.async_update_devices
     held = hold_selection(monkeypatch, account_module)
     try:
-        update = asyncio.create_task(account.async_update_devices([EU_LOCK, SCOPE_LOCK]))
+        started = asyncio.create_task(call([EU_LOCK, SCOPE_LOCK]))
         await until(held.entered.is_set)
         stop = asyncio.create_task(account.async_stop())
-        await asyncio.sleep(0.05)  # the stop arrives while the update reads the list
+        await asyncio.sleep(0.05)  # the stop arrives while the call reads the list
     finally:
         held.release.set()
     async with asyncio.timeout(5):
-        await update
+        await started
         await stop
     await asyncio.sleep(0.3)
     assert account.clients == {}
