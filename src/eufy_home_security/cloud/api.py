@@ -740,14 +740,20 @@ class EufyCloudApi:
                 regions.append(region)
         return regions
 
+    def _session_mega_domain(self, region: str) -> str | None:
+        """The ``mega_domain`` of scope ``region``'s session when it names that scope's
+        cluster, else None."""
+        domain = self._cache.cloud_sessions().get(region, {}).get("mega_domain")
+        cluster = const.scope_region(region)
+        if isinstance(domain, str) and const.region_from_mega_domain(domain) == cluster:
+            return domain
+        return None
+
     def _host(self, service: str, region: str) -> str:
         """``service``'s host on the cluster of scope ``region``, from the session's
         ``mega_domain`` when that names the same cluster."""
-        cluster = const.scope_region(region)
-        domain = self._cache.cloud_sessions().get(region, {}).get("mega_domain")
-        if not (isinstance(domain, str) and const.region_from_mega_domain(domain) == cluster):
-            domain = None
-        return const.cluster_host(service, cluster, domain)
+        domain = self._session_mega_domain(region)
+        return const.cluster_host(service, const.scope_region(region), domain)
 
     # ── login ──────────────────────────────────────────────────────────────
 
@@ -2936,11 +2942,7 @@ class EufyCloudApi:
     def _mega_host(self, region: str) -> str:
         """The ``mega-`` domain of scope ``region``'s cluster: the session's own when it
         names that cluster, else the cluster's default."""
-        cluster = const.scope_region(region)
-        domain = self._cache.cloud_sessions().get(region, {}).get("mega_domain")
-        if isinstance(domain, str) and const.region_from_mega_domain(domain) == cluster:
-            return domain
-        return const.mega_host(cluster)
+        return self._session_mega_domain(region) or const.mega_host(const.scope_region(region))
 
     async def async_register_iot(
         self, region: str | None = None, *, login: bool = True

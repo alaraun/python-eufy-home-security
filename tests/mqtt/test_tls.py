@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from eufy_home_security.cloud.models import MqttCertificate
-from eufy_home_security.exceptions import ProtocolError
+from eufy_home_security.exceptions import EufySecurityError, ProtocolError
 from eufy_home_security.mqtt import tls
 from eufy_home_security.testing.mqtt import MqttTestPki, make_mqtt_pki
 
@@ -102,3 +102,42 @@ async def test_an_unusable_pair_is_a_protocol_error_and_leaves_nothing(
         await tls.async_tls_context(broken, cadata=pki.ca_pem)
     assert dirs
     assert _all_gone(dirs)
+
+
+async def test_a_private_directory_that_cannot_be_made_is_a_library_error(
+    pki: MqttTestPki, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def mkdtemp(*args: object, **kwargs: object) -> str:
+        raise PermissionError("read-only")
+
+    monkeypatch.setattr(tempfile, "mkdtemp", mkdtemp)
+    with pytest.raises(EufySecurityError, match="MQTT client certificate not written") as caught:
+        await tls.async_tls_context(_certificate(pki), cadata=pki.ca_pem)
+    assert isinstance(caught.value.__cause__, PermissionError)
+
+
+async def test_a_pem_that_cannot_be_written_is_a_library_error_and_leaves_nothing(
+    pki: MqttTestPki, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dirs: list[str] = []
+    original_mkdtemp = tempfile.mkdtemp
+
+    def mkdtemp(*args: object, **kwargs: object) -> str:
+        path = original_mkdtemp(*args, **kwargs)  # type: ignore[call-overload]
+        dirs.append(path)
+        return str(path)
+
+    def write(path: Path, text: str) -> None:
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(tempfile, "mkdtemp", mkdtemp)
+    monkeypatch.setattr(tls, "_write_private", write)
+    with pytest.raises(EufySecurityError, match="MQTT client certificate not written"):
+        await tls.async_tls_context(_certificate(pki), cadata=pki.ca_pem)
+    assert dirs
+    assert _all_gone(dirs)
+
+
+async def test_an_unusable_broker_ca_is_a_protocol_error(pki: MqttTestPki) -> None:
+    with pytest.raises(ProtocolError, match="MQTT broker CA unusable"):
+        await tls.async_tls_context(_certificate(pki), cadata="not a certificate")

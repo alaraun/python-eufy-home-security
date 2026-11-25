@@ -15,7 +15,7 @@ import tempfile
 from pathlib import Path
 
 from ..cloud.models import MqttCertificate
-from ..exceptions import ProtocolError
+from ..exceptions import EufySecurityError, ProtocolError
 
 _PRIVATE_FILE = 0o600
 
@@ -27,9 +27,15 @@ def _write_private(path: Path, text: str) -> None:
 
 
 def _tls_context(certificate_pem: str, private_key: str, cadata: str | None) -> ssl.SSLContext:
-    context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cadata=cadata)
+    try:
+        context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cadata=cadata)
+    except (ssl.SSLError, ValueError) as err:
+        raise ProtocolError(f"MQTT broker CA unusable: {err}") from err
     context.minimum_version = ssl.TLSVersion.TLSv1_2
-    directory = Path(tempfile.mkdtemp(prefix="eufy-mqtt-"))
+    try:
+        directory = Path(tempfile.mkdtemp(prefix="eufy-mqtt-"))
+    except OSError as err:
+        raise EufySecurityError(f"MQTT client certificate not written: {err}") from err
     try:
         cert, key = directory / "certificate.pem", directory / "private.key"
         _write_private(cert, certificate_pem)
@@ -37,6 +43,8 @@ def _tls_context(certificate_pem: str, private_key: str, cadata: str | None) -> 
         context.load_cert_chain(cert, key)
     except (ssl.SSLError, ValueError) as err:
         raise ProtocolError(f"MQTT client certificate unusable: {err}") from err
+    except OSError as err:
+        raise EufySecurityError(f"MQTT client certificate not written: {err}") from err
     finally:
         shutil.rmtree(directory, ignore_errors=True)
     return context
@@ -47,7 +55,8 @@ async def async_tls_context(
 ) -> ssl.SSLContext:
     """A client TLS context holding ``certificate``'s pair, verifying the broker against
     ``cadata`` (PEM) or, when None, the system's trust store as the eufy app does. Raises
-    :class:`ProtocolError` for a pair ``ssl`` cannot load."""
+    :class:`ProtocolError` for a pair or a ``cadata`` that ``ssl`` cannot load, and
+    :class:`EufySecurityError` when the pair cannot be written to its private directory."""
     return await asyncio.to_thread(
         _tls_context, certificate.certificate_pem, certificate.private_key, cadata
     )
