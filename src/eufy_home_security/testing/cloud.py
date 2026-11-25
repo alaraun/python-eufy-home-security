@@ -437,6 +437,14 @@ class FakeCloud:
     pictures: dict[str, bytes] = field(default_factory=dict)
     """Picture URL -> its bytes, served by ``async_fetch_picture`` (recorded as
     ``"picture"``); another https URL is refused with HTTP 404."""
+    mqtt_answer: dict[str, Any] | None = None
+    """The ``data`` of ``app/mqtt/register/iot`` (see
+    :meth:`~.mqtt.MqttTestPki.register_answer`); None answers a success without data. A
+    request is recorded as ``"mqtt_register"`` and in ``mqtt_requests``; ``call_errors``
+    refuse it as any other request."""
+    mqtt_requests: list[tuple[str, bool, dict[str, Any]]] = field(default_factory=list)
+    """(host, whether the ``category``/``app-tab`` headers were sent, body) of each
+    ``app/mqtt/register/iot`` request, in order."""
 
     @staticmethod
     def refusal(
@@ -627,6 +635,10 @@ class FakeCloud:
             if self.things_error is not None:
                 raise _Refusal(self.things_error)
             return {"things_list": [self.things[c] for c in codes if c in self.things]}
+        if path == const.MQTT_REGISTER_PATH:
+            note("mqtt_register")
+            self._raise_call_error()
+            return None if self.mqtt_answer is None else dict(self.mqtt_answer)
         if path == const.FACES_BY_IDS_PATH:
             note("faces")
             self.face_requests.append(dict(payload))
@@ -796,6 +808,8 @@ class _FakeCloudApi(EufyCloudApi):
         auth: _Identity | None = None,
     ) -> tuple[int, dict[str, Any], Any]:
         self._raise_if_held_off(login=False)
+        if path == const.MQTT_REGISTER_PATH:
+            self._fake.mqtt_requests.append((host, category, dict(payload or {})))
         token = _request_region.set(identity.region)
         try:
             data = await self._fake._answer(path, payload or {})

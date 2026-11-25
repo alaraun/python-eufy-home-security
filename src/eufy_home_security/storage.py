@@ -23,7 +23,7 @@ import os
 import secrets
 import tempfile
 import time
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
@@ -99,6 +99,8 @@ _REPLACED = "replaced"
 _LINK_PATH = "link_path"
 # Per-station flag beside it: that link needed a punch because the LAN reply was blocked.
 _LAN_REPLY_BLOCKED = "lan_reply_blocked"
+# ``cloud.mqtt``: each login scope's MQTT certificate and the device set it was asked for.
+_MQTT = "mqtt"
 _CONNECT_PATHS: Final = tuple(str(path) for path in ConnectPath)
 
 _LOGGER = logging.getLogger(__name__)
@@ -208,7 +210,8 @@ class SessionCache:
     The document is namespaced so each subsystem owns its own section::
 
         {"version": 2, "account": "<email, lower-case>", "openudid": "…", "password": "…",
-         "cloud": {"sessions": {"<region>": {...}}, "listed": {"<region>": {...}}},
+         "cloud": {"sessions": {"<region>": {...}}, "listed": {"<region>": {...}},
+                   "mqtt": {"<region>": {"certificate": {...}, "devices": ["<serial>-<bind>", …]}}},
          "push": {...}, "replaced": {"at": <epoch s>},
          "devices": [{..., "cloud_region": "<region>"}, …],
          "stations": {"<serial>": {"account_id": "…", "ciphers": {"40": "…"}, "cipher_id": 40,
@@ -434,6 +437,34 @@ class SessionCache:
     def station(self, serial: str) -> dict[str, Any]:
         """The mutable per-station section."""
         return _subsection(self.section("stations"), serial)
+
+    # ── MQTT certificate (``cloud.mqtt.<scope>``) ────────────────────────────
+
+    def _mqtt(self, region: str) -> dict[str, Any]:
+        return _subsection(_subsection(self.section("cloud"), _MQTT), region)
+
+    def mqtt_certificate(self, region: str) -> dict[str, Any] | None:
+        """The cached MQTT certificate answer of login scope ``region``, if one is kept."""
+        value = self._mqtt(region).get("certificate")
+        return dict(value) if isinstance(value, dict) else None
+
+    def set_mqtt_certificate(self, region: str, certificate: Mapping[str, Any]) -> None:
+        self._mqtt(region)["certificate"] = dict(certificate)
+
+    def drop_mqtt_certificate(self, region: str) -> bool:
+        """Forget scope ``region``'s MQTT certificate; whether one was kept."""
+        return self._mqtt(region).pop("certificate", None) is not None
+
+    def mqtt_devices(self, region: str) -> frozenset[str] | None:
+        """The MQTT device set (``<serial>-<bind time>``) scope ``region``'s certificate was
+        last asked for; None before the first."""
+        value = self._mqtt(region).get("devices")
+        if not isinstance(value, list):
+            return None
+        return frozenset(str(key) for key in value)
+
+    def set_mqtt_devices(self, region: str, keys: Iterable[str]) -> None:
+        self._mqtt(region)["devices"] = sorted(keys)
 
     def station_account_id(self, serial: str) -> str | None:
         """The owner id commands to ``serial`` must carry, if cached."""

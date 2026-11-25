@@ -134,6 +134,8 @@ SENSITIVE_KEY_PARTS: Final = (
     "captcha",
     "verify_code",
     "encrypted_data",
+    "certificate",
+    "pkcs",
 )
 
 
@@ -158,7 +160,7 @@ IDENTIFYING_KEYS: Final = LOCATION_KEYS | frozenset(
         "account", "accountid", "userid", "uid", "shortuserid", "adminuserid",
         "memberuserid", "actionuserid", "ownerid", "owneruserid", "mvaluestrsub",
         "username", "nickname", "nick", "actionusernick", "actionusername", "personname",
-        "mobile", "openudid",
+        "mobile", "openudid", "thingname",
         # faces the station's AI matched (a push's short keys f and i)
         "f", "i", "fetchid", "aifaceid", "aifaceids", "faceurl", "facepath", "feature",
         # devices and the house

@@ -146,6 +146,8 @@ class FakeMega:
         # get_rom_version: None → the OTA "up to date" error object (code 20004 in data);
         # a dict → returned as the RomVersionData.
         self.rom_version_data: dict[str, Any] | None = None
+        # app/mqtt/register/iot: the decrypted ``data`` of its answer (None: a bare success).
+        self.mqtt_answer: dict[str, Any] | None = None
         self.captcha = {"captcha_id": "cap-123", "item": "aGVsbG8="}
         # get_client_real_code's ``ab_code`` (the caller's IP country); "" names none.
         self.client_country = ""
@@ -326,6 +328,17 @@ class FakeMega:
         mock.post(
             _url(const.cluster_host("things", region), const.THINGS_PATH),
             callback=self._delayed("things", self._things, region),
+            repeat=True,
+        )
+        self.install_mqtt_register(mock, const.mega_host(region), region)
+
+    def install_mqtt_register(self, mock: Any, host: str, region: str) -> None:
+        """Answer ``app/mqtt/register/iot`` on ``host`` (a cluster's ``mega-`` domain)."""
+        mock.post(
+            _url(host, const.MQTT_REGISTER_PATH),
+            callback=self._delayed(
+                "mqtt_register", functools.partial(self._mqtt_register, host=host), region
+            ),
             repeat=True,
         )
 
@@ -609,6 +622,13 @@ class FakeMega:
             reason = f"error: code = {const.OTA_NO_UPGRADE_CODE} reason =  message = "
             return self._reply(shared, 0, {"reason": reason})
         return self._reply(shared, 0, self.rom_version_data)
+
+    def _mqtt_register(self, url: str, *, host: str, **kwargs: Any) -> CallbackResult:
+        self.calls.append(("mqtt_register", self._decrypt_body(kwargs)))
+        self.headers.setdefault("mqtt_register", []).append({**kwargs["headers"], "host": host})
+        if failure := self._failure_once("mqtt_register", kwargs):
+            return failure
+        return self._reply(self._shared_for(kwargs), 0, self.mqtt_answer)
 
     def _things(self, url: str, **kwargs: Any) -> CallbackResult:
         payload = self._decrypt_body(kwargs)

@@ -18,6 +18,7 @@ from eufy_home_security.exceptions import (
     CloudApiError,
     CommunicationError,
     LoginLimitedError,
+    ProtocolError,
     RateLimitedError,
     SessionRejectedError,
     SessionReplacedError,
@@ -464,3 +465,27 @@ async def test_the_fake_cloud_serves_things_errors_once_each_ahead_of_things_err
     finally:
         await eufy.async_close()
     assert seen == ["first", "second", "standing"]
+
+
+async def test_the_fake_cloud_issues_its_mqtt_certificate_and_records_each_request() -> None:
+    from eufy_home_security.testing.mqtt import make_mqtt_pki  # noqa: PLC0415
+
+    pki = make_mqtt_pki()
+    cloud = FakeCloud(mqtt_answer=pki.register_answer())
+    eufy = build_eufy_security(
+        email=SYNTHETIC.email, store=warm_store(email=SYNTHETIC.email, cloud=cloud), cloud=cloud
+    )
+    try:
+        await eufy.async_login()
+        certificate = await eufy.cloud.async_register_iot()
+        cloud.mqtt_answer = None  # a success without a certificate
+        with pytest.raises(ProtocolError):
+            await eufy.cloud.async_register_iot()
+    finally:
+        await eufy.async_close()
+    assert certificate.certificate_pem == pki.client_cert_pem
+    assert cloud.calls == ["mqtt_register", "mqtt_register"]
+    assert cloud.mqtt_requests == [
+        (const.mega_host("eu"), True, {}),
+        (const.mega_host("eu"), True, {}),
+    ]

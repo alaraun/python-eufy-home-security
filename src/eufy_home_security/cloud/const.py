@@ -157,6 +157,9 @@ DSK_KEYS_PATH: Final = "/app/devicerelation/get_dsk_keys"
 PUSH_TOKEN_PATH: Final = "/app/push/register_push_token"  # noqa: S105 — a URL path, not a secret
 OTA_ROM_PATH: Final = "/app/ota/get_rom_version"
 THINGS_PATH: Final = "/app/things/get_things_list"
+MQTT_REGISTER_PATH: Final = "/app/mqtt/register/iot"
+"""The account's MQTT client certificate (the security realm's broker): an empty body on the
+session's ``mega-`` domain, ``app-tab: eufy_security`` (see docs/protocol/mqtt.md)."""
 # Arming groups ("Group Control"): house-level lists of (station, guard mode) on the
 # security realm (see docs/protocol/cloud.md § Arming groups).
 ARMING_GROUPS_PATH: Final = "/v3/house/guard_list"

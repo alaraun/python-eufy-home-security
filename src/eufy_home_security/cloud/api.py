@@ -26,7 +26,7 @@ import logging
 import math
 import secrets
 import time
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, NoReturn
@@ -75,6 +75,7 @@ from .models import (
     CloudInvite,
     FirmwareUpdate,
     LoginCountry,
+    MqttCertificate,
     parse_faces,
     security_device_entry,
 )
@@ -2929,6 +2930,108 @@ class EufyCloudApi:
                 expect_data=False,  # success is a bare code 0
             )
             _LOGGER.debug("registered push token %s in the %s region", Secret(token), region)
+
+    # ── MQTT certificate ─────────────────────────────────────────────────────
+
+    def _mega_host(self, region: str) -> str:
+        """The ``mega-`` domain of scope ``region``'s cluster: the session's own when it
+        names that cluster, else the cluster's default."""
+        cluster = const.scope_region(region)
+        domain = self._cache.cloud_sessions().get(region, {}).get("mega_domain")
+        if isinstance(domain, str) and const.region_from_mega_domain(domain) == cluster:
+            return domain
+        return const.mega_host(cluster)
+
+    async def async_register_iot(
+        self, region: str | None = None, *, login: bool = True
+    ) -> MqttCertificate:
+        """Ask the cloud for the account's MQTT client certificate (``app/mqtt/register/iot``).
+
+        One signed POST with an empty body and ``app-tab: eufy_security`` on scope ``region``'s
+        ``mega-`` domain (:attr:`region` when None), on its session, as the eufy app does.
+        Each call can issue a new certificate: :meth:`async_mqtt_certificate` reuses the
+        cached one. Raises :class:`ProtocolError` for an answer without a usable certificate
+        and the cloud call's typed errors (``login``: see :meth:`_with_session`).
+        """
+        scope = self.region if region is None else region
+
+        async def call(identity: _Identity) -> Any:
+            _code, _resp, data = await self._call(
+                self._mega_host(scope), const.MQTT_REGISTER_PATH, {}, identity, category=True
+            )
+            return data
+
+        data = await self._with_session(call, scope, login=login)
+        certificate = MqttCertificate.from_api(data)
+        _LOGGER.debug("MQTT certificate issued for %s: %r", scope, certificate)
+        return certificate
+
+    def mqtt_client_id(self, certificate: MqttCertificate, region: str | None = None) -> str:
+        """The MQTT client id of ``certificate`` with this install's own ``openudid`` of
+        scope ``region`` (:attr:`region` when None)."""
+        return certificate.client_id(self._install_id(self.region if region is None else region))
+
+    def _cached_mqtt_certificate(self, region: str) -> MqttCertificate | None:
+        entry = self._cache.mqtt_certificate(region)
+        if entry is None:
+            return None
+        try:
+            return MqttCertificate.from_api(entry)
+        except ProtocolError as err:
+            _LOGGER.debug("cached MQTT certificate of %s unusable (%s): fetching one", region, err)
+            return None
+
+    async def async_mqtt_certificate(
+        self,
+        device_keys: Iterable[str],
+        *,
+        region: str | None = None,
+        refresh: bool = False,
+        login: bool = True,
+    ) -> MqttCertificate:
+        """The MQTT certificate of scope ``region`` (:attr:`region` when None) for the MQTT
+        devices ``device_keys`` (``<serial>-<bind time>``, :func:`~..mqtt.device_key`), by
+        the eufy app's rules:
+
+        - the cached certificate while the device set is the one it was asked for (kept in
+          the session cache, across restarts); with none cached, one request;
+        - a changed set (stored first) or ``refresh`` asks for a new certificate; when that
+          fails, the cached one is used and the failure logged, and without one the
+          failure is raised.
+
+        Raises :class:`ProtocolError` for an answer without a usable certificate and the
+        cloud call's typed errors.
+        """
+        scope = self.region if region is None else region
+        keys = frozenset(device_keys)
+        cached = self._cached_mqtt_certificate(scope)
+        changed = self._cache.mqtt_devices(scope) != keys
+        if changed:
+            self._cache.set_mqtt_devices(scope, keys)
+            await self._cache.async_save()
+        if cached is not None and not (changed or refresh):
+            return cached
+        try:
+            certificate = await self.async_register_iot(scope, login=login)
+        except EufySecurityError as err:
+            if cached is None:
+                raise
+            _LOGGER.warning("new MQTT certificate refused (%s); keeping the cached one", err)
+            return cached
+        self._cache.set_mqtt_certificate(scope, certificate.as_cache())
+        await self._cache.async_save()
+        return certificate
+
+    async def async_drop_mqtt_certificate(self, region: str | None = None) -> None:
+        """Forget the cached MQTT certificate of scope ``region`` (:attr:`region` when None),
+        as the eufy app does after three lost connections; the next
+        :meth:`async_mqtt_certificate` asks for a new one."""
+        scope = self.region if region is None else region
+        if self._cache.drop_mqtt_certificate(scope):
+            await self._cache.async_save()
+            _LOGGER.info(
+                "MQTT certificate of %s dropped; the next connect asks for a new one", scope
+            )
 
     # ── thing descriptions ─────────────────────────────────────────────────
 

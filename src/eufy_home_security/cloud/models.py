@@ -735,3 +735,86 @@ def device_cache_entry(data: Mapping[str, Any], *, keep_params: bool) -> dict[st
             if isinstance(param, Mapping)
         ]
     return entry
+
+
+#: The fields of a certificate answer the client keeps (and caches); the rest (the public key,
+#: the broker's CA, the PKCS#12 copy) is never read.
+_MQTT_CERTIFICATE_FIELDS: Final = (
+    "user_id",
+    "app_name",
+    "endpoint_addr",
+    "certificate_pem",
+    "private_key",
+    "thing_name",
+    "certificate_id",
+)
+_MQTT_CERTIFICATE_REQUIRED: Final = _MQTT_CERTIFICATE_FIELDS[:5]
+
+
+def _nonblank(value: object) -> str | None:
+    """``value`` as it is when it is text that is not blank (a PEM keeps its newlines)."""
+    return value if isinstance(value, str) and value.strip() else None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True, repr=False)
+class MqttCertificate:
+    """The account's MQTT client certificate (``app/mqtt/register/iot``).
+
+    ``endpoint`` is the broker host (TLS on port 8883); ``certificate_pem`` and ``private_key``
+    are the client's PEM pair. The repr redacts every identifier and leaves the PEMs out.
+    """
+
+    user_id: str
+    app_name: str
+    endpoint: str
+    certificate_pem: str
+    private_key: str
+    thing_name: str | None = None
+    certificate_id: str | None = None
+
+    def __repr__(self) -> str:
+        return (
+            f"MqttCertificate(user_id={redact(self.user_id)!r}, app_name={self.app_name!r}, "
+            f"endpoint={redact(self.endpoint)!r}, thing_name={redact(self.thing_name)!r}, "
+            f"certificate_id={redact(self.certificate_id)!r})"
+        )
+
+    def client_id(self, openudid: str) -> str:
+        """The MQTT client id the app builds, ``android-<app_name>-<user_id>-<openudid>``;
+        ``openudid`` is this install's own id, never a phone's (the broker drops the older
+        session of a client id that connects twice)."""
+        return f"android-{self.app_name}-{self.user_id}-{openudid}"
+
+    @classmethod
+    def from_api(cls, data: object) -> MqttCertificate:
+        """The certificate of an answer's ``data`` (or a cached entry); :class:`ProtocolError`
+        when it is no object or lacks a non-empty user id, app name, endpoint, certificate or
+        private key."""
+        if not isinstance(data, Mapping):
+            raise ProtocolError("MQTT certificate answer is not an object")
+        values = {key: _nonblank(data.get(key)) for key in _MQTT_CERTIFICATE_FIELDS}
+        missing = [key for key in _MQTT_CERTIFICATE_REQUIRED if values[key] is None]
+        if missing:
+            raise ProtocolError(f"MQTT certificate answer lacks {', '.join(missing)}")
+        return cls(
+            user_id=str(values["user_id"]),
+            app_name=str(values["app_name"]),
+            endpoint=str(values["endpoint_addr"]),
+            certificate_pem=str(values["certificate_pem"]),
+            private_key=str(values["private_key"]),
+            thing_name=values["thing_name"],
+            certificate_id=values["certificate_id"],
+        )
+
+    def as_cache(self) -> dict[str, str]:
+        """The cached form, in the answer's field names; :meth:`from_api` reads it back."""
+        values = {
+            "user_id": self.user_id,
+            "app_name": self.app_name,
+            "endpoint_addr": self.endpoint,
+            "certificate_pem": self.certificate_pem,
+            "private_key": self.private_key,
+            "thing_name": self.thing_name,
+            "certificate_id": self.certificate_id,
+        }
+        return {key: value for key, value in values.items() if value is not None}
