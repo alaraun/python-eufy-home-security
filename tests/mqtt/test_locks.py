@@ -28,7 +28,7 @@ from eufy_home_security.lock_commands.control import LockPath
 from eufy_home_security.mqtt.account import EufyMqttAccount
 from eufy_home_security.testing.mqtt import FakeMqttLock
 
-from .conftest import LOCK_SN, OWNER, Rig, lock
+from .conftest import LOCK_SN, OWNER, SHORT_USER, Rig, lock
 
 pytestmark = pytest.mark.usefixtures("short_waits")
 
@@ -72,6 +72,7 @@ async def test_a_lock_over_mqtt_is_confirmed_by_its_status_report(
     finally:
         await account.async_stop()
     assert [a for a, _ in wifi_lock.received] == [LockAction.LOCK]
+    assert wifi_lock.users == [(OWNER, SHORT_USER)]  # the member record's ids, as the app sends
     changes = [(e.state, e.source, e.station_sn) for e in events if isinstance(e, LockStateChanged)]
     assert changes == [(LockState.LOCKED, LockStateSource.LOCK, None)]
     sent = json.loads(rig.broker.published[-1].payload)

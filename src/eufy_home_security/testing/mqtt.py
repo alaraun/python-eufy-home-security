@@ -457,6 +457,8 @@ class FakeMqttLock:
     mqtt.md § Lock commands), then reports its new state in a status report.
 
     ``owner_user_id`` is the member record's ``admin_user_id`` the commands are keyed by.
+    ``users`` records each command's sender entries as decrypted: ``(A2 user id, A5 short
+    user id as hex)``.
     ``answer_code`` is the lock's answer (0 accepted); an accepted command moves the lock to
     the asked state, or to ``move_to`` (a lock-state code), reported unless ``report`` is
     False; ``answer`` False: the lock sends nothing back. ``mismatch_first`` sends an answer
@@ -475,6 +477,7 @@ class FakeMqttLock:
     mismatch_first: bool = False
     answer: bool = True
     received: list[tuple[LockAction, int]] = field(default_factory=list)
+    users: list[tuple[str, str]] = field(default_factory=list)
     _tasks: set[asyncio.Task[None]] = field(default_factory=set)
 
     def attach(self) -> None:
@@ -495,6 +498,7 @@ class FakeMqttLock:
         entries = tlv_entries(cbc_decrypt(frame.body, key, iv))
         action = LockAction.LOCK if entries[0xA3] == b"\x00" else LockAction.UNLOCK
         self.received.append((action, int(payload["seq_num"])))
+        self.users.append((entries[0xA2].decode(), entries[0xA5].hex()))
         if not self.answer:
             return
         task = asyncio.get_running_loop().create_task(

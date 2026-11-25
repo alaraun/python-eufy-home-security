@@ -219,8 +219,9 @@ publishes ([cli.md](../reference/cli.md)).
 ([locks.md](locks.md#routes)) through an `EufyMqttAccount` the consumer started for the
 account (`None` stops). `async_lock`/`async_unlock` then publish the 1940 cm2 frame
 ([locks.md](locks.md#1940-cm2-frame-in-through-data)) as the `trans` of a command message,
-`{"cmd": 1940, "payload": {"lock_payload", "seq_num", "apiCommand": 1940, "time"}}`, keyed by
-the member record's `admin_user_id` and a time value. The lock answers on its response topic
+`{"cmd": 1940, "payload": {"lock_payload", "seq_num", "apiCommand": 1940, "time"}}`, naming
+the member record's `admin_user_id` and `short_user_id` as the station path does, keyed by the
+`admin_user_id` and a time value. The lock answers on its response topic
 under the key its own `time` names; an answer to another request is skipped. The refusals,
 waits and sequence numbers of [locks.md](locks.md#commands) apply.
 

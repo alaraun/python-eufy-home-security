@@ -180,21 +180,27 @@ class MqttLocks:
         self._owners[serial] = owner
         self._busy.add(serial)
         try:
-            return await self._run(serial, owner, action, target, timeout)
+            return await self._run(device, owner, action, target, timeout)
         finally:
             self._busy.discard(serial)
             self._watchers.pop(serial, None)
 
     async def _run(
-        self, serial: str, owner: str, action: LockAction, target: LockState, timeout: float | None
+        self,
+        device: CloudDevice,
+        owner: str,
+        action: LockAction,
+        target: LockState,
+        timeout: float | None,
     ) -> LockState:
+        serial = device.device_sn
         loop = asyncio.get_running_loop()
         deadline = None if timeout is None else loop.time() + timeout
         now = self._clock()
         request = cm2.build_on_off_request(
             serial,
             action,
-            cm2.Cm2User(owner, self._user_name, None),
+            cm2.Cm2User(owner, self._user_name, device.short_user_id),
             seq_num=self._sequences.next(serial),
             time_value=cm2.lock_time(now, secrets.randbelow(100)),
             timestamp=int(now),

@@ -26,6 +26,7 @@ from eufy_home_security.testing.mqtt import FakeMqttBroker, MqttTestPki, make_mq
 LOCK_SN = "T85D0P2000054321"
 LOCK2_SN = "T85L0P2000054322"
 OWNER = "fedcba9876543210fedcba9876543210fedcba98"
+SHORT_USER = "0a1b"
 
 
 def lock(
@@ -37,7 +38,7 @@ def lock(
             "device_type": 0,
             "device_new_pn": pn,
             "bind_time": bind_time,
-            "member": {"admin_user_id": OWNER, "member_type": 1},
+            "member": {"admin_user_id": OWNER, "member_type": 1, "short_user_id": SHORT_USER},
             **({REGION_KEY: region} if region else {}),
         }
     )
