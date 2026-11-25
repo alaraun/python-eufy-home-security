@@ -183,8 +183,7 @@ class StationGarage:
             waiter = self._waiters.get(key)
             if waiter is not None and _confirms(waiter[0], state) and not waiter[1].done():
                 waiter[1].set_result(state)
-            if key not in self._moving:
-                self._emit(device_sn, door, source)
+            self._emit(device_sn, door, source)  # reads moving while a command waits
 
     def _emit(self, device_sn: str, door: int, source: GarageDoorSource) -> None:
         key = (device_sn, door)

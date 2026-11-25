@@ -197,6 +197,20 @@ def test_a_door_state_read_other_than_the_librarys_fails_the_model(
         _garage(tmp_path, state)
 
 
+def test_contexts_reading_the_doors_from_other_params_fail_the_model(tmp_path: Path) -> None:
+    handler = _handler(
+        tmp_path,
+        GARAGE.replace(
+            "if (e.param_type === 7500) out.garage_door_on_off",
+            "if (e.param_type === (t.device_sn === t.parent_sn ? 1101 : 7500))"
+            " out.garage_door_on_off",
+        )
+        % {"state": HANDLER_STATE, "params": "payload"},
+    )
+    with pytest.raises(gen_models.GeneratorError, match="differ between contexts"):
+        gen_models.garage_block(PN, handler, GARAGE_PROPS, gen_models.contexts_of(PN), {})
+
+
 def test_a_write_that_does_not_send_the_body_as_is_gets_no_block(tmp_path: Path) -> None:
     found, counts = _garage(tmp_path, params="{ door: payload }")
     assert (found, counts) == ({}, {"garage:no read or write": 1})

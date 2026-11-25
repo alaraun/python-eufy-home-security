@@ -268,6 +268,32 @@ async def test_an_unknown_door_needs_operate(garage: Station, fake: FakeStation)
     assert fake.doorbell_payloads[-1]["data"]["type"] == 4
 
 
+async def test_operate_waits_past_an_unknown_report_for_a_known_state(
+    garage: Station, fake: FakeStation
+) -> None:
+    fake.params[0][7500] = fake.params[255][7500] = "16"  # door 1 unknown
+    await garage.async_update()
+    fake.garage_moves = False
+    task = asyncio.create_task(garage.async_open_garage_door(GARAGE_SN, 1, operate=True))
+    async with asyncio.timeout(3):
+        while not fake.doorbell_payloads:
+            await asyncio.sleep(0.01)
+    fake.send_json(0x0547, {"cmd": 7500, "payload": {"door_id": 1, "type": 16 | 8}})
+    await asyncio.sleep(0.2)
+    assert not task.done()
+    fake.send_json(0x0547, {"cmd": 7500, "payload": {"door_id": 1, "type": 2 | 8}})
+    assert await task is GarageDoorState.CLOSED
+
+
+async def test_only_doors_with_a_motor_or_sensor_are_listed(
+    garage: Station, fake: FakeStation
+) -> None:
+    fake.params[0][7501] = fake.params[255][7501] = "1"
+    fake.params[0][7502] = fake.params[255][7502] = "1"
+    await garage.async_update()
+    assert [d.door for d in garage.garage_doors()] == [1]
+
+
 async def test_a_door_without_a_motor_or_another_number_is_refused(
     garage: Station, fake: FakeStation
 ) -> None:
