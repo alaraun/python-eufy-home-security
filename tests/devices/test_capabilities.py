@@ -45,6 +45,8 @@ LOG_AREA: dict[Capability, str] = {
     Capability.RSSI: "Parameter dump",
     Capability.PIR_EVENT_TIME: "Motion sensor param 1605",
     Capability.DOORBELL_RING: "Cloud push (FCM)",  # a press arrives as a cloud push
+    Capability.LOCK: "Lock state",
+    Capability.GARAGE_DOOR: "Garage doors",
 }
 # The hardware-verification row that traces each pan/tilt preset action.
 LOG_AREA_PTZ_ACTION: dict[PtzAction, str] = {

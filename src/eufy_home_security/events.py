@@ -49,6 +49,8 @@ from .models import FrameCipher, GuardMode, ValueSource
 if TYPE_CHECKING:
     from .cloud.status import DeviceListSource
     from .devices.device_alarm import DeviceAlarm
+    from .devices.garage import GarageDoorSource, GarageDoorState
+    from .devices.locks import LockState, LockStateSource
     from .p2p.storage_info import StorageInfo
     from .station import StationState
 
@@ -1473,6 +1475,46 @@ class ZoomChanged:
     zoom: float
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LockStateChanged:
+    """A lock's state differs from the one the account last knew.
+
+    Emitted by :class:`~.client.EufySecurity` for a device graded
+    :attr:`~.devices.capabilities.Capability.LOCK`, the first state included, from its
+    station's parameter dump or notify, the device list's parameters, or a cloud push
+    about it (``source``); the state is already set (``EufySecurity.lock_state``) when a
+    subscriber receives it. ``raw`` is the lock-state parameter's value of a parameter
+    source, ``event_type`` the push's (see :mod:`~.devices.locks`). ``station_sn`` is the
+    station the lock is paired to, or its own serial; None for a push without one.
+    """
+
+    device_sn: str
+    state: LockState
+    source: LockStateSource
+    station_sn: str | None = None
+    raw: str | None = None
+    event_type: int | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GarageDoorChanged:
+    """A garage door's state differs from the one the station last knew.
+
+    Emitted by :class:`~.station.Station` per door of a device graded
+    :attr:`~.devices.capabilities.Capability.GARAGE_DOOR`: from the door-state parameter
+    (``source`` P2P, NOTIFY or CLOUD, as :class:`ParamChanged` names it), from the
+    device's door-state notify (NOTIFY), and opening or closing when this client sends a
+    door command (COMMAND) until the door's next report. ``door`` is 1 or 2 (see
+    :mod:`~.devices.garage`).
+    """
+
+    station_sn: str
+    device_sn: str
+    door: int
+    state: GarageDoorState
+    source: GarageDoorSource
+
+
 # ── guard-mode ordering ──────────────────────────────────────────────────────
 
 #: A guard-mode push whose event time is older than this is a redelivery, not news:
@@ -1831,6 +1873,8 @@ type Event = (
     | CameraBusyChanged
     | PresetsChanged
     | ZoomChanged
+    | LockStateChanged
+    | GarageDoorChanged
 )
 type EventCallback = Callable[[Event], None]
 type Unsubscribe = Callable[[], None]

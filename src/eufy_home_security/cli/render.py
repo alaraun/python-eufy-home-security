@@ -29,7 +29,9 @@ from ..events import (
     DeviceAlarmChanged,
     DevicesChanged,
     Event,
+    GarageDoorChanged,
     GuardModeChanged,
+    LockStateChanged,
     ParamChanged,
     PresetsChanged,
     PushChanged,
@@ -1141,6 +1143,18 @@ def _device_alarm_line(event: DeviceAlarmChanged, show: bool) -> str:
 @_renders(ZoomChanged)
 def _zoom_line(event: ZoomChanged, show: bool) -> str:
     return _on_serial(event.device_sn, show, f"zoom: {event.zoom:g}x")
+
+
+@_renders(LockStateChanged)
+def _lock_line(event: LockStateChanged, show: bool) -> str:
+    via = f"push {event.event_type}" if event.event_type is not None else event.source.value
+    return _on_serial(event.device_sn, show, f"lock: {event.state.value} ({via})")
+
+
+@_renders(GarageDoorChanged)
+def _garage_line(event: GarageDoorChanged, show: bool) -> str:
+    text = f"garage door {event.door}: {event.state.value} ({event.source.value})"
+    return _on_serial(event.device_sn, show, text)
 
 
 def _as_mode(code: int) -> GuardMode | int:

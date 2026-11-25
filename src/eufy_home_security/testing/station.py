@@ -651,6 +651,11 @@ class FakeStation:
         ]
     )
     """A pan/tilt camera's slots, answered to a 6034 query (1700 wrapper) in a 1351 notify."""
+    garage_moves: bool = False
+    """Answer a door command (1700 / 7500) as a garage-door camera: apply its ``type`` to
+    the door-state bits (param 7500 of the subheader's channel), then report them in a
+    7500 notify after :attr:`garage_report_delay` seconds. False: receipt only."""
+    garage_report_delay: float = 0.0
     live_ends_unpinged_after: float | None = None
     """End a live stream when no 1139 ping arrived for this many seconds (a T8170: about
     10 s); None streams until stopped."""
@@ -1055,6 +1060,23 @@ class FakeStation:
             self.send_receipt(FrameType.CMD_TRANSFER, RECEIPT_TAKEN, delay=delay)
             self._on_command(obj, subheader)
 
+    def _move_garage_door(self, kind: int, channel: int) -> None:
+        """Apply door command ``kind`` (0/1 close/open door 1, 2/3 door 2, 4/5 operate) to
+        the channel's door-state bits and schedule their notify (no ``mChannel``, as a
+        standalone garage camera's)."""
+        block = self.params.setdefault(channel, {})
+        bits = int(block.get(7500, "0"))
+        door = 1 if kind in (0, 1, 4) else 2
+        open_bit, closed_bit, unknown_bit = (1, 2, 16) if door == 1 else (4, 8, 32)
+        opens = kind in (1, 3) or (kind in (4, 5) and not bits & open_bit)
+        bits &= ~(open_bit | closed_bit | unknown_bit)
+        bits |= open_bit if opens else closed_bit
+        block[7500] = str(bits)
+        notify = {"cmd": 7500, "payload": {"door_id": door, "type": bits, "notify_tag": "t"}}
+        asyncio.get_running_loop().call_later(
+            self.garage_report_delay, self.send_json, FrameType.NOTIFY_PAYLOAD, notify
+        )
+
     def doorbell_receipt_code(self) -> int:
         """The code a 1700 receipt carries; override to reject one. A camera that is
         still moving answers 1 (busy), and a rejected command is never acted on."""
@@ -1066,6 +1088,8 @@ class FakeStation:
         if command == 1000:
             self.live_opens.append(subheader[2])
             self._start_media(data["encryptkey"], live=True, camera=subheader[2])
+        elif command == 7500 and self.garage_moves:
+            self._move_garage_door(int(data["type"]), subheader[2])
         elif command == 6034:
             self.send_json(
                 FrameType.NOTIFY_PAYLOAD,

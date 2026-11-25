@@ -156,6 +156,8 @@ cloud, for diagnostics.
 | guard mode | a `0x047f` report (the mode in force) about 1 s before the cloud push (`arming` selected, `mode` in force); both are ordered by `GuardModeTracker`, which emits one `GuardModeChanged` per change of either mode |
 | alarm | P2P tone frames (`0x04b1`) and cloud alarm pushes, merged by `AlarmTracker` into one `AlarmChanged` per start and end |
 | a device's own alarm | P2P siren frames (`0x04b2`) on the device's channel, or the station's alarm for a device whose alarm is the station tone (1201); one `DeviceAlarmChanged` per change of `Station.device_alarm_on` |
+| a lock's state | its lock-state parameter (dump, parameter notify, the device list's copy; taken when the value moves) and the lock's cloud pushes (ordered by event time); one `LockStateChanged` per change of `Station.lock_state` |
+| a garage door's state | the camera's door-state parameter and its `7500` door notify; one `GarageDoorChanged` per change, opening or closing while a door command of this client waits |
 | any parameter | the station pushes unsolicited dumps; `Station` coalesces each completed dump into one `StationStateChanged` |
 | sub-device online | the same dumps: 1131 moves with the device |
 | events | P2P `2037` locally and FCM from the cloud, de-duplicated across both channels by `EventDeduplicator` |

@@ -33,6 +33,7 @@ from ..devices.capabilities import (
 )
 from ..devices.conditions import ConditionUnit
 from ..devices.device_alarm import DeviceAlarm
+from ..devices.garage import GarageAction, GarageDoor, GarageDoorState
 from ..devices.lights import Light, lights_from
 from ..devices.live_open import (
     NVR_OPENS,
@@ -52,6 +53,7 @@ from ..devices.live_view import (
     live_view,
     parse_lenses,
 )
+from ..devices.locks import LockReading
 from ..devices.model_settings import (
     PARENTLESS_ONLY,
     SdStatusGroups,
@@ -108,6 +110,7 @@ from ..events import (
     EventBus,
     EventCallback,
     HistoryRecord,
+    ParamChanged,
     SecurityEvent,
     StationStateChanged,
     Unsubscribe,
@@ -204,7 +207,9 @@ from .activity import StationActivity
 from .alarms import AlarmWaits, StationAlarms
 from .base import _NOT_PAIRED, own_channel
 from .configuration import ConfigRules, StationConfiguration
+from .garage import StationGarage
 from .history import StationHistory
+from .locks import StationLocks
 from .ptz import PtzWaits, StationPtz
 
 if TYPE_CHECKING:
@@ -1071,9 +1076,12 @@ class Station:
         self._lens_read_locks: dict[int, asyncio.Lock] = {}
         """Per channel, held while its parameter read runs, so concurrent opens share it."""
         self._alarms = StationAlarms(self)
+        self._locks = StationLocks(self, self._bus)
+        self._garage = StationGarage(self, self._bus)
         session.add_dump_listener(self._on_dump_complete)
         session.add_alarm_listener(self._alarms.on_alarm_frame)
         session.add_notify_listener(self._ptz.on_notify)
+        session.add_notify_listener(self._garage.on_notify)
         session.subscribe(self._on_session_event)
         self._history = StationHistory(self)
 
@@ -1251,6 +1259,91 @@ class Station:
             return None
         params.update({k: v for k, v in (block or {}).items() if v is not None})
         return params
+
+    def _param_report(self, device: CloudDevice, param_id: int) -> tuple[str, ValueSource] | None:
+        """``device``'s value of ``param_id`` as last reported and where it came from: its
+        P2P block (P2P or NOTIFY) over the cloud's copy (CLOUD); None when neither holds
+        it."""
+        state = self.state
+        if state is not None and device is self.device:
+            value = state.setting_params.get(param_id)
+            if value is not None:
+                return value, state.param_sources.get(param_id, ValueSource.P2P)
+        elif state is not None and device.channel is not None:
+            sub = state.devices.get(device.channel)
+            value = None if sub is None else sub.params.get(param_id)
+            if value is not None:
+                origin = self.session.param_origins.get((device.channel, param_id))
+                return value, ValueSource.P2P if origin is None else origin.value_source
+        cloud = next((p.value for p in device.cloud_params if p.param_id == param_id), None)
+        return None if cloud is None else (cloud, ValueSource.CLOUD)
+
+    def lock_state(self, device_sn: str) -> LockReading | None:
+        """The lock state of ``device_sn`` (this station's own serial when it is a lock
+        itself): the latest news from its lock-state parameter (a dump, a parameter
+        notify, the device list's copy) or a cloud push about it, see
+        :class:`~.locks.StationLocks`. None for a device not graded
+        :attr:`~..devices.capabilities.Capability.LOCK` or with nothing reported yet.
+        Each change emits :class:`~..events.LockStateChanged`. Sync; raises
+        ``UnsupportedError`` when ``device_sn`` is not paired to this station.
+        """
+        self.sub_device(device_sn)
+        return self._locks.reading(device_sn)
+
+    def note_lock_push(self, event: SecurityEvent) -> bool:
+        """Take a cloud push about a lock of this station (its ``event_type``, as the eufy
+        app sets its lock card from it); whether it set a state. The client calls it for
+        every push it delivers."""
+        return self._locks.on_push(event)
+
+    def garage_doors(self, device_sn: str | None = None) -> tuple[GarageDoor, ...]:
+        """The garage doors of the station (``None``, or its own serial) or of a paired
+        device: one :class:`~..devices.garage.GarageDoor` per door its unit reports a
+        motor or a sensor bound to, with its last reported state (opening or closing while
+        a command of this client waits). ``()`` for a device not graded
+        :attr:`~..devices.capabilities.Capability.GARAGE_DOOR` or reporting no binding
+        yet. Sync; raises ``UnsupportedError`` when ``device_sn`` is not paired.
+        """
+        return self._garage.doors(self.sub_device(device_sn or self.serial))
+
+    async def async_open_garage_door(
+        self, device_sn: str, door: int, *, operate: bool = False, timeout: float | None = None
+    ) -> GarageDoorState:
+        """Open garage door ``door`` (1 or 2) of ``device_sn`` and wait until the door
+        reports open; see :meth:`async_close_garage_door`."""
+        return await self._garage.async_move(
+            device_sn, door, GarageAction.OPEN, operate=operate, timeout=timeout
+        )
+
+    async def async_close_garage_door(
+        self, device_sn: str, door: int, *, operate: bool = False, timeout: float | None = None
+    ) -> GarageDoorState:
+        """Close garage door ``door`` (1 or 2) of ``device_sn`` and wait until the door
+        reports closed.
+
+        Sends the eufy app's door command (the model's ``garage`` command: a body with the
+        door's ``type`` and the account's nickname) on the device's channel. It confirms
+        by the door's state, as the app does: the receipt only says the device took it, so
+        the call returns once the door reports the asked state (meanwhile the door reads
+        closing, or opening, with a :class:`~..events.GarageDoorChanged`), and raises
+        ``DeviceTimeoutError`` when it does not within ``timeout`` seconds (default
+        :data:`~.garage.GARAGE_CONFIRM_TIMEOUT`, the app's wait). A door already in the
+        asked state returns at once; nothing is sent.
+
+        A door whose state is unknown raises ``DoorStateUnknownError`` unless ``operate``
+        is set: then the app's operate command is sent, which runs the motor whichever way
+        it moves the door, and the call returns the next known state the door reports.
+
+        Raises before anything is sent: ``UnsupportedError`` for a device without garage
+        doors or a door without a bound motor, ``ValueError`` for another door number,
+        ``DeviceBusyError`` while another door command of this client waits on the device.
+        A refused command raises as
+        :meth:`~..p2p.session.StationSession.async_run_recipe` does
+        (``CommandRejectedError`` and its subclasses).
+        """
+        return await self._garage.async_move(
+            device_sn, door, GarageAction.CLOSE, operate=operate, timeout=timeout
+        )
 
     def has_battery(self, device_sn: str | None = None) -> bool | None:
         """Whether the camera or doorbell ``device_sn`` (the station itself for ``None``)
@@ -1458,7 +1551,8 @@ class Station:
         :class:`~..events.StationStateChanged`, :class:`~..events.StationConfigChanged`,
         :class:`~..events.CameraBusyChanged`,
         :class:`~..events.PresetsChanged`, :class:`~..events.ZoomChanged`,
-        :class:`~..events.DeviceAlarmChanged`,
+        :class:`~..events.DeviceAlarmChanged`, :class:`~..events.LockStateChanged`,
+        :class:`~..events.GarageDoorChanged`,
         :class:`~..events.DetectedEventsCounted` and :class:`~..events.RecordedEventsCounted`);
         returns the unsubscribe callable."""
         unsubscribes = (self.session.subscribe(callback), self._bus.subscribe(callback))
@@ -1485,14 +1579,23 @@ class Station:
             removed=tuple(sorted(old.keys() - new.keys())),
             moved=tuple(sorted(sn for sn in new.keys() & old.keys() if new[sn] != old[sn])),
         )
+        self._refresh_doors()
         if not (event.added or event.removed or event.moved):
             return None
         self._bus.emit(event)
         return event
 
+    def _refresh_doors(self) -> None:
+        """Take the lock and garage-door states the held parameters changed."""
+        self._locks.refresh()
+        self._garage.refresh()
+
     def _on_session_event(self, event: Event) -> None:
         if isinstance(event, AlarmChanged):
             self.note_alarm(event)
+        if isinstance(event, ParamChanged):
+            self._locks.on_param(event)
+            self._garage.on_param(event)
         # Preserve activity baselines on idle closes; reset PTZ on any disconnect.
         if isinstance(event, ConnectionChanged) and not event.connected:
             if event.cause is not DisconnectCause.IDLE:
@@ -1501,6 +1604,7 @@ class Station:
                 self._ptz.keep_zoom(device_sn, MIN_ZOOM)
 
     def _on_dump_complete(self) -> None:
+        self._refresh_doors()
         state = self.state
         if state is None:
             return

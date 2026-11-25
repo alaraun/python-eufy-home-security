@@ -29,6 +29,7 @@ from eufy_home_security.cloud.const import KEY_REFRESH_SLOW_RETRY, CloudCode
 from eufy_home_security.cloud.models import CloudDevice, CloudInvite
 from eufy_home_security.cloud.status import DeviceListSource, LoginNeed
 from eufy_home_security.devices.capabilities import Capability
+from eufy_home_security.devices.locks import LockState, LockStateSource
 from eufy_home_security.devices.model_settings import (
     BATTERY_PROPERTY,
     PARENTLESS_ONLY,
@@ -52,6 +53,7 @@ from eufy_home_security.events import (
     EventSource,
     GuardModeChanged,
     GuardModeOrigin,
+    LockStateChanged,
     PushChanged,
     PushPictureSource,
     SecurityEvent,
@@ -2700,6 +2702,46 @@ async def test_guard_mode_push_updates_on_demand_station() -> None:
         assert state.guard_mode == GuardMode.HOME
 
         await client.async_close()
+
+
+@pytest.mark.usefixtures("door_models")
+async def test_a_lock_push_sets_the_state_of_the_station_it_is_paired_to() -> None:
+    lock_sn = "T8502P2000000001"
+    lock = {
+        "device_sn": lock_sn,
+        "device_type": 52,
+        "parent_sn": SYNTHETIC.station_sn,
+        "device_channel": 1,
+        "device_name": "Front",
+    }
+    async with aiohttp.ClientSession() as http:
+        client = account(http, FakeCloud(devices=[station_device(), lock]))
+        await client.async_discover()
+        seen: list[Event] = []
+        client.subscribe(seen.append)
+        try:
+            client._deliver(
+                SecurityEvent(
+                    source=EventSource.CLOUD,
+                    station_sn=SYNTHETIC.station_sn,
+                    device_sn=lock_sn,
+                    event_type=264,  # locked from the app
+                    event_time_ms=1800000000000,
+                    raw={},
+                )
+            )
+            reading = client.stations[SYNTHETIC.station_sn].lock_state(lock_sn)
+        finally:
+            await client.async_close()
+    assert reading is not None
+    assert (reading.state, reading.source, reading.event_type) == (
+        LockState.LOCKED,
+        LockStateSource.PUSH,
+        264,
+    )
+    changed = [e for e in seen if isinstance(e, LockStateChanged)]
+    assert [(e.device_sn, e.state) for e in changed] == [(lock_sn, LockState.LOCKED)]
+    assert isinstance(seen[0], SecurityEvent)  # the push itself first
 
 
 def test_client_rejects_zero_cloud_state_refresh() -> None:

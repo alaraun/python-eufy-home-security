@@ -8,9 +8,11 @@ each written recipe's parameter dump back to getProperty for the read codec (a s
 without a write: the parameter getProperty fills it from, ``locate_params``), join the
 app's labels and settings layout (``scripts/gen_models_join.py``) with the app's setting
 titles, units and variant pairs, give each setting its role and where the app shows it (``--shown``,
-``scripts/gen_models_roles.py``), add the battery reads and the handler's grouping of an
-``SDINFO_EX`` status (``sd_status_groups``), and write ``<out>/<PN>.json``, then
-``<out>/INDEX.json``, the sorted list of every ``<PN>.json`` in ``<out>``.
+``scripts/gen_models_roles.py``), add the battery reads, the handler's grouping of an
+``SDINFO_EX`` status (``sd_status_groups``), a lock's state parameter per context (``lock``)
+and a garage camera's door parameters and command (``garage``), and write
+``<out>/<PN>.json``, then ``<out>/INDEX.json``, the sorted list of every ``<PN>.json`` in
+``<out>``.
 
 Every model is checked before it is written: each codec must render back every swept
 recipe, and every row of the frozen v1 reference (``tests/fixtures/models_v1_reference.json``)
@@ -71,6 +73,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
 
+from eufy_home_security.devices.garage import GarageDoorState, bound, door_state
 from eufy_home_security.devices.model_settings import (
     ACCOUNT_SLOT,
     BATTERY_PROPERTY,
@@ -1017,6 +1020,293 @@ def _status_param(
     return locate_params(product_code, handler, context, [SD_STATUS_PROPERTY], {}).get(
         SD_STATUS_PROPERTY
     )
+
+
+LOCK_PROPERTY = "smart_lock_onoff_status"  # the lock state the lock's card shows
+LOCK_PROBE = "7"  # the value a candidate lock-state parameter is listed at
+LOCK_SAMPLES = range(-1, 64)  # the raw codes the lock-state read is checked at
+GARAGE_STATE_PROPERTY = "garage_door_on_off"  # the doors' state bits; its write moves one
+GARAGE_MOTOR_PROPERTY = "garage_door_binding_status"  # the doors with a motor bound
+GARAGE_SENSOR_PROPERTY = "garage_sensor_binding_status"  # the doors with a sensor bound
+GARAGE_STATE_PROBE = "5"  # door 1 open and door 2 open
+GARAGE_BIND_PROBE = "3"  # both doors bound
+GARAGE_STATE_SAMPLES = range(64)  # every combination of the six state bits
+GARAGE_BIND_SAMPLES = range(16)  # every combination of the four binding bits
+GARAGE_COMMAND_PROBE = {"type": 1, "user_name": "probe", "source": 0}  # a door command body
+GARAGE_DOOR_CODES = {  # the handler's code of each door state
+    GarageDoorState.UNKNOWN: 0,
+    GarageDoorState.OPEN: 1,
+    GarageDoorState.CLOSED: 2,
+}
+
+
+def _get_request(
+    product_code: str, context: codec.Context, ident: str, params: Sequence[tuple[int, str]]
+) -> dict[str, Any]:
+    """getProperty for ``ident`` on a device listing ``params`` (their ids also as command
+    ids), as :func:`_battery_request` asks."""
+    device = context.device(product_code)
+    device["params"] = [{"param_type": p, "param_value": v} for p, v in params]
+    return {"kind": "get", "cmds": [p for p, _ in params], "device": device, "props": [ident]}
+
+
+def held_sources(
+    product_code: str,
+    handler: Path,
+    context: codec.Context,
+    ident: str,
+    *,
+    probe: str,
+    hit: Callable[[Any], bool],
+) -> list[int]:
+    """The parameters of :func:`handler_param_ids` that, listed at ``probe``, make
+    getProperty give ``ident`` a value ``hit`` accepts, ascending. Found by halving the id
+    list: a half is split again while its value is a hit (a parameter the handler reads
+    in place of the listed one, such as a context's other state parameter, is no hit)."""
+    ids = handler_param_ids(handler)
+
+    def ask(groups: list[list[int]]) -> list[bool]:
+        requests = [
+            _get_request(product_code, context, ident, [(p, probe) for p in g]) for g in groups
+        ]
+        replies = run_driver(product_code, handler, requests)
+        return [hit(_property_values(r).get(ident)) for r in replies]
+
+    found: list[int] = []
+    pending = [ids] if ids else []
+    while pending:
+        split: list[list[int]] = []
+        for group, hits in zip(pending, ask(pending), strict=True):
+            if not hits:
+                continue
+            if len(group) == 1:
+                found.extend(group)
+            else:
+                split += [group[: len(group) // 2], group[len(group) // 2 :]]
+        pending = split
+    return sorted(found)
+
+
+def _one_source(
+    product_code: str,
+    handler: Path,
+    context: codec.Context,
+    ident: str,
+    *,
+    probe: str,
+    hit: Callable[[Any], bool],
+) -> int | None:
+    """The one parameter :func:`held_sources` finds for ``ident``; None for none. Raises
+    GeneratorError when several do."""
+    found = held_sources(product_code, handler, context, ident, probe=probe, hit=hit)
+    if len(found) > 1:
+        raise GeneratorError(f"{product_code}: {ident} is read from {found} in {context.name}")
+    return found[0] if found else None
+
+
+def _held_values(
+    product_code: str,
+    handler: Path,
+    context: codec.Context,
+    ident: str,
+    *,
+    param: int,
+    samples: Iterable[int],
+) -> list[tuple[int, Any]]:
+    """``ident``'s getProperty value with ``param`` held at each of ``samples``."""
+    texts = list(samples)
+    requests = [_get_request(product_code, context, ident, [(param, str(n))]) for n in texts]
+    replies = run_driver(product_code, handler, requests)
+    return [(n, _property_values(r).get(ident)) for n, r in zip(texts, replies, strict=True)]
+
+
+def lock_block(
+    product_code: str,
+    handler: Path,
+    props: Sequence[Mapping[str, Any]],
+    contexts: Mapping[str, codec.Context],
+    counts: dict[str, int],
+) -> dict[str, Any]:
+    """The settings file's ``lock``: the parameter getProperty reads
+    :data:`LOCK_PROPERTY` from in each context, the base context's as ``param`` and each
+    other context's that differs under ``contexts``. Empty when the thing description has
+    no such property or no context reads one parameter for it.
+
+    The read must give the raw code back as that integer for every
+    :data:`LOCK_SAMPLES` text (the code the eufy app maps to a state); raises
+    GeneratorError when it does not, when only some contexts read a parameter, or when
+    several parameters fill the property in one context.
+    """
+    if not any(p["identifier"] == LOCK_PROPERTY for p in props):
+        return {}
+
+    def hit(value: Any) -> bool:
+        return _level(value) == int(LOCK_PROBE)
+
+    by_context: dict[str, int | None] = {}
+    for name, ctx in contexts.items():
+        param = _one_source(product_code, handler, ctx, LOCK_PROPERTY, probe=LOCK_PROBE, hit=hit)
+        by_context[name] = param
+        if param is None:
+            continue
+        for code, value in _held_values(
+            product_code, handler, ctx, LOCK_PROPERTY, param=param, samples=LOCK_SAMPLES
+        ):
+            if _level(value) != code:
+                raise GeneratorError(
+                    f"{product_code}: {LOCK_PROPERTY} reads {code} as {value!r} in {name}"
+                )
+    found = {name: p for name, p in by_context.items() if p is not None}
+    if not found:
+        _count(counts, "lock:no read")
+        return {}
+    if len(found) != len(by_context):
+        missing = sorted(set(by_context) - set(found))
+        raise GeneratorError(f"{product_code}: {LOCK_PROPERTY} has no read in {missing}")
+    base = found[BASE]
+    _count(counts, "lock")
+    return {
+        "lock": {
+            "param": base,
+            "contexts": {name: p for name, p in sorted(found.items()) if p != base},
+        }
+    }
+
+
+def _door_codes(value: Any) -> tuple[Any, Any] | None:
+    """``(door_1, door_2)`` of a JSON object text the handler gives a door property."""
+    try:
+        parsed = json.loads(value) if isinstance(value, str) else None
+    except ValueError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    return parsed.get("door_1"), parsed.get("door_2")
+
+
+def _garage_source(
+    product_code: str,
+    handler: Path,
+    context: codec.Context,
+    ident: str,
+    *,
+    probe: str,
+    want: Callable[[int], tuple[int, int]],
+    samples: Iterable[int],
+) -> int | None:
+    """The parameter getProperty reads the door property ``ident`` from in ``context`` (the
+    one whose value at ``probe`` makes it a door object), checked at every sample against
+    ``want`` (the library's door codes of a value); None when no parameter fills it.
+    Raises GeneratorError on a mismatch."""
+
+    def hit(value: Any) -> bool:
+        return _door_codes(value) is not None
+
+    param = _one_source(product_code, handler, context, ident, probe=probe, hit=hit)
+    if param is None:
+        return None
+    held = _held_values(product_code, handler, context, ident, param=param, samples=samples)
+    for bits, value in held:
+        if _door_codes(value) != want(bits):
+            raise GeneratorError(
+                f"{product_code}: {ident} reads {bits} as {value!r}, the library as {want(bits)}"
+            )
+    return param
+
+
+def _state_codes(bits: int) -> tuple[int, int]:
+    return GARAGE_DOOR_CODES[door_state(bits, 1)], GARAGE_DOOR_CODES[door_state(bits, 2)]
+
+
+def _bind_codes(bits: int) -> tuple[int, int]:
+    return int(bound(bits, 1)), int(bound(bits, 2))
+
+
+def _garage_control(
+    product_code: str, handler: Path, context: codec.Context
+) -> tuple[int, int] | None:
+    """``(cmd, subCmd)`` of the handler's write of :data:`GARAGE_STATE_PROPERTY` with a
+    door command body, when it sends that body as its params unchanged; else None."""
+    request = {
+        "kind": "set",
+        "identifier": GARAGE_STATE_PROPERTY,
+        "payload": GARAGE_COMMAND_PROBE,
+        "device": context.device(product_code),
+    }
+    (reply,) = run_driver(product_code, handler, [request])
+    recipe = p2p(reply)
+    if recipe is None or recipe.get("params") != GARAGE_COMMAND_PROBE:
+        return None
+    cmd, sub = recipe.get("cmd"), recipe.get("subCmd")
+    return (cmd, sub) if type(cmd) is int and type(sub) is int else None
+
+
+def garage_block(
+    product_code: str,
+    handler: Path,
+    props: Sequence[Mapping[str, Any]],
+    contexts: Mapping[str, codec.Context],
+    counts: dict[str, int],
+) -> dict[str, Any]:
+    """The settings file's ``garage``: the parameters getProperty reads the door state
+    (:data:`GARAGE_STATE_PROPERTY`), the bound motors and the bound sensors from, and the
+    command the state property's write sends a door command body with. Empty when the
+    thing description lacks one of the three properties, or the handler fills one from no
+    parameter or sends no such write.
+
+    Each read is checked at every combination of its bits against the library's reading
+    (:func:`~eufy_home_security.devices.garage.door_state`,
+    :func:`~eufy_home_security.devices.garage.bound`); raises GeneratorError on a
+    mismatch or when the contexts disagree.
+    """
+    declared = {p["identifier"] for p in props}
+    wanted = (GARAGE_STATE_PROPERTY, GARAGE_MOTOR_PROPERTY, GARAGE_SENSOR_PROPERTY)
+    if not set(wanted) <= declared:
+        if declared & set(wanted):
+            _count(counts, "garage:incomplete")
+        return {}
+    per_context = []
+    for ctx in contexts.values():
+        reads = (
+            _garage_source(
+                product_code,
+                handler,
+                ctx,
+                GARAGE_STATE_PROPERTY,
+                probe=GARAGE_STATE_PROBE,
+                want=_state_codes,
+                samples=GARAGE_STATE_SAMPLES,
+            ),
+            *(
+                _garage_source(
+                    product_code,
+                    handler,
+                    ctx,
+                    ident,
+                    probe=GARAGE_BIND_PROBE,
+                    want=_bind_codes,
+                    samples=GARAGE_BIND_SAMPLES,
+                )
+                for ident in (GARAGE_MOTOR_PROPERTY, GARAGE_SENSOR_PROPERTY)
+            ),
+        )
+        per_context.append((reads, _garage_control(product_code, handler, ctx)))
+    if any(entry != per_context[0] for entry in per_context):
+        raise GeneratorError(f"{product_code}: the garage door reads differ between contexts")
+    (state, motors, sensors), control = per_context[0]
+    if state is None or motors is None or sensors is None or control is None:
+        _count(counts, "garage:no read or write")
+        return {}
+    _count(counts, "garage")
+    cmd, sub = control
+    return {
+        "garage": {
+            "state": state,
+            "motors": motors,
+            "sensors": sensors,
+            "control": {"cmd": cmd, "subCmd": sub},
+        }
+    }
 
 
 def _sd_parse_with(
@@ -2658,6 +2948,8 @@ def generate(
         "settings": merged,
         **battery_block(product_code, handler, props, contexts[BASE], counts),
         **sd_status_block(product_code, handler, contexts, located, counts),
+        **lock_block(product_code, handler, props, contexts, counts),
+        **garage_block(product_code, handler, props, contexts, counts),
     }
     return doc, counts
 

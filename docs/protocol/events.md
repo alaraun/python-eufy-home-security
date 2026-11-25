@@ -416,6 +416,7 @@ What the library does with them:
 | `0x04B1`, `0x04B2`, `0x0578` | alarm tone, siren and light ([Alarm over P2P](#alarm-over-p2p)) |
 | `0x0408` (1032) | Wi-Fi RSSI (`[-61, 0]`) of a camera while it streams |
 | `0x0547` cmd 6246 | live viewers of a camera: `{"num": 1}` when a stream opens, 0 when it closes — every session sees another client's live view |
+| `0x0547` cmd 7500 | a garage door's new state, `{"cmd": 7500, "payload": {"door_id", "type": <state bits>, "notify_tag"}}` **[declared: app]**; the library emits `GarageDoorChanged` per door that changed ([commands.md](commands.md#garage-doors-1700--7500-declared-app)) |
 | `0x0547` cmd 1307 / 1082 | storage records and 1082 answers, including those requested by another client ([commands.md](commands.md#storage-1307-verified)). The library keeps each GCM 11001 record and emits `StorageChanged` when it differs from the last |
 | `0x0402` (1026) | first byte `02` when a recording playback ends, GCM-tagged or under the static key ([media.md](media.md#recording-playback-1025-and-download-1024-verified)) |
 
@@ -621,6 +622,26 @@ event). Neither is authenticated. An arming push whose event time is rejected
 cannot be ordered; both names are then in `rejected_fields`. The fields and the
 properties derived from them are described under
 [Station pushes](#station-pushes-arming-and-alarm).
+
+### Lock pushes **[declared: app]**
+
+A smart lock's push carries its `event_type`; the eufy app sets its lock card from it.
+The library does the same for a device graded `lock` that is paired to one of the
+account's stations (`Station.note_lock_push`, called for every delivered push), emitting
+`LockStateChanged` with `source` `push`:
+
+| `event_type` | state |
+|---|---|
+| 257-261, 269, 270, 530, 532, 538, 549, 550, 562 (unlocked: by hand, automatically, by code, fingerprint, app, temporary code, NFC, palm, one key, face, Matter) | `unlocked` |
+| 262-268, 271, 531, 533, 551, 552, 561 (locked by the same methods, the keypad, automatically) | `locked` |
+| 517, 519 (mechanical fault) | `jammed` |
+| 516 (the lock went offline) | `unknown`: the app sets a code its card shows as its fault state; the library does not call an offline lock jammed |
+
+Other lock pushes (low battery, a door left open, tamper) set no state. A push older (by
+its event time) than the last one taken for that lock is ignored. Between pushes the lock
+state comes from its lock-state parameter (1912 behind a station, 6000 for a lock that is
+its own station; the `lock` block of its settings file), from a dump, a parameter notify
+or the device list's copy.
 
 ## De-duplication across channels
 

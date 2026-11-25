@@ -7,7 +7,15 @@ from collections.abc import Iterable, Sequence
 
 from ._model_names_data import MODEL_NAMES
 from .capabilities import GUARD_MODE_EVIDENCE, PROFILES, Capability
-from .model_settings import Setting, SettingKind, Value, bundled_codes, settings_of
+from .model_settings import (
+    Setting,
+    SettingKind,
+    Value,
+    bundled_codes,
+    garage_params,
+    lock_state_read,
+    settings_of,
+)
 from .station_config_support import (
     StationFeature,
     config_support,
@@ -190,6 +198,35 @@ def _unit_names_section() -> list[str]:
     return out
 
 
+def _doors_section() -> list[str]:
+    """The models whose settings file carries a ``lock`` or a ``garage`` block."""
+    rows = []
+    for code in bundled_codes():
+        lock, garage = lock_state_read(code), garage_params(code)
+        if lock is not None:
+            contexts = ", ".join(f"{name} {p}" for name, p in sorted(lock.contexts.items()))
+            params = f"{lock.param}" + (f" ({contexts})" if contexts else "")
+            rows.append((code, MODELS[code].name if code in MODELS else code, "lock", params))
+        if garage is not None:
+            params = (
+                f"state {garage.state_param}, motors {garage.motor_param}, sensors "
+                f"{garage.sensor_param}; command {garage.cmd} / {garage.sub_cmd}"
+            )
+            name = MODELS[code].name if code in MODELS else code
+            rows.append((code, name, "garage_door", params))
+    out = [
+        "",
+        "## Locks and garage doors",
+        "",
+        "Lock state (`lock`: the lock-state parameter, behind a station and per other"
+        " context) and garage doors (`garage_door`: the door-state, motor and sensor"
+        " parameters and the door command), *declared (eufy app)* from each model's"
+        " settings file. No lock command is sent.",
+        "",
+    ]
+    return out + _table(("model", "name", "capability", "parameters"), rows)
+
+
 def render_support_matrix() -> str:
     """The whole support matrix, deterministically ordered."""
     out = [
@@ -225,7 +262,9 @@ def render_support_matrix() -> str:
         " pan/tilt/zoom capabilities as *declared* where the model's handler sends what the"
         " library sends (per station: `Station.live_support`, `Station.ptz_support`), and"
         " `doorbell_ring` as *declared* for a video doorbell or a video smart lock"
-        " (`ring_evidence`). Any other capability of a model without a profile is *unknown*.",
+        " (`ring_evidence`), and `lock` and `garage_door` as *declared* where the model's"
+        " settings file carries the data ([Locks and garage doors](#locks-and-garage-doors))."
+        " Any other capability of a model without a profile is *unknown*.",
     ]
     for model in sorted(PROFILES):
         profile = PROFILES[model]
@@ -266,6 +305,7 @@ def render_support_matrix() -> str:
         ),
     )
     out += ["", "Modes not listed carry no recorded evidence."]
+    out += _doors_section()
     out += _station_config_section()
     out += [
         "",

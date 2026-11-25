@@ -9,12 +9,14 @@ model (live video, pan/tilt/zoom, the doorbell ring).
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Final
 
+from ..exceptions import ModelDataError
 from ..models import (
     PARAM_BATTERY,
     PARAM_DEVICE_NAME,
@@ -28,12 +30,16 @@ from ..models import (
     GuardMode,
 )
 from ..p2p.params import GUARD_MODE_PARAM
+from .garage import garage_evidence
 from .live_open import app_version, library_live_open
+from .locks import lock_evidence
 from .ptz import app_version as ptz_app_version
 from .ptz import ptz_form
 from .recipes import PARENT_CONNECT_TYPES, ConnectType, PtzAction
 from .support import Evidence, Support
 from .types import MODELS, DeviceKind, DeviceModel, model_for_serial, serial_product_code
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class Capability(StrEnum):
@@ -69,6 +75,12 @@ class Capability(StrEnum):
     """A doorbell button: its press arrives as
     :attr:`~..events.DetectionType.DOORBELL_PRESS` with the device's own serial, and the
     eufy app shows it as a ring (see :func:`ring_evidence`)."""
+    LOCK = "lock"
+    """A smart lock's state: locked, unlocked, jammed and the app's other states
+    (:mod:`.locks`); state only, no lock or unlock command."""
+    GARAGE_DOOR = "garage_door"
+    """The doors of a garage-door camera: their state and the open and close commands
+    (:mod:`.garage`)."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -552,12 +564,16 @@ _GENERATED_PROFILES: dict[tuple[int, str, str], DeviceProfile] = {}
 
 
 def _with_generated(profile: DeviceProfile, product_code: str, model: DeviceModel) -> DeviceProfile:
-    """Memoised :func:`_build_with_ring` of :func:`_build_with_ptz` of
-    :func:`_build_with_live`, keyed by the (module-level, immortal) profile."""
+    """Memoised :func:`_build_with_doors` of :func:`_build_with_ring` of
+    :func:`_build_with_ptz` of :func:`_build_with_live`, keyed by the (module-level,
+    immortal) profile."""
     key = (id(profile), product_code, model.model)
     if key not in _GENERATED_PROFILES:
-        _GENERATED_PROFILES[key] = _build_with_ring(
-            _build_with_ptz(_build_with_live(profile, product_code), product_code), model
+        _GENERATED_PROFILES[key] = _build_with_doors(
+            _build_with_ring(
+                _build_with_ptz(_build_with_live(profile, product_code), product_code), model
+            ),
+            product_code,
         )
     return _GENERATED_PROFILES[key]
 
@@ -662,6 +678,30 @@ def _build_with_ring(profile: DeviceProfile, model: DeviceModel) -> DeviceProfil
     )
 
 
+def _build_with_doors(profile: DeviceProfile, product_code: str) -> DeviceProfile:
+    """``profile`` with :attr:`Capability.LOCK` and :attr:`Capability.GARAGE_DOOR` graded
+    from the model's file (:func:`~.locks.lock_evidence`, :func:`~.garage.garage_evidence`);
+    an entry the profile grades itself (other than ``UNKNOWN``) stands. A file that fails to
+    load grades neither (logged; the result is memoised). ``profile`` itself when nothing
+    changes."""
+    try:
+        found = {
+            Capability.LOCK: lock_evidence(product_code),
+            Capability.GARAGE_DOOR: garage_evidence(product_code),
+        }
+    except ModelDataError as err:
+        _LOGGER.warning("%s: no lock or garage grade: %s", product_code, err)
+        return profile
+    graded = {
+        cap: evidence
+        for cap, evidence in found.items()
+        if evidence is not None and profile.support(cap) is Support.UNKNOWN
+    }
+    if not graded:
+        return profile
+    return replace(profile, capabilities=MappingProxyType({**profile.capabilities, **graded}))
+
+
 def profile_for_serial(serial: str) -> DeviceProfile | None:
     """The profile for a serial's model.
 
@@ -675,7 +715,10 @@ def profile_for_serial(serial: str) -> DeviceProfile | None:
     not grade are ``DECLARED`` the same way from the handler's actions
     (:data:`PTZ_ACTIONS`); under one station: :meth:`~..station.Station.ptz_support`.
     :attr:`Capability.DOORBELL_RING` is ``DECLARED`` for every model that rings
-    (:func:`ring_evidence`), whatever the station.
+    (:func:`ring_evidence`), whatever the station. :attr:`Capability.LOCK` and
+    :attr:`Capability.GARAGE_DOOR` are ``DECLARED`` where the model's file has a ``lock``
+    or ``garage`` block; that reads the file like :func:`~.model_settings.settings_of` the
+    first time (off the event loop, or after the client loaded the account's models).
     """
     profile = own_profile(serial)
     model = model_for_serial(serial)

@@ -1735,11 +1735,66 @@ def sd_status_groups(product_code: str | None) -> SdStatusGroups | None:
 
 
 @dataclass(frozen=True, slots=True)
+class LockStateRead:
+    """The parameter a lock model reports its lock state in, per context **[declared]**
+    (the settings file's ``lock``, see docs/reference/models-schema.md): its handler's
+    read of ``smart_lock_onoff_status``, the raw code the eufy app maps to a state."""
+
+    param: int
+    """The parameter behind a station (the base context)."""
+    contexts: Mapping[str, int] = field(default_factory=lambda: MappingProxyType({}))
+    """The parameter of each context that reads another one (``standalone``: the lock
+    is its own station)."""
+
+    def param_for(self, connect: ConnectType | None = None, *, standalone: bool = False) -> int:
+        """The parameter in a context named as :func:`settings_of` names it."""
+        context = STANDALONE_CONTEXT if standalone else _context_name(connect)
+        return self.param if context is None else self.contexts.get(context, self.param)
+
+
+def lock_state_read(product_code: str | None) -> LockStateRead | None:
+    """Where a device of ``product_code`` reports its lock state; None without a code, a
+    file or a ``lock`` in it. Reads like :func:`settings_of` (same memo) and raises like
+    it."""
+    if product_code is None or not _PRODUCT_CODE.fullmatch(product_code):
+        return None
+    return _load(product_code.upper()).lock
+
+
+@dataclass(frozen=True, slots=True)
+class GarageParams:
+    """The parameters and command of a garage-door model's doors **[declared]** (the
+    settings file's ``garage``, see docs/reference/models-schema.md)."""
+
+    state_param: int
+    """The doors' state bits (``garage_door_on_off``'s read)."""
+    motor_param: int
+    """Which doors have a motor bound (``garage_door_binding_status``'s read)."""
+    sensor_param: int
+    """Which doors have a sensor bound (``garage_sensor_binding_status``'s read)."""
+    cmd: int
+    """The command a door command is sent with (``garage_door_on_off``'s write)."""
+    sub_cmd: int
+    """Its sub-command."""
+
+
+def garage_params(product_code: str | None) -> GarageParams | None:
+    """The door parameters and command of a device of ``product_code``; None without a
+    code, a file or a ``garage`` in it. Reads like :func:`settings_of` (same memo) and
+    raises like it."""
+    if product_code is None or not _PRODUCT_CODE.fullmatch(product_code):
+        return None
+    return _load(product_code.upper()).garage
+
+
+@dataclass(frozen=True, slots=True)
 class _Model:
     entries: Mapping[str, Mapping[str, Any]]
     td_version: int | None
     battery: tuple[BatteryRead, ...] = ()
     sd_status: SdStatusGroups | None = None
+    lock: LockStateRead | None = None
+    garage: GarageParams | None = None
 
 
 _NO_MODEL: Final = _Model(MappingProxyType({}), None)
@@ -1765,9 +1820,51 @@ def _load(code: str) -> _Model:
         sd_status = (
             None if "sd_status_groups" not in data else _sd_status_of(data["sd_status_groups"])
         )
+        lock = None if "lock" not in data else _lock_of(data["lock"])
+        garage = None if "garage" not in data else _garage_of(data["garage"])
     except (KeyError, TypeError, ValueError) as err:
         raise ModelDataError(f"{name}: {err}") from err
-    return _Model(MappingProxyType(entries), _source_version(data), battery, sd_status)
+    return _Model(
+        MappingProxyType(entries), _source_version(data), battery, sd_status, lock, garage
+    )
+
+
+def _param_id(raw: object, what: str) -> int:
+    if type(raw) is not int or not 0 < raw < 2**16:
+        raise ValueError(f"{what} {raw!r} is no parameter id")
+    return raw
+
+
+_CONTEXT_NAMES: Final = frozenset(
+    {STANDALONE_CONTEXT, *(c.value for c in ConnectType if c is not ConnectType.SINGLE)}
+)
+
+
+def _lock_of(raw: object) -> LockStateRead:
+    """The checked ``lock`` object of a settings file."""
+    if not isinstance(raw, dict) or set(raw) != {"param", "contexts"}:
+        raise TypeError("lock is not {param, contexts}")
+    contexts = raw["contexts"]
+    if not isinstance(contexts, dict) or not set(contexts) <= _CONTEXT_NAMES:
+        raise TypeError("lock contexts are not context name -> parameter")
+    by_context = {name: _param_id(p, f"lock param of {name}") for name, p in contexts.items()}
+    return LockStateRead(_param_id(raw["param"], "lock param"), MappingProxyType(by_context))
+
+
+def _garage_of(raw: object) -> GarageParams:
+    """The checked ``garage`` object of a settings file."""
+    if not isinstance(raw, dict) or set(raw) != {"state", "motors", "sensors", "control"}:
+        raise TypeError("garage is not {state, motors, sensors, control}")
+    control = raw["control"]
+    if not isinstance(control, dict) or set(control) != {"cmd", "subCmd"}:
+        raise TypeError("garage control is not {cmd, subCmd}")
+    return GarageParams(
+        _param_id(raw["state"], "garage state"),
+        _param_id(raw["motors"], "garage motors"),
+        _param_id(raw["sensors"], "garage sensors"),
+        _param_id(control["cmd"], "garage control cmd"),
+        _param_id(control["subCmd"], "garage control subCmd"),
+    )
 
 
 _STATUS_TEXT: Final = re.compile(r"-?(?:0|[1-9][0-9]*)")

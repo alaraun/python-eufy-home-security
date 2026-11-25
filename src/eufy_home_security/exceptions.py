@@ -341,12 +341,13 @@ class DeviceTimeoutError(CommunicationError, TimeoutError):
 
 
 class DeviceBusyError(CommunicationError):
-    """The camera is busy with another capture; nothing was sent.
+    """The device is busy with another request of this client; nothing was sent.
 
     Raised at once instead of queueing, so a second request never moves a pan/tilt
     camera away from the view the first one is capturing: another capture, or a
     command that turns or zooms the camera (a pan/tilt step, a go-to, a preset store
-    or default-preset write, a live open at a preset, a zoom).
+    or default-preset write, a live open at a preset, a zoom). A garage-door camera
+    raises it for a door command while another one still waits for its door.
     """
 
 
@@ -477,6 +478,15 @@ class PresetSlotsFullError(CommandNotAppliedError):
 
 class UnsupportedError(EufySecurityError):
     """The device or firmware does not support the requested operation."""
+
+
+class DoorStateUnknownError(UnsupportedError):
+    """A garage door's state is unknown, so an open or close cannot be told apart from
+    the other; raised before anything is sent.
+
+    The eufy app sends its operate command then, which runs the door's motor whichever
+    way it moves the door from where it stands; pass ``operate=True`` to send that.
+    """
 
 
 class ModeInUseError(UnsupportedError):

@@ -38,8 +38,15 @@ if TYPE_CHECKING:
     )
     from .detection_delivery import DetectionDelivery, DetectionDeliveryReport
     from .devices.device_alarm import DeviceAlarm
+    from .devices.garage import (
+        GarageAction,
+        GarageDoor,
+        GarageDoorSource,
+        GarageDoorState,
+    )
     from .devices.lights import Light, LightBrightness, LightColorTemperature
     from .devices.live_view import Lens, LensReport, LensSource, LensView
+    from .devices.locks import LockReading, LockState, LockStateSource
     from .devices.model_settings import (
         Setting,
         SettingControl,
@@ -86,9 +93,11 @@ if TYPE_CHECKING:
         EventDeduplicator,
         EventScope,
         EventSource,
+        GarageDoorChanged,
         GuardModeChanged,
         GuardModeOrigin,
         HistoryRecord,
+        LockStateChanged,
         ParamChanged,
         PresetsChanged,
         PushChanged,
@@ -120,6 +129,7 @@ if TYPE_CHECKING:
         ConfigChangedError,
         DeviceBusyError,
         DeviceTimeoutError,
+        DoorStateUnknownError,
         EmptyResponseError,
         EufySecurityError,
         HandshakeError,
@@ -250,7 +260,11 @@ _EXPORTS: dict[str, str] = {
         "cloud.status",
     ),
     "DeviceAlarm": "devices.device_alarm",
+    **dict.fromkeys(
+        ("GarageAction", "GarageDoor", "GarageDoorSource", "GarageDoorState"), "devices.garage"
+    ),
     **dict.fromkeys(("Light", "LightBrightness", "LightColorTemperature"), "devices.lights"),
+    **dict.fromkeys(("LockReading", "LockState", "LockStateSource"), "devices.locks"),
     **dict.fromkeys(
         (
             "Setting",
@@ -320,9 +334,11 @@ _EXPORTS: dict[str, str] = {
             "EventDeduplicator",
             "EventScope",
             "EventSource",
+            "GarageDoorChanged",
             "GuardModeChanged",
             "GuardModeOrigin",
             "HistoryRecord",
+            "LockStateChanged",
             "ParamChanged",
             "PresetsChanged",
             "PushChanged",
@@ -356,6 +372,7 @@ _EXPORTS: dict[str, str] = {
             "ConfigChangedError",
             "DeviceBusyError",
             "DeviceTimeoutError",
+            "DoorStateUnknownError",
             "EmptyResponseError",
             "EufySecurityError",
             "HandshakeError",
@@ -533,6 +550,7 @@ __all__ = [
     "DevicesChanged",
     "DisconnectCause",
     "DiskInfo",
+    "DoorStateUnknownError",
     "EmmcInfo",
     "EmptyResponseError",
     "EufySecurity",
@@ -544,6 +562,11 @@ __all__ = [
     "FirmwareUpdate",
     "FrameCipher",
     "FrameStream",
+    "GarageAction",
+    "GarageDoor",
+    "GarageDoorChanged",
+    "GarageDoorSource",
+    "GarageDoorState",
     "GuardMode",
     "GuardModeChanged",
     "GuardModeOrigin",
@@ -567,6 +590,10 @@ __all__ = [
     "LightBrightness",
     "LightColorTemperature",
     "LiveStreamLimitError",
+    "LockReading",
+    "LockState",
+    "LockStateChanged",
+    "LockStateSource",
     "LoginChallengeError",
     "LoginLimitedError",
     "LoginNeed",

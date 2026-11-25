@@ -383,7 +383,7 @@ def test_model_file_matches_the_schema(code: str) -> None:
     assert path.is_file()
     text = path.read_text(encoding="utf-8")
     doc = json.loads(text, object_pairs_hook=dict)
-    optional = {"battery", "sd_status_groups"}
+    optional = {"battery", "sd_status_groups", "lock", "garage"}
     assert set(doc) - optional == {"schema_version", "product_code", "source", "settings"}
     assert doc["schema_version"] == 3
     assert doc["product_code"] == code
@@ -417,8 +417,34 @@ def test_model_file_matches_the_schema(code: str) -> None:
         _check_battery(doc["battery"], settings)
     if "sd_status_groups" in doc:
         _check_sd_status_groups(doc["sd_status_groups"])
+    if "lock" in doc:
+        _check_lock(doc["lock"], settings)
+    if "garage" in doc:
+        _check_garage(doc["garage"], settings)
     assert text == codec.dump(doc)
     assert [s for s in _strings(doc) if SERIAL.search(s)] == []
+
+
+def _param_id(value: Any) -> bool:
+    return type(value) is int and 1000 <= value < 65536
+
+
+def _check_lock(lock: Any, settings: dict[str, Any]) -> None:
+    """The lock-state parameter behind a station and each other context's that differs."""
+    assert "smart_lock_onoff_status" in settings
+    assert set(lock) == {"param", "contexts"}
+    assert _param_id(lock["param"])
+    assert set(lock["contexts"]) <= CONTEXTS
+    assert all(_param_id(p) and p != lock["param"] for p in lock["contexts"].values())
+
+
+def _check_garage(garage: Any, settings: dict[str, Any]) -> None:
+    """The door-state, motor and sensor parameters and the door command."""
+    assert {"garage_door_on_off", "garage_door_binding_status"} <= set(settings)
+    assert set(garage) == {"state", "motors", "sensors", "control"}
+    assert all(_param_id(garage[k]) for k in ("state", "motors", "sensors"))
+    assert set(garage["control"]) == {"cmd", "subCmd"}
+    assert all(_param_id(v) for v in garage["control"].values())
 
 
 def _check_sd_status_groups(groups: Any) -> None:

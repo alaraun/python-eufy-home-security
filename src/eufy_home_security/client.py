@@ -1543,6 +1543,9 @@ class EufySecurity:
         if admitted is None:
             return
         self._bus.emit(admitted)
+        for hub in self.stations.values():
+            if hub.note_lock_push(admitted):
+                break
         if (alarm := self._alarms.push(admitted)) is not None:
             self._emit_alarm(alarm)
         if admitted.guard_mode is None or not admitted.station_sn:

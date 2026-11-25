@@ -901,6 +901,13 @@ class StationSession:
         """
         return self._param_state.add_dump_listener(callback)
 
+    @property
+    def user_name(self) -> str:
+        """The account's name the session's credentials carry (the eufy app sends its
+        nickname in a command's ``user_name``). Raises :class:`CommunicationError` before
+        the credentials are loaded (:meth:`async_connect` loads them)."""
+        return self._require_creds().user_name
+
     def add_notify_listener(
         self, callback: Callable[[Mapping[str, Any], FrameCipher], None]
     ) -> Unsubscribe:

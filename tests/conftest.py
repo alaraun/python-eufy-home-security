@@ -9,12 +9,16 @@ addresses must never appear in this repository (``scripts/check_denylist.py``).
 from __future__ import annotations
 
 import ipaddress
+import json
+import shutil
 import socket
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
 
+from eufy_home_security.devices import capabilities, model_settings
 from eufy_home_security.testing import SYNTHETIC
 
 
@@ -78,3 +82,42 @@ def _no_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch)
 @pytest.fixture
 def station_sn() -> str:
     return SYNTHETIC.station_sn
+
+
+DOOR_BLOCKS: dict[str, dict[str, Any]] = {
+    "T8502": {"lock": {"param": 1912, "contexts": {"standalone": 6000}}},
+    "T8453": {
+        "garage": {
+            "state": 7500,
+            "motors": 7501,
+            "sensors": 7502,
+            "control": {"cmd": 1700, "subCmd": 7500},
+        }
+    },
+}
+
+
+def _clear_model_memos() -> None:
+    model_settings._load.cache_clear()
+    model_settings._resolved.cache_clear()
+    model_settings.bundled_codes.cache_clear()
+    capabilities._GENERATED_PROFILES.clear()
+
+
+@pytest.fixture
+def door_models(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[None]:
+    """The bundled model files, T8502 with a ``lock`` and T8453 with a ``garage``."""
+    root = tmp_path_factory.mktemp("models")
+    source = Path(str(model_settings._root()))
+    for path in source.glob("*.json"):
+        shutil.copyfile(path, root / path.name)
+    for code, block in DOOR_BLOCKS.items():
+        doc = json.loads((root / f"{code}.json").read_text("utf-8"))
+        doc.update(block)
+        (root / f"{code}.json").write_text(json.dumps(doc), "utf-8")
+    monkeypatch.setattr(model_settings, "_root", lambda: root)
+    _clear_model_memos()
+    yield
+    _clear_model_memos()

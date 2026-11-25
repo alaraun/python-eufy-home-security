@@ -1271,6 +1271,31 @@ mean 1x **[verified, T8170]**:
   view moves as many times further as the picture is zoomed; the app's pad sends the
   picture's zoom there for a finer step.
 
+## Garage doors (1700 / 7500) **[declared: app]**
+
+A garage-door camera (the models whose settings file carries `garage`,
+[models-schema.md](../reference/models-schema.md#top-level)) drives up to two doors, the
+app's A and B (the library's 1 and 2). Its handler reads three parameters, the ids the
+`garage` block names (7500, 7501, 7502 on every bundled model):
+
+| parameter | bits |
+|---|---|
+| door state (7500) | 1 door 1 open, 2 door 1 closed, 4 door 2 open, 8 door 2 closed, 16 door 1 unknown, 32 door 2 unknown. The handler reads a door's unknown bit first, then open, then closed; none of them is unknown |
+| motors (7501) | 1 door 1, 2 door 2: a motor is bound |
+| sensors (7502) | 1 door 1, 2 door 2: a sensor is bound; 4 door 1, 8 door 2: calibrated (the app's door card) |
+
+The door command is the [1700 wrapper](#the-1700-wrapper-a-standalone-devices-commands-verified)
+with sub-command 7500 on the camera's channel: `{"commandType": 7500, "data": {"type": t,
+"user_name": <account nickname>, "source": 0, "disable_push": 0, "cmdType": 0}}`, `t` 0
+close door 1, 1 open door 1, 2 close door 2, 3 open door 2, 4 / 5 operate door 1 / 2 (the
+app sends operate when the door's state is unknown: the motor runs whichever way it moves
+the door). The receipt only says the camera took it. The door reports its new state in a
+`0x0547` notify `{"cmd": 7500, "payload": {"door_id": d, "type": <state bits>,
+"notify_tag": …}}` ([events.md](events.md#other-station-initiated-frames)); the app waits
+for that report (up to 300 s) and shows the door opening or closing until it arrives. The
+library does the same (`Station.async_open_garage_door`, `async_close_garage_door`): it
+returns once the door reports the asked state.
+
 ## Result codes
 
 | where | code | meaning |

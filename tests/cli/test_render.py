@@ -12,6 +12,8 @@ from eufy_home_security.cli import render
 from eufy_home_security.cli.render import render_network
 from eufy_home_security.cloud.models import CloudDevice, CloudInvite
 from eufy_home_security.devices.device_alarm import DeviceAlarm
+from eufy_home_security.devices.garage import GarageDoorSource, GarageDoorState
+from eufy_home_security.devices.locks import LockState, LockStateSource
 from eufy_home_security.devices.recipes import PresetPosition
 from eufy_home_security.events import (
     AccountMismatch,
@@ -27,7 +29,9 @@ from eufy_home_security.events import (
     DevicesChanged,
     Event,
     EventSource,
+    GarageDoorChanged,
     GuardModeChanged,
+    LockStateChanged,
     ParamChanged,
     PresetsChanged,
     PushChanged,
@@ -840,6 +844,37 @@ def test_zoom_changed_renders_and_serialises() -> None:
     assert render.render_event(event, now=NOW, show_serials=False).endswith("zoom: 2.5x")
     data = json.loads(json.dumps(render.event_json(event)))
     assert (data["type"], data["zoom"]) == ("ZoomChanged", 2.5)
+
+
+def test_lock_and_garage_door_changes_render_and_serialise() -> None:
+    pushed = LockStateChanged(
+        device_sn=SYNTHETIC.camera_sn,
+        state=LockState.UNLOCKED,
+        source=LockStateSource.PUSH,
+        event_type=259,
+    )
+    dumped = LockStateChanged(
+        device_sn=SYNTHETIC.camera_sn, state=LockState.LOCKED, source=LockStateSource.P2P, raw="4"
+    )
+    door = GarageDoorChanged(
+        station_sn=SYNTHETIC.camera_sn,
+        device_sn=SYNTHETIC.camera_sn,
+        door=2,
+        state=GarageDoorState.OPENING,
+        source=GarageDoorSource.COMMAND,
+    )
+    lines = [render.render_event(e, now=NOW, show_serials=False) for e in (pushed, dumped, door)]
+    assert lines[0].endswith("lock: unlocked (push 259)")
+    assert lines[1].endswith("lock: locked (p2p)")
+    assert lines[2].endswith("garage door 2: opening (command)")
+    data = json.loads(json.dumps(render.event_json(door)))
+    assert (data["type"], data["door"], data["state"]) == ("GarageDoorChanged", 2, "opening")
+    data = json.loads(json.dumps(render.event_json(pushed)))
+    assert (data["type"], data["state"], data["event_type"]) == (
+        "LockStateChanged",
+        "unlocked",
+        259,
+    )
 
 
 def test_alarm_delay_changed_renders_and_serialises() -> None:
