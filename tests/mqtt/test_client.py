@@ -733,6 +733,49 @@ async def test_a_stop_during_a_connack_wait_that_times_out_leaves_nothing_open(
     assert loop_errors == []  # the connect's error is the client's, not the loop's
 
 
+async def test_a_connect_step_left_past_the_bound_is_closed_when_it_connects(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(client_module, "CONNECT_SETTLE_SECONDS", 0.3)
+    async with _SlowProxy(rig.broker.port, 1.0) as proxy:
+        rig.client._port = proxy.port
+        before = asyncio.all_tasks()
+        await rig.client.async_start([lock()])
+        await asyncio.sleep(0.2)  # the connect step waits on the proxy
+        await rig.client.async_stop()  # returns after the bound, the step still running
+        await until(lambda: len(rig.broker.connects) == 1, 3.0)
+        await asyncio.sleep(0.5)
+        assert rig.broker.connected_clients == []
+        assert rig.broker.open_sockets == 0
+        assert _left_tasks(before) == []
+    assert len(_warnings(caplog, "when it ends")) == 1
+
+
+async def test_a_connect_step_left_past_the_bound_is_closed_when_it_fails(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(client_module, "CONNECT_SETTLE_SECONDS", 0.2)
+    monkeypatch.setattr(client_module, "PUBLISH_TIMEOUT_SECONDS", 0.6)
+    rig.broker.connack_delay = None
+    loop = asyncio.get_running_loop()
+    loop_errors: list[dict[str, Any]] = []
+    loop.set_exception_handler(lambda _loop, context: loop_errors.append(context))
+    try:
+        before = asyncio.all_tasks()
+        await rig.client.async_start([lock()])
+        await until(lambda: len(rig.broker.connects) == 1)
+        await rig.client.async_stop()  # returns after the bound, the CONNACK wait running
+        assert rig.broker.open_sockets == 1
+        await asyncio.sleep(0.8)  # past the CONNACK wait
+        gc.collect()
+        await asyncio.sleep(0)
+    finally:
+        loop.set_exception_handler(None)
+    assert rig.broker.open_sockets == 0
+    assert _left_tasks(before) == []
+    assert loop_errors == []
+
+
 # ── the optional dependency ──────────────────────────────────────────────────
 
 

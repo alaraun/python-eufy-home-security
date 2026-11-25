@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import logging
 from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Any, Final
@@ -64,8 +65,10 @@ PUBLISH_TIMEOUT_SECONDS: Final = 15.0
 REQUEST_TIMEOUT_SECONDS: Final = 20.0
 """How long :meth:`EufyMqttClient.async_request` waits for the device's answer."""
 CONNECT_SETTLE_SECONDS: float = 30.0
-"""How long a stop or restart waits for a connect step it interrupts: the name lookup, the
-socket connect and the TLS handshake (5 s each at most) and the CONNACK wait (15 s)."""
+"""How long a stop or restart waits for a connect step it interrupts, which normally ends
+within it: the socket connect (5 s per address the endpoint resolves to), the TLS handshake
+(5 s) and the CONNACK wait (15 s). The name lookup has no timeout of its own. A step still
+running after it is closed when it ends."""
 _QOS: Final = 1
 _SUBACK_FAILURE: Final = 0x80
 
@@ -532,8 +535,8 @@ class EufyMqttClient:
 async def _open(client: aiomqtt.Client) -> None:
     """Connect ``client``. The connect step runs in an executor thread that a cancel cannot
     stop: a cancel waits for it (:data:`CONNECT_SETTLE_SECONDS` at most), closes the
-    connection it opened, then propagates, so no connection outlives a stop or a restart.
-    A connect that fails has its socket closed (:func:`_drop`)."""
+    connection it opened, then propagates; a step still running then is closed when it
+    ends. A connect that fails has its socket closed (:func:`_drop`)."""
     connect = asyncio.ensure_future(client.__aenter__())
     try:
         # asyncio.wait, not shield: a shield hands a step that fails after a cancel to the
@@ -544,8 +547,10 @@ async def _open(client: aiomqtt.Client) -> None:
             await _close(client, connect)
         else:
             _LOGGER.warning(
-                "MQTT connect step still running after %g s; leaving it", CONNECT_SETTLE_SECONDS
+                "MQTT connect step still running after %g s; closing it when it ends",
+                CONNECT_SETTLE_SECONDS,
             )
+            connect.add_done_callback(functools.partial(_drop_when_done, client))
         raise
     try:
         connect.result()
@@ -570,6 +575,14 @@ def _drop(client: aiomqtt.Client) -> None:
     paho = client._client
     if paho.socket() is not None:
         paho._sock_close()
+
+
+def _drop_when_done(client: aiomqtt.Client, connect: asyncio.Future[Any]) -> None:
+    """Done callback of a connect step a stop stopped waiting for: close its socket,
+    connected or not, and retrieve its error."""
+    if not connect.cancelled():
+        connect.exception()
+    _drop(client)
 
 
 async def _settle(future: asyncio.Future[Any]) -> bool:
