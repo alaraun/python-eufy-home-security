@@ -500,7 +500,32 @@ async def test_a_restart_reconnects_at_once_and_keeps_the_back_off(
     assert 0.4 < await _gap_before_connect(rig, 3) < 1.0  # the first wait, not doubled
 
 
-async def test_a_cancel_from_outside_ends_the_background_task(rig: Rig) -> None:
+def _held_disconnect(monkeypatch: pytest.MonkeyPatch, outcome: str, hold: float = 0.6) -> None:
+    """Hold every DISCONNECT of an established connection ``hold`` seconds. After the first
+    one closes, ``failing`` raises aiomqtt's error (an unanswered DISCONNECT), ``raising``
+    another one."""
+    aiomqtt = pytest.importorskip("aiomqtt")
+    real = aiomqtt.Client.__aexit__
+    disconnects = 0
+
+    async def held(self: Any, *exc: Any) -> None:
+        nonlocal disconnects
+        disconnects += 1
+        await asyncio.sleep(hold)
+        await real(self, *exc)
+        if disconnects == 1 and outcome == "failing":
+            raise aiomqtt.MqttError("Operation timed out")
+        if disconnects == 1 and outcome == "raising":
+            raise RuntimeError("DISCONNECT failed")
+
+    monkeypatch.setattr(aiomqtt.Client, "__aexit__", held)
+
+
+@pytest.mark.parametrize("disconnect", ["slow", "failing", "raising"])
+async def test_a_cancel_from_outside_ends_the_background_task(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, disconnect: str
+) -> None:
+    _held_disconnect(monkeypatch, disconnect, hold=0.1)
     await rig.client.async_start([lock()])
     await rig.client.async_wait_connected(5)
     (task,) = [t for t in asyncio.all_tasks() if t.get_name() == "eufy-mqtt"]
@@ -508,6 +533,19 @@ async def test_a_cancel_from_outside_ends_the_background_task(rig: Rig) -> None:
     async with asyncio.timeout(2):
         await asyncio.wait({task})
     assert task.cancelled()
+
+
+async def test_a_restart_whose_disconnect_fails_is_no_loss(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    _held_disconnect(monkeypatch, "failing", hold=0.1)
+    await rig.client.async_start([lock()])
+    await rig.client.async_wait_connected(5)
+    await rig.client.async_update_devices([lock(), lock(LOCK2_SN, "T85L0")])
+    await until(lambda: len(rig.broker.connects) == 2)
+    await rig.client.async_wait_connected(5)
+    assert rig.client._losses == 0
+    assert _warnings(caplog, "connection %s") == []
 
 
 async def test_a_changed_device_set_reconnects_with_a_new_certificate(rig: Rig) -> None:
@@ -707,6 +745,61 @@ async def test_a_start_after_a_cancelled_stop_keeps_its_connection(rig: Rig) -> 
         assert rig.client.connected
         await rig.client.async_publish(LOCK_SN, "x")
         await until(lambda: len(rig.broker.published) == 1)
+
+
+@pytest.mark.parametrize("disconnect", ["slow", "failing", "raising"])
+async def test_a_start_right_after_a_cancelled_stop_runs_only_its_own_connection(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, disconnect: str
+) -> None:
+    _held_disconnect(monkeypatch, disconnect)
+    await rig.client.async_start([lock()])
+    await rig.client.async_wait_connected(5)
+    await until(lambda: len(rig.client.topics) == 1)
+    old_run = rig.client._run_task
+    assert old_run is not None
+    with pytest.raises(TimeoutError):
+        async with asyncio.timeout(0.1):
+            await rig.client.async_stop()  # the DISCONNECT is still held
+    await rig.client.async_start([lock()])
+    assert not rig.client.connected  # the closing connection is the stopped run's
+    assert rig.client.topics == frozenset()
+    await rig.client.async_wait_connected(5)
+    assert len(rig.broker.connects) == 2  # the wait ended on the new connection
+    await until(lambda: _subscriptions_are(rig, 2))  # the new connection subscribes
+    async with asyncio.timeout(3):
+        await asyncio.wait({old_run})
+    assert old_run.cancelled()  # the stop's cancel is never swallowed
+    await asyncio.sleep(0.3)  # a stopped run that went on would reconnect meanwhile
+    assert mqtt_tasks().count("eufy-mqtt") == 1
+    assert len(rig.broker.connects) == 2
+    assert len(rig.broker.connected_clients) == 1
+    await rig.client.async_stop()
+    await until(lambda: mqtt_tasks() == [] and rig.broker.connected_clients == [], 3.0)
+    assert rig.broker.open_sockets == 0
+
+
+async def test_a_subscription_granted_after_a_stop_stays_with_its_connection(rig: Rig) -> None:
+    granted = asyncio.Event()
+
+    class HeldSuback:
+        async def subscribe(self, topics: list[tuple[str, int]]) -> list[int]:
+            await granted.wait()
+            return [qos for _topic, qos in topics]
+
+    rig.client._devices = {LOCK_SN: lock()}
+    own = rig.client._subscribed  # the set of the connection the subscriber serves
+    keep = rig.client._keep_subscribed(HeldSuback(), own)  # type: ignore[arg-type]
+    subscriber = asyncio.create_task(keep)
+    try:
+        await asyncio.sleep(0.05)  # the SUBSCRIBE waits for its SUBACK
+        await rig.client.async_stop()
+        granted.set()
+        await until(lambda: bool(own))
+        assert rig.client.topics == frozenset()
+    finally:
+        subscriber.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await subscriber
 
 
 def _left_tasks(before: set[asyncio.Task[Any]]) -> list[str]:

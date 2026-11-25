@@ -144,7 +144,6 @@ class EufyMqttClient:
         self._losses = 0
         self._run_task: asyncio.Task[None] | None = None
         self._connection_task: asyncio.Task[bool] | None = None
-        self._stopping = False
         self._stopped = False
         """Set by :meth:`async_stop`, cleared by :meth:`async_start`: device updates are ignored."""
         self._lifecycle = asyncio.Lock()
@@ -226,7 +225,6 @@ class EufyMqttClient:
             self._start_task()
 
     def _start_task(self) -> None:
-        self._stopping = False
         self._run_task = asyncio.create_task(self._run(), name="eufy-mqtt")
 
     async def async_update_devices(self, devices: Iterable[CloudDevice]) -> None:
@@ -261,8 +259,9 @@ class EufyMqttClient:
             await self._stop()
 
     async def _stop(self) -> None:
-        self._stopping = True
         task, self._run_task = self._run_task, None
+        # The stopped run's connection may still be closing: it is no longer this client's.
+        self._end_connection()
         try:
             if task is not None:
                 task.cancel()
@@ -283,6 +282,12 @@ class EufyMqttClient:
         except TimeoutError:
             raise CommunicationError(f"no MQTT broker connection within {timeout:g} s") from None
 
+    def _end_connection(self) -> None:
+        self._connection_task = None
+        self._client = None
+        self._connected.clear()
+        self._subscribed = set()
+
     def _restart(self) -> None:
         """End the current connection without counting a loss; the run loop reconnects."""
         self._wake.set()
@@ -292,8 +297,9 @@ class EufyMqttClient:
     # ── the connection ───────────────────────────────────────────────────────
 
     async def _run(self) -> None:
+        run = asyncio.current_task()
         delay = RECONNECT_MIN_SECONDS
-        while not self._stopping:
+        while True:
             self._wake.clear()
             connection = asyncio.create_task(self._connect_once(), name="eufy-mqtt-connection")
             self._connection_task = connection
@@ -302,8 +308,7 @@ class EufyMqttClient:
                 established = await connection
             except asyncio.CancelledError:
                 # Only a restart cancels the connection alone; a stop cancels this task.
-                current = asyncio.current_task()
-                if current is not None and current.cancelling():
+                if run is not None and run.cancelling():
                     raise
             except Exception:
                 if self._throttle.should_log("unexpected"):
@@ -311,16 +316,18 @@ class EufyMqttClient:
                 else:
                     _LOGGER.debug("MQTT connection ended unexpectedly; reconnecting", exc_info=True)
             finally:
-                # A run task a cut-short stop left ending must not reset a later start's state.
+                # A stop ends its run's connection itself: a run task it left ending must
+                # not reset a later start's state.
                 if self._connection_task is connection:
-                    lost = self._client is not None and not self._stopping
-                    self._connection_task = None
-                    self._client = None
-                    self._connected.clear()
-                    self._subscribed.clear()
+                    lost = self._client is not None
+                    self._end_connection()
                     if lost:
                         # The answers of an ended connection never arrive.
                         self._fail_waiters("MQTT connection lost")
+            if run is not None and run.cancelling():
+                # A stop or an outside cancel that an error of the closing connection
+                # replaced: this run still ends, and a later start runs its own task.
+                raise asyncio.CancelledError
             if established:
                 delay = RECONNECT_MIN_SECONDS
                 await self._count_loss()
@@ -377,10 +384,12 @@ class EufyMqttClient:
             try:
                 established = True
                 self._client = client
+                # Every end of a connection replaces this set: a late answer stays with it.
+                subscribed = self._subscribed
                 self._connected.set()
                 _LOGGER.info("MQTT broker connected for %d device(s)", len(self._devices))
                 subscriber = asyncio.create_task(
-                    self._keep_subscribed(client), name="eufy-mqtt-subscribe"
+                    self._keep_subscribed(client, subscribed), name="eufy-mqtt-subscribe"
                 )
                 try:
                     async for message in client.messages:
@@ -392,23 +401,29 @@ class EufyMqttClient:
             finally:
                 await client.__aexit__(None, None, None)
         except mqtt.MqttError as err:
+            current = asyncio.current_task()
+            if current is not None and current.cancelling():
+                # A DISCONNECT failing on a stop or restart: the cancel still ends the task.
+                _LOGGER.debug("MQTT disconnect failed: %s", err)
+                raise asyncio.CancelledError from err
             state = "lost" if established else "failed"
             self._log_repeated(state, "MQTT broker connection %s: %s", state, err)
         return established
 
-    async def _keep_subscribed(self, client: aiomqtt.Client) -> None:
-        """Subscribe every wanted answer topic; ask again for the refused ones."""
+    async def _keep_subscribed(self, client: aiomqtt.Client, subscribed: set[str]) -> None:
+        """Subscribe every wanted answer topic on ``client``, recording the accepted ones in
+        ``subscribed``; ask again for the refused ones."""
         while True:
             wanted = {
                 response_topic(topic_code(d), d.device_sn)
                 for d in self._devices.values()
                 if self._subscribe is None or d.device_sn in self._subscribe
             }
-            missing = sorted(wanted - self._subscribed)
+            missing = sorted(wanted - subscribed)
             try:
-                for topic in self._subscribed - wanted:
+                for topic in subscribed - wanted:
                     await client.unsubscribe(topic)
-                    self._subscribed.discard(topic)
+                    subscribed.discard(topic)
                 if missing:
                     codes = await client.subscribe([(topic, _QOS) for topic in missing])
                     for topic, code in zip(missing, codes, strict=False):
@@ -417,7 +432,7 @@ class EufyMqttClient:
                                 "MQTT broker refused the topic of %s", _topic_device(topic)
                             )
                         else:
-                            self._subscribed.add(topic)
+                            subscribed.add(topic)
             except self._aiomqtt.MqttError as err:
                 _LOGGER.debug("MQTT subscription not answered: %s", err)
             await asyncio.sleep(SUBSCRIBE_RETRY_SECONDS)
