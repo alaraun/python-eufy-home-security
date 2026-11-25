@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from .devices.garage import GarageDoorState
+    from .devices.locks import LockState
     from .station_config import StationConfig
 
 
@@ -428,11 +429,14 @@ class CommandError(EufySecurityError):
 class CommandRejectedError(CommandError):
     """The station answered a command with an error code."""
 
-    def __init__(self, command: int, code: int, message: str = "") -> None:
+    def __init__(
+        self, command: int, code: int, message: str = "", *, device_sn: str | None = None
+    ) -> None:
         self.command = command
         self.code = code
         super().__init__(
-            f"command {command} rejected with code {code}" + (f": {message}" if message else "")
+            f"command {command} rejected with code {code}" + (f": {message}" if message else ""),
+            device_sn=device_sn,
         )
 
 
@@ -496,6 +500,21 @@ class DoorNotMovedError(CommandNotAppliedError):
         super().__init__(command, message, device_sn=device_sn)
 
 
+class LockNotMovedError(CommandNotAppliedError):
+    """A lock took a lock or unlock command and then reported a fault state instead of the
+    one asked for (``state``: jammed, or stopped between its positions).
+
+    ``state`` is the reported :class:`~.devices.locks.LockState`, which the lock reads
+    from then on.
+    """
+
+    def __init__(
+        self, command: int, message: str, *, state: LockState, device_sn: str | None = None
+    ) -> None:
+        self.state = state
+        super().__init__(command, message, device_sn=device_sn)
+
+
 class PresetSlotsFullError(CommandNotAppliedError):
     """The camera stores at most ``slots`` presets and all are in use.
 
@@ -521,6 +540,12 @@ class DoorStateUnknownError(UnsupportedError):
     The eufy app sends its operate command then, which runs the door's motor whichever
     way it moves the door from where it stands; pass ``operate=True`` to send that.
     """
+
+
+class GuestAccessError(UnsupportedError):
+    """The account is a guest of the device (its member record's ``member_type`` 0) and the
+    eufy app offers guests no such control (a lock's lock and unlock); raised before
+    anything is sent."""
 
 
 class ModeInUseError(UnsupportedError):

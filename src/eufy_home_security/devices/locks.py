@@ -56,6 +56,8 @@ class LockStateSource(StrEnum):
     """The device list's parameters (the cloud's copy)."""
     PUSH = "push"
     """A cloud push about the lock (its ``event_type``)."""
+    LOCK = "lock"
+    """The lock's own status report (it follows a lock or unlock command)."""
 
 
 CODE_STATES: Final[Mapping[int, LockState]] = MappingProxyType(

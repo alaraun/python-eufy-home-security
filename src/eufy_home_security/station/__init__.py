@@ -53,7 +53,7 @@ from ..devices.live_view import (
     live_view,
     parse_lenses,
 )
-from ..devices.locks import LockReading
+from ..devices.locks import LockReading, LockState
 from ..devices.model_settings import (
     PARENTLESS_ONLY,
     SdStatusGroups,
@@ -134,6 +134,8 @@ from ..images import (
     CameraImage,
     ImageSource,
 )
+from ..lock_commands.actions import LockAction
+from ..lock_commands.control import LockControl
 from ..models import (
     DEV_STATUS_ONLINE,
     NOT_CHARGING_SOURCES,
@@ -209,6 +211,7 @@ from .base import _NOT_PAIRED, ParamReport, own_channel
 from .configuration import ConfigRules, StationConfiguration
 from .garage import StationGarage
 from .history import StationHistory
+from .lock_control import LockCloud, StationLockControl
 from .locks import StationLocks
 from .ptz import PtzWaits, StationPtz
 
@@ -1040,12 +1043,15 @@ class Station:
         listed_settings: Callable[[str], Sequence[Setting]] | None = None,
         cloud_refresh: Callable[[], Awaitable[object]] | None = None,
         login_country: Callable[[], str | None] | None = None,
+        lock_cloud: LockCloud | None = None,
     ) -> None:
         """``listed_settings`` gives the read-only settings listed for a product code
         without a bundled file (the client's model scan); None lists nothing.
         ``cloud_refresh`` reads the cloud device list and applies it
         (:meth:`async_get_config` with ``refresh``); None reads no cloud.
         ``login_country`` gives the country the account logs in with (None: unknown).
+        ``lock_cloud`` gives lock commands the account's user id and the locks' public
+        keys (the cloud client); None sends no lock command that needs them.
         """
         self.device = device
         self.session = session
@@ -1078,10 +1084,12 @@ class Station:
         self._alarms = StationAlarms(self)
         self._locks = StationLocks(self, self._bus)
         self._garage = StationGarage(self, self._bus)
+        self._lock_control = StationLockControl(self, self._locks, cloud=lock_cloud)
         session.add_dump_listener(self._on_dump_complete)
         session.add_alarm_listener(self._alarms.on_alarm_frame)
         session.add_notify_listener(self._ptz.on_notify)
         session.add_notify_listener(self._garage.on_notify)
+        session.add_notify_listener(self._lock_control.on_notify)
         session.subscribe(self._on_session_event)
         self._history = StationHistory(self)
 
@@ -1302,6 +1310,33 @@ class Station:
         """
         self.sub_device(device_sn)
         return self._locks.reading(device_sn)
+
+    def lock_control(self, device_sn: str) -> LockControl:
+        """Whether this client can lock and unlock ``device_sn``, over which path, or why
+        not (:class:`~..lock_commands.control.LockControl`): from the lock's command route,
+        as the eufy app picks it. Sync; raises ``UnsupportedError`` when ``device_sn`` is not
+        paired to this station."""
+        return self._lock_control.control(device_sn)
+
+    async def async_lock(self, device_sn: str, *, timeout: float | None = None) -> LockState:
+        """Lock ``device_sn`` and return its state once the lock reports it locked.
+
+        Sends the lock's P2P command form over this station's session and confirms by the
+        lock's state, never by the station's or the lock's acknowledgement (see
+        :class:`~.lock_control.StationLockControl`). Returns at once, sending nothing, when
+        the lock already reads locked. ``timeout`` bounds the whole wait (default: the eufy
+        app's 20 s for the lock's answer, then 30 s for its state). Raises before sending:
+        ``UnsupportedError`` (no lock, no route, a route this library cannot send or one
+        served over MQTT: use :meth:`EufySecurity.async_lock`), ``GuestAccessError`` (a
+        guest account), ``DeviceBusyError`` (a command for this lock still waits). After:
+        ``CommandRejectedError`` (the station or the lock refused it, with its code),
+        ``LockNotMovedError`` (the lock reported a fault state), ``DeviceTimeoutError``.
+        """
+        return await self._lock_control.async_command(device_sn, LockAction.LOCK, timeout=timeout)
+
+    async def async_unlock(self, device_sn: str, *, timeout: float | None = None) -> LockState:
+        """Unlock ``device_sn``; as :meth:`async_lock`, confirmed by the unlocked state."""
+        return await self._lock_control.async_command(device_sn, LockAction.UNLOCK, timeout=timeout)
 
     def note_lock_push(self, event: SecurityEvent) -> bool:
         """Take a cloud push about a lock of this station (its ``event_type``, as the eufy

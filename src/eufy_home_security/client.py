@@ -732,6 +732,7 @@ class EufySecurity:
                 listed_settings=self._listed_settings,
                 cloud_refresh=self.async_refresh_cloud_state,
                 login_country=self._login_country_code,
+                lock_cloud=self.cloud,
             )
             station.apply_cloud_device(device)  # the cached snapshot, until a fresh one
             self.stations[serial] = station
