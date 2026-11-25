@@ -248,6 +248,10 @@ listed without an end time."""
 RECORDING_MATCH_GIVE_UP: Final = 180.0
 """Seconds after a detection when the search for its recording ends: the longest clip
 length the eufy app offers (120 s), :data:`RECORDING_QUIET` and one more listing."""
+RECORDING_MATCH_FRESH: Final = 5.0
+"""Seconds a finished listing of a camera's recordings answers another look of that
+camera (detections close in time share their listings), at most half of
+:data:`RECORDING_MATCH_RETRY` and of the look's ``quiet``."""
 STANDALONE_STILL_WINDOW: Final = (-2.0, 30.0)
 """Seconds a standalone device's newest still may lie before and after a detection's time
 to be that detection's (its file name is the device's local second)."""
@@ -4123,7 +4127,13 @@ class Station:
         then the lower ``record_id``; else the row that holds that time (it began
         earlier and had not ended by then, or runs still), the latest start first. So a
         second detection of the same camera inside one clip gets that clip's row. The
-        window is inferred, not measured on a HomeBase 2.
+        window is inferred, not measured on a HomeBase 2. The listing goes back from the
+        event's day to the page holding a recording that started
+        :data:`RECORDING_MATCH_GIVE_UP` before the event, or before the oldest detection of
+        the camera whose search is still within that bound (rows come newest first: a busy
+        day costs one page, not the whole day). Looks at one camera share a listing: one
+        in flight, or one finished less than :data:`RECORDING_MATCH_FRESH` ago, answers
+        every look it reaches back far enough for.
 
         The answer is ``SETTLED`` (:meth:`recording_settled` with ``quiet``),
         ``RECORDING`` (``retry_at``: the row's end plus ``quiet``, or
@@ -4147,6 +4157,7 @@ class Station:
             window=RECORDING_MATCH_WINDOW,
             retry=RECORDING_MATCH_RETRY,
             give_up=RECORDING_MATCH_GIVE_UP,
+            fresh=min(RECORDING_MATCH_FRESH, RECORDING_MATCH_RETRY / 2, quiet / 2),
             quiet=quiet,
             timeout=timeout,
         )
@@ -4175,7 +4186,8 @@ class Station:
         ``timeout``) and, until it answers ``SETTLED``, sleeps to its ``retry_at`` and
         asks again. The wait is the clip's length plus ``quiet`` plus at most one
         :data:`RECORDING_MATCH_RETRY`, never past :data:`RECORDING_MATCH_GIVE_UP` after
-        the event (180 s); each ask lists the camera's recordings of those minutes. A
+        the event (180 s); each ask lists the camera's recordings of those minutes, and
+        the waits of one camera's detections share their listings. A
         second detection of the same camera inside one clip gets the same row. For the
         trigger frame and thumbnail pass :meth:`event_with_recording` to
         :meth:`async_event_image`. Raises what :meth:`async_recording_for_detection`

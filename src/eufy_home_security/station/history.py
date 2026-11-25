@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
-from collections.abc import Callable
-from dataclasses import dataclass, replace
+import time
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Protocol
 
@@ -119,6 +121,48 @@ class _MatchClock:
         return min(wanted, bound)
 
 
+@dataclass(slots=True)
+class _Look:
+    """One listing of a camera's recordings, shared by the looks that start while it
+    runs or soon after it ends."""
+
+    since: datetime
+    """The oldest start it lists down to."""
+    last_day: date
+    """The newest day it lists."""
+    rows: asyncio.Future[tuple[list[HistoryRecord], datetime]]
+    """The rows and when they were listed (aware)."""
+    done_at: float | None = None
+    """``time.monotonic()`` when it was listed; None while it runs or after it failed."""
+
+    def serves(self, since: datetime, last_day: date, fresh: float) -> bool:
+        """Whether a look down to ``since`` and up to ``last_day`` may take its rows: it
+        reaches both and runs still, or was listed less than ``fresh`` seconds ago."""
+        if self.since > since or self.last_day < last_day:
+            return False
+        if not self.rows.done():
+            return True
+        return self.done_at is not None and time.monotonic() - self.done_at < fresh
+
+
+@dataclass(slots=True)
+class _Searches:
+    """A camera's looks: the last listing, and the bounds of the detections still
+    searched (a listing reaches the oldest, so their next looks can share it)."""
+
+    look: _Look | None = None
+    bounds: dict[datetime, datetime] = field(default_factory=dict)
+    """Lower bound -> when its detection's search ends."""
+
+    def floor(self, since: datetime, until: datetime, now: datetime) -> datetime:
+        """The oldest bound of the searches still running at ``now``, ``since``
+        (searched until ``until``) among them."""
+        if until > now:
+            self.bounds[since] = max(until, self.bounds.get(since, until))
+        self.bounds = {b: end for b, end in self.bounds.items() if end > now}
+        return min((since, *self.bounds))
+
+
 class HistoryOwner(Protocol):
     """The station members a :class:`StationHistory` uses."""
 
@@ -139,13 +183,15 @@ class HistoryOwner(Protocol):
 class StationHistory:
     """A station's history rows and recordings: lists, single rows, pages, downloads.
 
-    Requests only, over the station's session; it holds no state. Every default the
+    Requests over the station's session; the only state is each camera's last listing
+    for a detection's recording, which the looks of that camera share. Every default the
     public API documents (``days``, ``quiet``) is resolved by :class:`Station` before
     calling.
     """
 
     def __init__(self, station: HistoryOwner) -> None:
         self._station = station
+        self._searches: dict[str, _Searches] = {}
 
     async def list_history(
         self, start_date: str, end_date: str | None = None, **kwargs: Any
@@ -316,11 +362,13 @@ class StationHistory:
         window: tuple[float, float],
         retry: float,
         give_up: float,
+        fresh: float,
         quiet: float,
         timeout: float | None,
     ) -> DetectionRecording:
         """See :meth:`Station.async_recording_for_detection`; ``device_sn`` is the
-        event's camera, paired here."""
+        event's camera, paired here; a listing of the camera finished less than ``fresh``
+        seconds ago answers the look."""
         if self._station.is_standalone:
             raise UnsupportedError("a standalone device lists no history")
         event_at = (
@@ -343,18 +391,72 @@ class StationHistory:
             raise UnsupportedError("the event carries no time to match a recording to")
         early, late = window
         first = event_at - timedelta(seconds=give_up)  # the earliest start of a holding clip
-        days = max(1, (_host_today() - first.astimezone().date()).days + 1)
-        rows = await self.list_recordings(
-            device_sn,
-            days=days,
-            since=first,
-            until=(event_at + timedelta(seconds=late)).astimezone().date(),
-            timeout=timeout,
+        last_day = min(_host_today(), (event_at + timedelta(seconds=late)).astimezone().date())
+        searches = self._searches.setdefault(device_sn, _Searches())
+        floor = searches.floor(first, event_at + timedelta(seconds=give_up), clock.now)
+        rows, _listed_at = await self._shared_look(
+            searches,
+            _Look(floor, last_day, asyncio.get_running_loop().create_future()),
+            first,
+            fresh,
+            lambda: self._camera_recordings(device_sn, floor, last_day, timeout),
         )
         found = _detection_match(rows, event_at, event.video_path, early, late)
         if found is None:
             return clock.not_listed()
         return clock.of_row(*found)
+
+    @staticmethod
+    async def _shared_look(
+        searches: _Searches,
+        look: _Look,
+        since: datetime,
+        fresh: float,
+        listing: Callable[[], Awaitable[list[HistoryRecord]]],
+    ) -> tuple[list[HistoryRecord], datetime]:
+        """The camera's rows down to ``since`` and up to ``look``'s last day, and when they
+        were listed: from the camera's last listing when it serves (see
+        :meth:`_Look.serves`), else from ``listing``, run as ``look`` and shared with
+        the looks that come while it runs (its error too)."""
+        while (last := searches.look) is not None and last.serves(since, look.last_day, fresh):
+            await asyncio.wait((last.rows,))
+            if not last.rows.cancelled():
+                return last.rows.result()
+        searches.look = look
+        try:
+            rows = await listing()
+            look.done_at = time.monotonic()
+            look.rows.set_result((rows, datetime.now(UTC)))
+        except Exception as err:
+            look.rows.set_exception(err)
+            look.rows.exception()  # read: a failure no other look shares logs nothing
+            raise
+        finally:
+            if not look.rows.done():
+                look.rows.cancel()
+        return look.rows.result()
+
+    async def _camera_recordings(
+        self, device_sn: str, since: datetime, last_day: date, timeout: float | None
+    ) -> list[HistoryRecord]:
+        """The recordings of ``device_sn`` from ``last_day`` back to the page holding a
+        row that started before ``since``."""
+
+        def older(row: HistoryRecord) -> bool:
+            started = row.started_at
+            return started is not None and started < since
+
+        first_day = since.astimezone().date()
+        if first_day > last_day:
+            return []
+        return await self._station.session.async_list_history(
+            first_day.strftime("%Y%m%d"),
+            last_day.strftime("%Y%m%d"),
+            keep=self._recording_filter(device_sn, since),
+            stop=older,
+            device_sn=device_sn,
+            timeout=timeout,
+        )
 
     @staticmethod
     def recording_settled(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import gc
 from collections.abc import AsyncIterator
 from datetime import UTC, date, datetime, timedelta, tzinfo
 from typing import Any
@@ -20,6 +21,7 @@ from eufy_home_security.exceptions import (
     RecordingCursorError,
     RecordingRefError,
     RecordNotFoundError,
+    StationUnreachableError,
     UnsupportedError,
 )
 from eufy_home_security.images import ImageSource
@@ -966,6 +968,7 @@ async def test_a_detection_with_no_recording_listed_yet_is_asked_again_until_its
     assert found.retry_at == expected
 
 
+@pytest.mark.usefixtures("no_reuse")
 async def test_of_two_recordings_in_the_window_the_closest_start_wins_and_a_tie_the_earlier(
     station: Station, fake: FakeStation, today: datetime
 ) -> None:
@@ -989,6 +992,7 @@ async def test_of_two_recordings_in_the_window_the_closest_start_wins_and_a_tie_
     assert same.record.record_id == _dayed(event, 8)  # the lower record id
 
 
+@pytest.mark.usefixtures("no_reuse")
 async def test_a_recording_of_another_camera_is_never_a_detections(
     two_cameras: Station, fake: FakeStation, today: datetime
 ) -> None:
@@ -1336,3 +1340,182 @@ async def test_a_record_of_another_camera_or_without_a_clip_names_no_recording(
     unlisted = HistoryRecord.from_row(_at(today, SYNTHETIC.camera_sn, 0, thumb_path="/media/x.jpg"))
     named = two_cameras.event_with_recording(event, unlisted)
     assert (named.record_id, named.thumb_path) == (None, None)  # no id, no valid still path
+
+
+# ── one look per camera ──────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def no_reuse(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A finished listing answers no later look (only one in flight is shared)."""
+    monkeypatch.setattr(station_module, "RECORDING_MATCH_FRESH", 0.0)
+
+
+def _busy_day(
+    event: datetime, *, hb2: bool, step: float, first: float, count: int = 100
+) -> list[dict[str, object]]:
+    """``count`` recordings of the camera ``first`` s, ``first + step`` s ... before
+    ``event``, newest first, on the event's host-local day only."""
+    day = event.astimezone().date()
+    starts = [event - timedelta(seconds=first + step * n) for n in range(count)]
+    return [
+        _at(start, SYNTHETIC.camera_sn, 1999 - n if hb2 else _dayed(start, 1000 - n))
+        for n, start in enumerate(starts)
+        if start.astimezone().date() == day
+    ]
+
+
+@pytest.fixture(params=["homebase_3", "homebase_2"])
+async def homebase(request: pytest.FixtureRequest, fake: FakeStation) -> AsyncIterator[Station]:
+    """A HomeBase 3 (:data:`STATION`), then a HomeBase 2 (:data:`HB2_SN`), with :data:`CAMERA`."""
+    serial = SYNTHETIC.station_sn if request.param == "homebase_3" else HB2_SN
+    fake.serial = serial
+    fake.static_key = static_key(serial, fake.did)
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
+
+    session = StationSession(serial, credentials, host="127.0.0.1", port=fake.discovery_port)
+    st = Station(
+        dataclasses.replace(STATION, device_sn=serial),
+        session,
+        sub_devices=[dataclasses.replace(CAMERA, station_sn=serial)],
+    )
+    yield st
+    await st.async_close()
+
+
+async def test_a_look_at_a_busy_day_stops_at_the_page_that_reaches_its_bound(
+    homebase: Station, fake: FakeStation, today: datetime
+) -> None:
+    """A camera day of 101 recordings: one look asks only the page that reaches back past
+    :data:`RECORDING_MATCH_GIVE_UP` before the detection, not the rest of the day."""
+    st = homebase
+    hb2 = st.serial == HB2_SN
+    event = _whole(today, 30)
+    own_id = 3000 if hb2 else _dayed(event, 2000)
+    fake.rows = [
+        _at(event, SYNTHETIC.camera_sn, own_id),
+        *_busy_day(event, hb2=hb2, step=60, first=300),
+    ]
+    found = await st.async_recording_for_detection(_detection(event, station_sn=st.serial))
+    assert found.record is not None
+    assert found.record.record_id == own_id
+    assert len(fake.history_queries) == 1
+
+
+@pytest.mark.usefixtures("no_reuse")
+async def test_concurrent_looks_at_one_camera_share_one_listing(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    event = _whole(today, 120)
+    fake.rows = [_at(event, SYNTHETIC.camera_sn, _dayed(event, 4))]
+    detection = _detection(event)
+    first, second = await asyncio.gather(
+        station.async_recording_for_detection(detection),
+        station.async_recording_for_detection(_detection(event + timedelta(seconds=1))),
+    )
+    assert first.record == second.record
+    assert len(fake.history_queries) == 1
+    await station.async_recording_for_detection(detection)  # the listing is over: a new one
+    assert len(fake.history_queries) == 2
+
+
+async def test_a_look_soon_after_another_of_the_camera_reuses_its_listing(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    """A listing finished less than :data:`RECORDING_MATCH_FRESH` ago answers the next look
+    of the camera; with ``quiet`` 0 no listing is fresh."""
+    event = _whole(today, 120)
+    fake.rows = [_at(event, SYNTHETIC.camera_sn, _dayed(event, 4))]
+    await station.async_recording_for_detection(_detection(event))
+    await station.async_recording_for_detection(_detection(event + timedelta(seconds=5)))
+    assert len(fake.history_queries) == 1
+    await station.async_recording_for_detection(_detection(event), quiet=0.0)
+    assert len(fake.history_queries) == 2
+
+
+@pytest.mark.usefixtures("no_reuse")
+@pytest.mark.parametrize(("older_ago", "pages"), [(150, 2), (190, 1)])
+async def test_a_look_lists_back_to_the_oldest_detection_of_the_camera_still_searched(
+    hb2: Station, fake: FakeStation, today: datetime, older_ago: int, pages: int
+) -> None:
+    """A newer detection's listing reaches the bound of an older one still within its
+    give-up time (so the older one's next look can share it), not of one past it."""
+    newer = _whole(today, 20)
+    fake.rows = [
+        _at(newer, SYNTHETIC.camera_sn, 3000),
+        *_busy_day(newer, hb2=True, step=10, first=10),
+    ]
+    older = _detection(_whole(today, older_ago), station_sn=HB2_SN)
+    await hb2.async_recording_for_detection(older)
+    assert len(fake.history_queries) == 2  # its bound lies on the second page
+    fake.history_queries.clear()
+    await hb2.async_recording_for_detection(_detection(newer, station_sn=HB2_SN))
+    assert len(fake.history_queries) == pages
+
+
+@pytest.mark.usefixtures("short_match")
+async def test_a_burst_of_detections_of_one_camera_shares_the_listings_of_their_waits(
+    hb2: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started = datetime.now(UTC).replace(microsecond=0) + timedelta(seconds=1)
+    record_id = fake.add_detection_recording(SYNTHETIC.camera_sn, started, 1.0, listed_after=0.5)
+    events = [_detection(started + timedelta(seconds=s), station_sn=HB2_SN) for s in (3, 0, 2, 1)]
+    states = _states(hb2, monkeypatch)
+    async with asyncio.timeout(6.0):
+        rows = await asyncio.gather(
+            *(hb2.async_wait_recording_for_detection(e, quiet=1.1) for e in events)
+        )
+    assert {None if r is None else r.record_id for r in rows} == {record_id}
+    assert len(fake.history_queries) * 3 <= len(states)
+
+
+async def test_a_failed_listing_fails_the_looks_sharing_it_and_answers_no_later_look(
+    station: Station, fake: FakeStation, today: datetime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The looks waiting on a listing get its error (one query); a look cancelled meanwhile
+    leaves nothing for the loop's exception handler; the next look lists again."""
+    event = _whole(today, 120)
+    fake.rows = [_at(event, SYNTHETIC.camera_sn, _dayed(event, 4))]
+    real = station.session.async_list_history
+    release = asyncio.Event()
+    calls = 0
+
+    async def fail_first(*args: Any, **kwargs: Any) -> list[HistoryRecord]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            await release.wait()
+            raise StationUnreachableError("no route")
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(station.session, "async_list_history", fail_first)
+    loop = asyncio.get_running_loop()
+    seen: list[dict[str, Any]] = []
+    loop.set_exception_handler(lambda _loop, context: seen.append(context))
+    try:
+        looks = [
+            asyncio.create_task(
+                station.async_recording_for_detection(_detection(event + timedelta(seconds=s)))
+            )
+            for s in (0, 1, 2)
+        ]
+        for _ in range(5):
+            await asyncio.sleep(0)
+        looks[2].cancel()
+        release.set()
+        results = await asyncio.gather(*looks, return_exceptions=True)
+        assert [type(r) for r in results] == [
+            StationUnreachableError,
+            StationUnreachableError,
+            asyncio.CancelledError,
+        ]
+        assert calls == 1
+        found = await station.async_recording_for_detection(_detection(event))
+        assert (found.state, calls) == (DetectionRecordingState.SETTLED, 2)
+        await asyncio.sleep(0)
+        gc.collect()
+        assert seen == []
+    finally:
+        loop.set_exception_handler(None)

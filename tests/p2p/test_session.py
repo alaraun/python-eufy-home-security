@@ -1535,6 +1535,29 @@ async def test_history_pages_every_day_of_the_window(station: FakeStation) -> No
     assert [r.record_id for r in capped] == [r["record_id"] for r in newest_first[:40]]
 
 
+@pytest.mark.parametrize(("stop_at", "queries"), [(None, 5), (100, 2), (25, 4)])
+async def test_history_stops_at_the_page_holding_a_row_older_than_wanted(
+    station: FakeStation, stop_at: int | None, queries: int
+) -> None:
+    """``stop`` ends the walk at the page holding a row it accepts: no later page of the
+    day and no earlier day is asked; that page's rows still count."""
+    station.rows = [_history_row("20260915", n) for n in range(22, 36)]  # hygiene: ok
+    station.rows += [_history_row("20260916", n) for n in range(21, 131)]  # hygiene: ok
+    session = make_session(station, Provider(station))
+    try:
+        history = await session.async_list_history(
+            "20260915",  # hygiene: ok
+            "20260916",  # hygiene: ok
+            page_size=30,
+            stop=None if stop_at is None else (lambda row: row.record_id % 100_000 < stop_at),
+        )
+    finally:
+        await session.async_close()
+    assert len(station.history_queries) == queries
+    if stop_at == 100:
+        assert [r.record_id % 100_000 for r in history] == list(range(130, 71, -1))
+
+
 async def test_a_station_outside_the_homebase_3_family_is_paged_by_start_time() -> None:
     """A HomeBase 2 gets the app's 10017 query: the filters at their "all" values, no
     ids, a page of 20, and the next page from the oldest start_time of the last;

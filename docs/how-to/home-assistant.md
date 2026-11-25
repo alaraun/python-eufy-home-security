@@ -2438,7 +2438,10 @@ its trigger frame. The library finds it:
   (`recording_settled`), or None when none was listed by `RECORDING_MATCH_GIVE_UP`
   (180 s) after the event. It lists the camera's recordings around the event's time,
   every `RECORDING_MATCH_RETRY` (15 s) while none is listed, and again when a running
-  row's end plus `quiet` has passed. The wait is the clip's length plus `quiet` (30 s)
+  row's end plus `quiet` has passed. A listing goes back only to the page that reaches
+  180 s before the event (or before the camera's oldest detection still searched), so a
+  busy day costs one page per look, and the waits of one camera's detections share their
+  listings (one in flight, or one finished less than `RECORDING_MATCH_FRESH`, 5 s, ago). The wait is the clip's length plus `quiet` (30 s)
   plus at most one re-list, never more than 180 s after the event (the longest clip
   length the eufy app offers is 120 s). Run it as a background task per detection and
   cancel it at unload; `timeout` bounds each history query.
