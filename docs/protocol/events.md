@@ -709,7 +709,7 @@ before anything reaches the deduplicator.
 | need | use |
 |---|---|
 | camera detections on the LAN | local push where `Station.local_events` is verified: sooner, richer paths, no internet |
-| camera detections of any other station (a HomeBase 2) | cloud push |
+| camera detections of any other station (a HomeBase 2) | cloud push; the push names no recording, so find it with `Station.async_wait_recording_for_detection` (matched by camera and time, see the [HA guide](../how-to/home-assistant.md#the-recording-of-a-detection-that-names-none)) |
 | guard mode, within seconds | cloud push (`arming`) |
 | guard mode, authoritative | parameter dump (station 1224) |
 | batteries, RSSI, storage, settings | parameter dump + local change pushes |

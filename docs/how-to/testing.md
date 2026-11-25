@@ -107,6 +107,13 @@ async def test_warm_start_needs_no_cloud() -> None:
   (`SYNTHETIC_SD_INFO`); any other model answers it only when `sd_info` is set.
   `push_camera_event(cipher=...)` sends a camera event under either frame cipher, and
   `send_alarm_frame(FrameType.ALARM_TONE_NOTIFY, 3, 30, channel=1)` an alarm frame.
+  `rows` are the history rows it lists (`history_queries` records each query);
+  `add_detection_recording(device_sn, started_at, seconds, listed_after=0.0)` adds a
+  recording in the station's own row shape (a HomeBase 3's; a `.dat` row on a station
+  paged by start time, such as a HomeBase 2) that is listed from `listed_after` seconds
+  after its start and runs on the host's clock, its end growing until `seconds`: not
+  listed, running, then settled, as
+  `Station.async_wait_recording_for_detection` sees a cloud-pushed detection's clip.
 - **Station configuration.** Seed the guard modes and the schedule a
   `StationConfig` reads with typed helpers instead of hand-built base64:
 
