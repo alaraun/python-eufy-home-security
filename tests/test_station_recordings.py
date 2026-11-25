@@ -1743,9 +1743,26 @@ async def test_no_row_listed_names_the_offset_of_the_nearest_recording(
     assert found.state is DetectionRecordingState.NOT_LISTED
     assert (found.record, found.offset_s) == (None, -100.0)
     assert any("not_listed, row None, offset -100s" in r.getMessage() for r in caplog.records)
-    fake.rows = fake.rows[:1]
-    ahead = await station.async_recording_for_detection(_detection(event))
-    assert (ahead.state, ahead.offset_s) == (DetectionRecordingState.NOT_LISTED, 7198.0)
+
+
+@pytest.mark.parametrize("hours", [2, -2])
+async def test_no_row_listed_names_a_station_clock_hours_ahead_or_behind(
+    host_utc: None,
+    station: Station,
+    fake: FakeStation,
+    monkeypatch: pytest.MonkeyPatch,
+    hours: int,
+) -> None:
+    """A station whose zone is unknown here writes its local time ``hours`` off the
+    host's: its row is read that far from the detection, after it or before its bound,
+    and the answer names that offset."""
+    now = _freeze(monkeypatch, NOW)
+    event = _whole(now, 60)
+    clock = timezone(timedelta(hours=hours))
+    record_id = int(event.astimezone(clock).strftime("%Y%m%d")) * HISTORY_RECORD_COUNTER + 4
+    fake.rows = [_zoneless(event, clock, record_id)]
+    found = await station.async_recording_for_detection(_detection(event))
+    assert (found.state, found.offset_s) == (DetectionRecordingState.NOT_LISTED, hours * 3600.0)
 
 
 @pytest.mark.usefixtures("no_reuse")
@@ -1762,6 +1779,21 @@ async def test_a_row_before_a_detections_own_bound_never_holds_it(
     assert older.record is not None  # it holds the older detection
     newer = await station.async_recording_for_detection(_detection(newer_event))
     assert newer.state is DetectionRecordingState.NOT_LISTED
+
+
+async def test_a_running_row_that_started_at_a_detections_bound_holds_it(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    """The bound is included: a row still running that started exactly
+    :data:`RECORDING_MATCH_GIVE_UP` before the detection is its recording."""
+    event = _whole(today, 10)
+    started = event - timedelta(seconds=RECORDING_MATCH_GIVE_UP)
+    fake.rows = [_at(started, SYNTHETIC.camera_sn, _dayed(started, 1), end_time="")]
+    found = await station.async_recording_for_detection(_detection(event))
+    assert (found.state, found.offset_s) == (
+        DetectionRecordingState.RECORDING,
+        -RECORDING_MATCH_GIVE_UP,
+    )
 
 
 # ── a clip that ended before the detection ───────────────────────────────────

@@ -90,9 +90,9 @@ class DetectionRecording:
     start minus the detection's time in seconds, None when the detection's ``record_id``
     named its row (looked up by it; a row named by ``video_path`` is listed by time and
     carries its offset).
-    ``NOT_LISTED`` gives the offset of the camera's nearest listed recording instead (None
-    when none is listed): a recording that lies a whole number of hours off shows a clock
-    read in the wrong zone.
+    ``NOT_LISTED`` gives the offset of the camera's nearest listed recording instead,
+    before or after the detection (None when none is listed): a recording that lies a
+    whole number of hours off shows a clock read in the wrong zone.
     """
 
     state: DetectionRecordingState

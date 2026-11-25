@@ -47,19 +47,14 @@ class _Timed:
     ended: datetime | None
 
 
-def _timed_rows(
-    rows: list[HistoryRecord], event_at: datetime, zone: tzinfo | None, give_up: float
-) -> list[_Timed]:
-    """The rows with a start no earlier than ``give_up`` seconds before ``event_at``, read
-    in the station's ``zone`` (see :meth:`HistoryRecord.times_near`)."""
+def _timed_rows(rows: list[HistoryRecord], event_at: datetime, zone: tzinfo | None) -> list[_Timed]:
+    """The rows with a start, read against ``event_at`` in the station's ``zone`` (see
+    :meth:`HistoryRecord.times_near`)."""
     timed = []
     for row in rows:
         started, ended = row.times_near(event_at, zone)
-        if started is None:
-            continue
-        offset = (started - event_at).total_seconds()
-        if offset >= -give_up:
-            timed.append(_Timed(row, offset, ended))
+        if started is not None:
+            timed.append(_Timed(row, (started - event_at).total_seconds(), ended))
     return timed
 
 
@@ -452,10 +447,12 @@ class StationHistory:
             lambda: self._camera_recordings(device_sn, floor, last_day, zone, timeout),
         )
         clock = _MatchClock(datetime.now(UTC), event_at, retry, give_up, quiet)  # after it
-        timed = _timed_rows(rows, event_at, zone, give_up)
+        listed = _timed_rows(rows, event_at, zone)
+        # a row that started before the detection's own bound is never its recording
+        timed = [c for c in listed if c.offset >= -give_up]
         found = _detection_match(timed, event_at, event.video_path, early, late)
         if found is None:
-            nearest = min(timed, key=lambda c: abs(c.offset), default=None)
+            nearest = min(listed, key=lambda c: abs(c.offset), default=None)
             return clock.not_listed(None if nearest is None else nearest.offset)
         started = event_at + timedelta(seconds=found.offset)
         return clock.of_row(
