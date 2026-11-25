@@ -257,7 +257,7 @@ class StationLockControl:
         if report is None:
             return
         pending = self._pending.get(serial)
-        if report.code != 0 or report.state_code is None:
+        if report.code != 0:
             if pending is not None and not pending.state.done():
                 pending.state.set_exception(
                     CommandRejectedError(
@@ -268,7 +268,8 @@ class StationLockControl:
                     )
                 )
             return
-        self._locks.on_report(serial, report.state_code)
+        if report.state_code is not None:
+            self._locks.on_report(serial, report.state_code)
 
     # ── commands ────────────────────────────────────────────────────────────
 

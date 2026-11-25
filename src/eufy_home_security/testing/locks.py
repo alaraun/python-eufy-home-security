@@ -59,8 +59,8 @@ class FakeLock:
     code: 5 stops between positions), and the lock reports it unless ``report`` is False:
     a 1940 lock in its status report, the others in a parameter dump. ``mismatch_first``
     sends an answer to another request before the real one; ``seq_report`` answers the
-    next 1940 command with a sequence report of that number instead (the client resends);
-    on a 1961 lock it reports that number and the station refuses the command (-151).
+    next command with a sequence report of that number while the station refuses it (-151);
+    a 1940 client resends, a 1961 one fails.
     ``answer`` False: the lock sends no answer after the station's result.
     ``status_code`` is the code of a 1940 lock's status report (0: a state).
     ``received`` records each command as decrypted: ``(command, action, seq_num)``.
@@ -147,7 +147,7 @@ class FakeLock:
         self.received.append((cm2.P2P_COMMAND, action, int(payload["seq_num"])))
         if self.seq_report is not None:
             seq, self.seq_report = self.seq_report, None
-            self._result(station, cm2.P2P_COMMAND, 0)
+            self._result(station, cm2.P2P_COMMAND, -151)
             report = {"seq_num": seq, "bus_type": cm2.FUNCTION_TYPE, "lock_cmd": cm2.COMMAND_ON_OFF}
             self._through(station, _SEQ_REPORT, report)
             return

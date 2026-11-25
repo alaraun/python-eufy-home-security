@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import dataclasses
 import json
@@ -15,6 +16,7 @@ from eufy_home_security.devices.locks import LockState, LockStateSource
 from eufy_home_security.events import Event, LockStateChanged
 from eufy_home_security.exceptions import (
     CommandRejectedError,
+    DeviceBusyError,
     DeviceTimeoutError,
     GuestAccessError,
     LockNotMovedError,
@@ -103,6 +105,61 @@ async def test_no_status_report_over_mqtt_times_out(rig: Rig, wifi_lock: FakeMqt
             await rig.eufy.async_lock(LOCK_SN, timeout=1)
     finally:
         await account.async_stop()
+
+
+async def test_a_silent_mqtt_lock_times_out_within_the_given_timeout(
+    rig: Rig, wifi_lock: FakeMqttLock
+) -> None:
+    wifi_lock.answer = False
+    account = await _served(rig)
+    try:
+        async with asyncio.timeout(5):
+            with pytest.raises(DeviceTimeoutError, match="no answer"):
+                await rig.eufy.async_lock(LOCK_SN, timeout=0.5)
+    finally:
+        await account.async_stop()
+
+
+async def test_an_mqtt_lock_already_locked_sends_nothing(rig: Rig, wifi_lock: FakeMqttLock) -> None:
+    account = await _served(rig)
+    try:
+        assert await rig.eufy.async_lock(LOCK_SN, timeout=5) is LockState.LOCKED
+        assert await rig.eufy.async_lock(LOCK_SN, timeout=5) is LockState.LOCKED
+    finally:
+        await account.async_stop()
+    assert [a for a, _ in wifi_lock.received] == [LockAction.LOCK]
+
+
+async def test_a_second_mqtt_command_while_one_waits_is_busy(
+    rig: Rig, wifi_lock: FakeMqttLock
+) -> None:
+    wifi_lock.report = False
+    account = await _served(rig)
+    try:
+        first = asyncio.create_task(rig.eufy.async_lock(LOCK_SN, timeout=5))
+        async with asyncio.timeout(5):
+            while not wifi_lock.received:
+                await asyncio.sleep(0.01)
+            with pytest.raises(DeviceBusyError):
+                await rig.eufy.async_unlock(LOCK_SN)
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+    finally:
+        await account.async_stop()
+    assert len(wifi_lock.received) == 1
+
+
+async def test_an_mqtt_lock_without_a_member_record_is_refused(
+    rig: Rig, wifi_lock: FakeMqttLock
+) -> None:
+    account = await _served(rig, dataclasses.replace(lock(), owner_user_id=None))
+    try:
+        with pytest.raises(UnsupportedError, match="member"):
+            await rig.eufy.async_lock(LOCK_SN)
+    finally:
+        await account.async_stop()
+    assert wifi_lock.received == []
 
 
 async def test_a_fault_state_over_mqtt_raises_lock_not_moved(

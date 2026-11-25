@@ -234,6 +234,65 @@ async def test_a_sequence_refusal_without_an_answer_raises_its_code(
         assert "no answer" in str(raised.value)
 
 
+async def test_a_resend_the_station_takes_ends_as_a_timeout_when_the_lock_is_silent(
+    fake: FakeStation, lock_1940: FakeLock
+) -> None:
+    """After a refused send and an accepted resend, a silent lock is a timeout, not -151."""
+    lock_1940.seq_report, lock_1940.answer = 500, False
+    station = await _hub(fake, _lock(LOCK_1940), lock_1940)
+    try:
+        async with asyncio.timeout(5):
+            with pytest.raises(DeviceTimeoutError, match="no answer"):
+                await station.async_lock(LOCK_1940, timeout=0.5)
+    finally:
+        await station.async_close()
+    assert [seq for _, _, seq in lock_1940.received] == [int(NOW) + 1, 502]
+
+
+async def test_a_1961_lock_without_a_state_waits_the_answer_and_the_state_time(
+    fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The station's result to a 1961 command is the lock's answer: the state wait follows."""
+    monkeypatch.setattr(lock_control_module, "LOCK_ANSWER_TIMEOUT", 0.2)
+    monkeypatch.setattr(lock_control_module, "LOCK_CONFIRM_TIMEOUT", 0.3)
+    serial = "T8520P2000000001"
+    lock = FakeLock(serial=serial, channel=1, report=False)
+    station = await _hub(fake, _lock(serial), lock)
+    try:
+        async with asyncio.timeout(5):
+            with pytest.raises(DeviceTimeoutError, match="locked state"):
+                await station.async_lock(serial)
+    finally:
+        await station.async_close()
+
+
+async def test_a_sequence_report_of_another_form_leaves_the_1961_counter(
+    fake: FakeStation,
+) -> None:
+    """A 1940 lock's sequence report does not move the counter of the 1961 locks."""
+    cm2_lock = FakeLock(serial=LOCK_1940, channel=1, user_id=SYNTHETIC.account_id)
+    cm2_lock.seq_report = 5000
+    serial = "T8520P2000000001"
+    anker_lock = FakeLock(serial=serial, channel=2)
+    fake.locks[2] = anker_lock
+    fake.params.setdefault(2, {})[1912] = str(anker_lock.state_code)
+    devices = [_lock(LOCK_1940), _lock(serial, channel=2)]
+    fake.locks[1] = cm2_lock
+    fake.params.setdefault(1, {})[1912] = str(cm2_lock.state_code)
+    station = Station(
+        STATION, _session(fake), sub_devices=devices, lock_cloud=_Cloud(cm2_lock, anker_lock)
+    )
+    await station.async_update()
+    try:
+        assert await station.async_lock(LOCK_1940) is LockState.LOCKED
+        assert await station.async_lock(serial) is LockState.LOCKED
+    finally:
+        await station.async_close()
+    seq = anker_lock.received[-1][2]
+    assert seq is not None
+    assert seq < 1000
+
+
 async def test_an_answer_to_another_request_is_skipped(
     fake: FakeStation, lock_1940: FakeLock
 ) -> None:
@@ -318,8 +377,9 @@ async def test_a_status_report_with_an_error_code_fails_the_command(
     lock_1940.status_code = 2
     station = await _hub(fake, _lock(LOCK_1940), lock_1940)
     try:
-        with pytest.raises(CommandRejectedError) as raised:
-            await station.async_lock(LOCK_1940)
+        async with asyncio.timeout(5):  # at the report, not after the state wait
+            with pytest.raises(CommandRejectedError) as raised:
+                await station.async_lock(LOCK_1940)
     finally:
         await station.async_close()
     assert raised.value.code == 2
@@ -425,8 +485,9 @@ async def test_a_1961_sequence_refusal_fails_as_the_app_does(fake: FakeStation) 
     lock = FakeLock(serial=serial, channel=1, result_code=-151)
     station = await _hub(fake, _lock(serial), lock)
     try:
-        with pytest.raises(CommandRejectedError) as raised:
-            await station.async_lock(serial)
+        async with asyncio.timeout(5):  # at once, not after the answer wait
+            with pytest.raises(CommandRejectedError) as raised:
+                await station.async_lock(serial)
     finally:
         await station.async_close()
     assert raised.value.code == -151
