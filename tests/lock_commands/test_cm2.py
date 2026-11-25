@@ -269,7 +269,7 @@ def test_plain_answer_is_read_without_a_key() -> None:
     assert reply == LockReply(49, LockResult.ALREADY_LOCKED)
 
 
-@pytest.mark.parametrize("time_field", [f"{TIME ^ 0x40:08x}", "1234"])
+@pytest.mark.parametrize("time_field", [f"{TIME ^ 0x40:08x}", f"{TIME ^ 0x40:08X}", "1234"])
 def test_plain_answer_with_another_time_is_not_ours(time_field: str) -> None:
     answer = _answer(0, encrypted=False, time_field=time_field)
     with pytest.raises(LockReplyMismatchError, match="time"):
