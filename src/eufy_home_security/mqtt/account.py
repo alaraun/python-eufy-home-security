@@ -62,6 +62,8 @@ class EufyMqttAccount:
         self._subscribe: frozenset[str] | None = None
         self._stopped = False
         """Set by :meth:`async_stop`, cleared by :meth:`async_start`: device updates are ignored."""
+        self._ending: set[asyncio.Task[None]] = set()
+        """Client stops still running after a cancel of :meth:`async_stop`'s caller."""
         self._lifecycle = asyncio.Lock()
         """Held by start, device update and stop, so a stop never interleaves with them."""
 
@@ -183,12 +185,20 @@ class EufyMqttAccount:
     async def async_stop(self) -> None:
         """Stop every client; their pending requests get a :class:`CommunicationError`.
         A start or device update in progress finishes first, then is stopped; a later
-        device update is ignored until the next :meth:`async_start`."""
+        device update is ignored until the next :meth:`async_start`. The clients stop
+        together; a cancel of the caller propagates at once and they still stop."""
         async with self._lifecycle:
             self._stopped = True
             clients, self._clients = list(self._clients.values()), {}
-            for client in clients:
-                await client.async_stop()
+            # Tasks, not awaits in turn: a cancel of the caller still stops every client.
+            stops = [asyncio.create_task(c.async_stop()) for c in clients]
+            for stop in stops:
+                self._ending.add(stop)
+                stop.add_done_callback(self._ending.discard)
+            if stops:
+                await asyncio.wait(stops)
+                for stop in stops:
+                    stop.result()
 
     async def async_wait_connected(self, timeout: float) -> None:
         """Wait until every client's connection is up; :class:`CommunicationError` when

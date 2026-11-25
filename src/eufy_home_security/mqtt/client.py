@@ -254,7 +254,8 @@ class EufyMqttClient:
     async def async_stop(self) -> None:
         """Disconnect and end the background task; the waiters get a CommunicationError.
         A start or device update in progress finishes first, then is stopped; a later
-        device update is ignored until the next :meth:`async_start`."""
+        device update is ignored until the next :meth:`async_start`. A cancel of the caller
+        propagates at once; the background task still ends by itself."""
         async with self._lifecycle:
             self._stopped = True
             await self._stop()
@@ -262,11 +263,16 @@ class EufyMqttClient:
     async def _stop(self) -> None:
         self._stopping = True
         task, self._run_task = self._run_task, None
-        if task is not None:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
-        self._fail_waiters("the MQTT client stopped")
+        try:
+            if task is not None:
+                task.cancel()
+                # asyncio.wait, not await task: a cancel of the caller ends the wait and
+                # propagates, and the cancelled task still ends on its own.
+                await asyncio.wait({task})
+                if not task.cancelled():
+                    task.result()
+        finally:
+            self._fail_waiters("the MQTT client stopped")
 
     async def async_wait_connected(self, timeout: float) -> None:
         """Wait until the broker connection is up; :class:`CommunicationError` when it is
@@ -305,14 +311,16 @@ class EufyMqttClient:
                 else:
                     _LOGGER.debug("MQTT connection ended unexpectedly; reconnecting", exc_info=True)
             finally:
-                lost = self._client is not None and not self._stopping
-                self._connection_task = None
-                self._client = None
-                self._connected.clear()
-                self._subscribed.clear()
-                if lost:
-                    # The answers of an ended connection never arrive.
-                    self._fail_waiters("MQTT connection lost")
+                # A run task a cut-short stop left ending must not reset a later start's state.
+                if self._connection_task is connection:
+                    lost = self._client is not None and not self._stopping
+                    self._connection_task = None
+                    self._client = None
+                    self._connected.clear()
+                    self._subscribed.clear()
+                    if lost:
+                        # The answers of an ended connection never arrive.
+                        self._fail_waiters("MQTT connection lost")
             if established:
                 delay = RECONNECT_MIN_SECONDS
                 await self._count_loss()

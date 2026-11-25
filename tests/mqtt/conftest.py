@@ -4,6 +4,7 @@ synthetic locks."""
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import threading
 from collections.abc import AsyncIterator, Callable
@@ -135,3 +136,50 @@ def hold_selection(monkeypatch: pytest.MonkeyPatch, module: ModuleType) -> HeldS
 
     monkeypatch.setattr(module, "mqtt_devices", slow)
     return held
+
+
+class SlowProxy:
+    """A TCP proxy to the broker that holds each new connection ``delay`` seconds, so the
+    client's connect step is still running when the test stops or restarts it."""
+
+    def __init__(self, target: int, delay: float) -> None:
+        self._target, self._delay = target, delay
+        self._server: asyncio.Server | None = None
+        self._tasks: set[asyncio.Task[None]] = set()
+        self.port = 0
+
+    async def __aenter__(self) -> SlowProxy:
+        self._server = await asyncio.start_server(self._serve, "127.0.0.1", 0)
+        self.port = self._server.sockets[0].getsockname()[1]
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        assert self._server is not None
+        self._server.close()
+        for task in list(self._tasks):
+            task.cancel()
+        await asyncio.gather(*self._tasks, return_exceptions=True)
+        await self._server.wait_closed()
+
+    async def _serve(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        task = asyncio.current_task()
+        assert task is not None
+        self._tasks.add(task)
+        upstream: asyncio.StreamWriter | None = None
+        try:
+            await asyncio.sleep(self._delay)
+            up_reader, upstream = await asyncio.open_connection("127.0.0.1", self._target)
+            await asyncio.gather(_pipe(reader, upstream), _pipe(up_reader, writer))
+        finally:
+            for stream in (writer, upstream):
+                if stream is not None:
+                    stream.transport.abort()
+            self._tasks.discard(task)
+
+
+async def _pipe(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    with contextlib.suppress(ConnectionError):
+        while data := await reader.read(65536):
+            writer.write(data)
+            await writer.drain()
+    writer.transport.abort()

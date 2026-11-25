@@ -21,6 +21,7 @@ from .conftest import (
     LOCK_SN,
     SCOPE,
     Rig,
+    SlowProxy,
     answer,
     hold_selection,
     lock,
@@ -154,6 +155,25 @@ async def test_a_start_after_a_stop_follows_device_updates_again(
     await account.async_update_devices([EU_LOCK])
     await account.async_wait_connected(5)
     assert list(account.clients) == ["eu"]
+
+
+async def test_a_cancel_of_a_stop_still_stops_every_client(rig: Rig) -> None:
+    async with SlowProxy(rig.broker.port, 1.0) as proxy:
+        account = EufyMqttAccount(rig.eufy.cloud, port=proxy.port, server_ca_pem=rig.pki.ca_pem)
+        await account.async_start([EU_LOCK, SCOPE_LOCK])
+        clients = list(account.clients.values())
+        try:
+            await asyncio.sleep(0.2)  # both connect steps wait on the proxy
+            with pytest.raises(TimeoutError):
+                async with asyncio.timeout(0.2):
+                    await account.async_stop()
+            await until(lambda: mqtt_tasks() == [], 3.0)
+            await asyncio.sleep(0.2)
+            assert account.clients == {}
+            assert rig.broker.connected_clients == []
+        finally:
+            for client in clients:
+                await client.async_stop()
 
 
 async def test_no_mqtt_device_starts_no_client_unless_a_check_asks(

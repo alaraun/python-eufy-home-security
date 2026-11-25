@@ -49,6 +49,7 @@ from .conftest import (
     OWNER,
     SCOPE,
     Rig,
+    SlowProxy,
     answer,
     hold_selection,
     lock,
@@ -633,55 +634,8 @@ async def test_a_start_after_a_stop_follows_device_updates_again(rig: Rig) -> No
     assert len(rig.broker.connects) == 1
 
 
-class _SlowProxy:
-    """A TCP proxy to the broker that holds each new connection ``delay`` seconds, so the
-    client's connect step is still running when the test stops or restarts it."""
-
-    def __init__(self, target: int, delay: float) -> None:
-        self._target, self._delay = target, delay
-        self._server: asyncio.Server | None = None
-        self._tasks: set[asyncio.Task[None]] = set()
-        self.port = 0
-
-    async def __aenter__(self) -> _SlowProxy:
-        self._server = await asyncio.start_server(self._serve, "127.0.0.1", 0)
-        self.port = self._server.sockets[0].getsockname()[1]
-        return self
-
-    async def __aexit__(self, *exc: object) -> None:
-        assert self._server is not None
-        self._server.close()
-        for task in list(self._tasks):
-            task.cancel()
-        await asyncio.gather(*self._tasks, return_exceptions=True)
-        await self._server.wait_closed()
-
-    async def _serve(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        task = asyncio.current_task()
-        assert task is not None
-        self._tasks.add(task)
-        upstream: asyncio.StreamWriter | None = None
-        try:
-            await asyncio.sleep(self._delay)
-            up_reader, upstream = await asyncio.open_connection("127.0.0.1", self._target)
-            await asyncio.gather(_pipe(reader, upstream), _pipe(up_reader, writer))
-        finally:
-            for stream in (writer, upstream):
-                if stream is not None:
-                    stream.transport.abort()
-            self._tasks.discard(task)
-
-
-async def _pipe(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-    with contextlib.suppress(ConnectionError):
-        while data := await reader.read(65536):
-            writer.write(data)
-            await writer.drain()
-    writer.transport.abort()
-
-
 async def test_a_stop_during_the_connect_step_leaves_no_connection(rig: Rig) -> None:
-    async with _SlowProxy(rig.broker.port, 0.5) as proxy:
+    async with SlowProxy(rig.broker.port, 0.5) as proxy:
         rig.client._port = proxy.port
         await rig.client.async_start([lock()])
         await asyncio.sleep(0.2)  # the connect step waits on the proxy
@@ -695,7 +649,7 @@ async def test_a_stop_during_the_connect_step_leaves_no_connection(rig: Rig) -> 
 
 
 async def test_a_restart_during_the_connect_step_keeps_one_connection(rig: Rig) -> None:
-    async with _SlowProxy(rig.broker.port, 0.5) as proxy:
+    async with SlowProxy(rig.broker.port, 0.5) as proxy:
         rig.client._port = proxy.port
         await rig.client.async_start([lock()])
         await asyncio.sleep(0.2)  # the connect step waits on the proxy
@@ -709,7 +663,7 @@ async def test_a_restart_during_the_connect_step_keeps_one_connection(rig: Rig) 
 async def test_a_stop_right_after_a_restart_during_the_connect_step_leaves_no_connection(
     rig: Rig,
 ) -> None:
-    async with _SlowProxy(rig.broker.port, 0.5) as proxy:
+    async with SlowProxy(rig.broker.port, 0.5) as proxy:
         rig.client._port = proxy.port
         await rig.client.async_start([lock()])
         await asyncio.sleep(0.2)  # the connect step waits on the proxy
@@ -718,6 +672,41 @@ async def test_a_stop_right_after_a_restart_during_the_connect_step_leaves_no_co
         await rig.client.async_stop()
         await asyncio.sleep(0.6)
         assert rig.broker.connected_clients == []
+
+
+async def test_a_cancel_of_a_stop_reaches_its_caller_and_the_stop_still_ends(rig: Rig) -> None:
+    loop = asyncio.get_running_loop()
+    async with SlowProxy(rig.broker.port, 1.0) as proxy:
+        rig.client._port = proxy.port
+        await rig.client.async_start([lock()])
+        await asyncio.sleep(0.2)  # the connect step waits on the proxy
+        started = loop.time()
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(0.2):
+                await rig.client.async_stop()
+        assert loop.time() - started < 0.6
+        await until(lambda: mqtt_tasks() == [], 3.0)
+        await until(lambda: rig.broker.open_sockets == 0, 1.0)
+        assert not rig.client.connected
+
+
+async def test_a_start_after_a_cancelled_stop_keeps_its_connection(rig: Rig) -> None:
+    async with SlowProxy(rig.broker.port, 1.0) as proxy:
+        rig.client._port = proxy.port
+        await rig.client.async_start([lock()])
+        await asyncio.sleep(0.2)  # the connect step waits on the proxy
+        (ending,) = [t for t in asyncio.all_tasks() if t.get_name() == "eufy-mqtt"]
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(0.2):
+                await rig.client.async_stop()
+        rig.client._port = rig.broker.port
+        await rig.client.async_start([lock()])
+        await rig.client.async_wait_connected(5)
+        async with asyncio.timeout(3):
+            await asyncio.wait({ending})  # the stopped task ends after the new connect
+        assert rig.client.connected
+        await rig.client.async_publish(LOCK_SN, "x")
+        await until(lambda: len(rig.broker.published) == 1)
 
 
 def _left_tasks(before: set[asyncio.Task[Any]]) -> list[str]:
@@ -769,7 +758,7 @@ async def test_a_connect_step_left_past_the_bound_is_closed_when_it_connects(
     rig: Rig, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     monkeypatch.setattr(client_module, "CONNECT_SETTLE_SECONDS", 0.3)
-    async with _SlowProxy(rig.broker.port, 1.0) as proxy:
+    async with SlowProxy(rig.broker.port, 1.0) as proxy:
         rig.client._port = proxy.port
         before = asyncio.all_tasks()
         await rig.client.async_start([lock()])
