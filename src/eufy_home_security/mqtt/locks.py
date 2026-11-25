@@ -108,6 +108,8 @@ class MqttLocks:
         self._readings: dict[str, LockReading] = {}
         self._owners: dict[str, str] = {}
         self._watchers: dict[str, Callable[[LockReading], None]] = {}
+        self._states: dict[str, asyncio.Future[LockState]] = {}
+        """Per lock, the state a command waits for (a refusing status report fails it)."""
         self._busy: set[str] = set()
         self._remove = account.add_listener(self._on_message)
 
@@ -128,7 +130,21 @@ class MqttLocks:
         except ProtocolError as err:
             _LOGGER.debug("%s: unreadable status report: %s", redact_serial(message.device_sn), err)
             return
-        if report is None or report.code != 0 or report.state_code is None:
+        if report is None:
+            return
+        if report.code != 0:
+            state = self._states.get(message.device_sn)
+            if state is not None and not state.done():
+                state.set_exception(
+                    CommandRejectedError(
+                        cm2.P2P_COMMAND,
+                        report.code,
+                        f"{redact_serial(message.device_sn)}: status report",
+                        device_sn=message.device_sn,
+                    )
+                )
+            return
+        if report.state_code is None:
             return
         self._take(message.device_sn, report.state_code)
 
@@ -184,6 +200,7 @@ class MqttLocks:
         finally:
             self._busy.discard(serial)
             self._watchers.pop(serial, None)
+            self._states.pop(serial, None)
 
     async def _run(
         self,
@@ -218,6 +235,7 @@ class MqttLocks:
                 state.set_result(taken.state)
 
         self._watchers[serial] = on_reading
+        self._states[serial] = state
         replies: list[LockReply] = []
 
         def match(message: MqttMessage) -> bool:

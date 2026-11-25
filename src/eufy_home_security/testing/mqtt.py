@@ -462,7 +462,8 @@ class FakeMqttLock:
     ``answer_code`` is the lock's answer (0 accepted); an accepted command moves the lock to
     the asked state, or to ``move_to`` (a lock-state code), reported unless ``report`` is
     False; ``answer`` False: the lock sends nothing back. ``mismatch_first`` sends an answer
-    to another request first. ``received``
+    to another request first. ``status_code`` is the status report's code (0: a state).
+    ``received``
     records each command as decrypted: ``(action, seq_num)``. Call :meth:`attach`.
     """
 
@@ -476,6 +477,7 @@ class FakeMqttLock:
     report: bool = True
     mismatch_first: bool = False
     answer: bool = True
+    status_code: int = 0
     received: list[tuple[LockAction, int]] = field(default_factory=list)
     users: list[tuple[str, str]] = field(default_factory=list)
     _tasks: set[asyncio.Task[None]] = field(default_factory=set)
@@ -539,5 +541,5 @@ class FakeMqttLock:
             self.move_to if self.move_to is not None else (4 if action is LockAction.LOCK else 3)
         )
         if self.report:
-            report = bytes([0, 0xA1, 1, 90, 0xA2, 1, self.state_code])
+            report = bytes([self.status_code, 0xA1, 1, 90, 0xA2, 1, self.state_code])
             await self.broker.send(topic, message(key, cm2.STATUS_COMMAND, report, time_text))

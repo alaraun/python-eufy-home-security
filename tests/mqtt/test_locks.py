@@ -98,6 +98,20 @@ async def test_an_unlock_over_mqtt_skips_an_answer_to_another_request(
     assert [a for a, _ in wifi_lock.received] == [LockAction.UNLOCK]
 
 
+async def test_a_status_report_with_an_error_code_fails_the_mqtt_command(
+    rig: Rig, wifi_lock: FakeMqttLock
+) -> None:
+    wifi_lock.status_code = 2
+    account = await _served(rig)
+    try:
+        async with asyncio.timeout(5):  # at the report, not after the state wait
+            with pytest.raises(CommandRejectedError) as raised:
+                await rig.eufy.async_lock(LOCK_SN)
+    finally:
+        await account.async_stop()
+    assert (raised.value.command, raised.value.code) == (1940, 2)
+
+
 async def test_no_status_report_over_mqtt_times_out(rig: Rig, wifi_lock: FakeMqttLock) -> None:
     wifi_lock.report = False
     account = await _served(rig)

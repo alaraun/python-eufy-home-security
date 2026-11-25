@@ -228,5 +228,6 @@ waits and sequence numbers of [locks.md](locks.md#commands) apply.
 The lock's status reports on its response topic set its state: each change emits
 `LockStateChanged` with `source` `lock` and `station_sn` None. They are read for a lock that
 took a command from this client (the member record's key opens them). A status report with
-a non-zero code ends no command on this path: the state wait runs out. Declared from the
+a non-zero code ends a waiting command with `CommandRejectedError(code)`, as on the station
+path. Declared from the
 eufy app, not tested against the broker.
