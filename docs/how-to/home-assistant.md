@@ -1778,7 +1778,8 @@ entity lock and unlock where `writable`, and make it read-only otherwise.
 path and return the `LockState` once the lock reports the asked state, never on an
 acknowledgement ([protocol/locks.md](../protocol/locks.md#commands)). Before sending they
 raise `GuestAccessError` (the account is a guest of the lock), `UnsupportedError` (no
-route the library sends), `MqttAccountRequiredError` (an MQTT lock: call
+route the library sends, no member record for the lock in the cloud's device list, or no
+cloud user id before the first login), `MqttAccountRequiredError` (an MQTT lock: call
 `eufy.use_mqtt(account)` with the account's `EufyMqttAccount`) or `DeviceBusyError`
 (a command for that lock still waits). After sending they raise `CommandRejectedError`
 (`err.code`; -151 is a refused sequence number), `LockNotMovedError` (`err.state`: jammed

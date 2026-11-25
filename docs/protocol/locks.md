@@ -176,7 +176,10 @@ acknowledgement alone never counts. In order:
    `GuestAccessError`, as the app refuses guests. A cloud entry without a member record
    raises `UnsupportedError`, as the app sends nothing then; a record without
    `admin_user_id` is enough (a 1940 command is then keyed by the account's own user id, a
-   1961 one names no `userId`). An MQTT route with no account given to `use_mqtt()` raises
+   1961 one names no `userId`). A 1940 command (station or MQTT) raises `UnsupportedError`
+   while the cloud client has no user id for the account (before its first login), and a
+   1961 ECIES or 1930 command on a station built without a cloud client, which the lock's
+   public key comes from. An MQTT route with no account given to `use_mqtt()` raises
    `MqttAccountRequiredError`; a command still waiting for the same lock raises
    `DeviceBusyError`. A lock whose last reading already is the
    asked state returns it at once and sends nothing (the app's lock card offers lock only
