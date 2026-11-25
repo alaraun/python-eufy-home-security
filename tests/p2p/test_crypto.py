@@ -103,6 +103,44 @@ def test_ecies_finds_the_length_whatever_the_over_read() -> None:
         assert crypto.ecies_decrypt(blob + b"\x00" * tail, priv_hex) == secret, tail
 
 
+# The eufy app's ECIES outputs for a synthetic P-256 key pair, given the ephemeral scalar
+# and IV it drew: the same scheme wraps lock command keys (docs/protocol/locks.md).
+_NATIVE_PRIV = 0x5EED0000000000000000000000000001A11CE000000000000000000000000042
+_NATIVE_EPHEMERAL = 0xCFFC659AEBC8E106C7543DB263E0397EAF5C453ACB28C166A7F41D12434019DE
+_NATIVE_IV = bytes.fromhex("84fde23330f9be9fb46d9223e069ee8f")
+_NATIVE_HEAD = (
+    "026d75a2a14a690a8237a5cde2f7285c90470564788464c77952971a9f8998063b"
+    "84fde23330f9be9fb46d9223e069ee8f"
+)
+_NATIVE_VECTORS = [
+    (
+        bytes(range(16)),
+        "961b4e07f3d9578f55e17c6f1172ac5f8430df641973bfe8806fccb6e436eeb6"
+        "66140c164f8c7111d15332b59be86a03af2e72b94113abfc6dd064ef5f9c3ca9",
+    ),
+    (
+        b"00112233445566778899AABBCCDDEEFF",
+        "474be8ea0f707c5ac677e41657ac324233c217040b0e8d461be7a0e1d23812b0"
+        "b0af31db98f21040cd3f41e2dd144e637d45fb40391ef55fe2102f43c0d9a754"
+        "35b747214f9b88257ab89622f694480f",
+    ),
+    (
+        b'{"seq_num":1,"x":"synthetic"}',
+        "b00a66684336324528b1c8e298974eff0db1f62b9cf8eb2a83238564b04185c0"
+        "c647532b083ccfc456bf66171b6f01608f5b6eb5b2bc712c8550a578b062301b",
+    ),
+]
+
+
+@pytest.mark.parametrize(("plain", "tail"), _NATIVE_VECTORS)
+def test_ecies_encrypt_equals_the_apps_native_output(plain: bytes, tail: str) -> None:
+    priv = ec.derive_private_key(_NATIVE_PRIV, ec.SECP256R1())
+    ephemeral = ec.derive_private_key(_NATIVE_EPHEMERAL, ec.SECP256R1())
+    blob = crypto.ecies_encrypt(plain, priv.public_key(), iv=_NATIVE_IV, ephemeral=ephemeral)
+    assert blob.hex() == _NATIVE_HEAD + tail
+    assert crypto.ecies_decrypt(blob, format(_NATIVE_PRIV, "x")) == plain
+
+
 def test_ecies_rejects_a_wrong_key() -> None:
     priv, _ = _ecc_keypair()
     _, other_hex = _ecc_keypair()

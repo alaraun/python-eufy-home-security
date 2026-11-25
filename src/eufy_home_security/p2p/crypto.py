@@ -202,14 +202,21 @@ def ecies_decrypt(blob: bytes, ecc_private_key_hex: str, blob_len: int | None = 
 
 
 def ecies_encrypt(
-    plaintext: bytes, public_key: ec.EllipticCurvePublicKey, *, iv: bytes | None = None
+    plaintext: bytes,
+    public_key: ec.EllipticCurvePublicKey,
+    *,
+    iv: bytes | None = None,
+    ephemeral: ec.EllipticCurvePrivateKey | None = None,
 ) -> bytes:
-    """Inverse of :func:`ecies_decrypt`, for tests and round-trip symmetry."""
+    """Inverse of :func:`ecies_decrypt`; also wraps lock command keys (docs/protocol/locks.md).
+
+    ``iv`` and the ``ephemeral`` key are random unless given (tests pin them).
+    """
     if iv is None:
         iv = os.urandom(16)
     if len(iv) != 16:
         raise ProtocolError(f"ECIES IV must be 16 bytes, got {len(iv)}")
-    eph_priv = ec.generate_private_key(ec.SECP256R1())
+    eph_priv = ephemeral if ephemeral is not None else ec.generate_private_key(ec.SECP256R1())
     shared = eph_priv.exchange(ec.ECDH(), public_key)
     km = _kdf(shared, 48)
     aes_key, hmac_key = km[0:16], km[16:48]
