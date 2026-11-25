@@ -55,6 +55,14 @@ def answer(head: dict[str, Any], trans: str = "answer") -> bytes:
     return json.dumps({"head": {"cmd": CMD_UPLINK_TRANS, **head}, "payload": payload}).encode()
 
 
+@dataclass
+class AccountUser:
+    """The account a lock command is sent for, as the cloud client gives it."""
+
+    user_id: str | None = SYNTHETIC.account_id
+    display_name: str = "Synthetic Nick"
+
+
 CAMERA = CloudDevice.from_api({"device_sn": SYNTHETIC.camera_sn, "device_type": 0})
 
 

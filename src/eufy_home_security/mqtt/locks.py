@@ -43,6 +43,7 @@ from ..lock_commands.control import (
     LOCK_CONFIRM_TIMEOUT,
     LOCK_PUBLISH_TIMEOUT,
     TARGET_STATES,
+    LockAccount,
     LockControl,
     LockPath,
     check_control,
@@ -94,8 +95,8 @@ def _through_data(message: MqttMessage) -> Mapping[str, Any] | None:
 class MqttLocks:
     """Lock commands and lock state of the account's MQTT locks over ``account``.
 
-    ``user_id`` is the logged-in account's cloud user id and ``user_name`` its nickname,
-    which a command names as its sender; ``emit`` receives each
+    ``user`` gives the logged-in account's cloud user id and its display name (the sender
+    a command names), read at each command; ``emit`` receives each
     :class:`~..events.LockStateChanged`. Call :meth:`close` to stop listening.
     """
 
@@ -103,14 +104,12 @@ class MqttLocks:
         self,
         account: EufyMqttAccount,
         *,
-        user_id: str,
-        user_name: str,
+        user: LockAccount,
         emit: Callable[[Event], None],
         clock: Callable[[], float] = time.time,
     ) -> None:
         self._account = account
-        self._user_id = user_id
-        self._user_name = user_name
+        self._user = user
         self._emit = emit
         self._clock = clock
         self._sequences = LockSequences(clock=clock)
@@ -194,7 +193,8 @@ class MqttLocks:
                 f"{redact_serial(serial)}: the cloud record names no member for the lock",
                 device_sn=serial,
             )
-        if not self._user_id:
+        account_user_id = self._user.user_id
+        if not account_user_id:
             raise UnsupportedError(
                 f"{redact_serial(serial)}: a lock command needs the account's cloud user id",
                 device_sn=serial,
@@ -209,7 +209,7 @@ class MqttLocks:
         if reading is not None and reading.state is target:
             return target
         user_id = cm2.key_user_id(
-            account_user_id=self._user_id,
+            account_user_id=account_user_id,
             admin_user_id=owner,
             member_type=device.member_type,
             member_user_id=device.member_user_id,
@@ -238,7 +238,7 @@ class MqttLocks:
         request = cm2.build_on_off_request(
             serial,
             action,
-            cm2.Cm2User(user_id, self._user_name, device.short_user_id),
+            cm2.Cm2User(user_id, self._user.display_name, device.short_user_id),
             seq_num=self._sequences.next(serial),
             time_value=cm2.lock_time(now, secrets.randbelow(100)),
             timestamp=int(now),

@@ -789,8 +789,7 @@ async def test_lock_control_and_the_command_agree_for_every_lock(
     eufy = _client()
     eufy._mqtt_locks = MqttLocks(
         _NoBroker(),  # type: ignore[arg-type]
-        user_id=SYNTHETIC.account_id,
-        user_name="Nick",
+        user=_Cloud(),
         emit=lambda _e: None,
     )
     writable = 0

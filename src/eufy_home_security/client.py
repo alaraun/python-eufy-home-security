@@ -1288,19 +1288,16 @@ class EufySecurity:
         """Serve the lock commands of locks the eufy app reaches over MQTT through
         ``account`` (an :class:`~.mqtt.account.EufyMqttAccount` the consumer started for
         this account); None stops. Their states from the broker arrive as
-        :class:`~.events.LockStateChanged` (``station_sn`` None)."""
+        :class:`~.events.LockStateChanged` (``station_sn`` None). Each command reads the
+        account's user id and display name when it is sent, so this may come before the
+        login."""
         if self._mqtt_locks is not None:
             self._mqtt_locks.close()
             self._mqtt_locks = None
         if account is not None:
             from .mqtt.locks import MqttLocks  # noqa: PLC0415 - the optional extra's module
 
-            self._mqtt_locks = MqttLocks(
-                account,
-                user_id=self.cloud.user_id or "",
-                user_name=self.cloud.display_name,
-                emit=self._bus.emit,
-            )
+            self._mqtt_locks = MqttLocks(account, user=self.cloud, emit=self._bus.emit)
 
     def _lock_of(self, device_sn: str) -> tuple[Station | None, CloudDevice, LockControl]:
         for station in self.stations.values():

@@ -34,10 +34,10 @@ from eufy_home_security.lock_commands.mqtt_trans import encode_trans
 from eufy_home_security.mqtt.account import EufyMqttAccount
 from eufy_home_security.mqtt.envelope import MqttMessage, parse_message
 from eufy_home_security.mqtt.locks import MqttLocks, mqtt_lock_control
-from eufy_home_security.testing import SYNTHETIC
-from eufy_home_security.testing.mqtt import FakeMqttLock
+from eufy_home_security.testing import SYNTHETIC, FakeCloud, build_eufy_security, warm_store
+from eufy_home_security.testing.mqtt import FakeMqttBroker, FakeMqttLock, MqttTestPki
 
-from .conftest import LOCK2_SN, LOCK_SN, OWNER, SHORT_USER, Rig, answer, lock
+from .conftest import LOCK2_SN, LOCK_SN, OWNER, SHORT_USER, AccountUser, Rig, answer, lock
 
 pytestmark = pytest.mark.usefixtures("short_waits")
 
@@ -128,8 +128,7 @@ async def test_an_mqtt_lock_command_is_the_apps_message_byte_for_byte(
     account = await _served(rig, device)
     locks = MqttLocks(
         account,
-        user_id=SYNTHETIC.account_id,
-        user_name="Synthetic Nick",
+        user=AccountUser(),
         emit=lambda _event: None,
         clock=lambda: 1700000000.0,
     )
@@ -187,12 +186,44 @@ async def test_an_mqtt_lock_command_is_keyed_by_the_accounts_own_id_otherwise(
     assert fake.users == [(SYNTHETIC.account_id, SHORT_USER)]
 
 
+async def test_use_mqtt_before_the_login_takes_the_user_id_of_the_later_login(
+    pki: MqttTestPki, short_waits: None
+) -> None:
+    """The account's user id and name are read per command, not when ``use_mqtt`` is
+    called: a client given its MQTT account before its login commands after it."""
+    cloud = FakeCloud(mqtt_answer=pki.register_answer(), nick_name="Kim R")
+    store = warm_store(email=SYNTHETIC.email, cloud=cloud)
+    eufy = build_eufy_security(email=SYNTHETIC.email, store=store, cloud=cloud)
+    broker = FakeMqttBroker(pki)
+    await broker.async_start()
+    fake = FakeMqttLock(broker=broker, serial=LOCK_SN, product_code="T85D0", owner_user_id=OWNER)
+    fake.attach()
+    device = lock()
+    eufy.listed_devices = MappingProxyType({device.device_sn: device})
+    account = EufyMqttAccount(eufy.cloud, port=broker.port, server_ca_pem=pki.ca_pem)
+    try:
+        assert eufy.cloud.user_id is None
+        eufy.use_mqtt(account)
+        await eufy.async_login()
+        await account.async_start([device])
+        await account.async_wait_connected(5)
+        await broker.wait_for(lambda: any(t.endswith("/res") for _, t, _ in broker.subscriptions))
+        assert await eufy.async_lock(LOCK_SN, timeout=5) is LockState.LOCKED
+    finally:
+        await account.async_stop()
+        await broker.async_stop()
+        await eufy.async_close()
+    assert fake.refused == []
+    assert (fake.users, fake.names) == ([(OWNER, SHORT_USER)], ["Kim R"])
+
+
+@pytest.mark.parametrize("user_id", ["", None])
 async def test_an_mqtt_lock_command_needs_the_accounts_user_id(
-    rig: Rig, wifi_lock: FakeMqttLock
+    rig: Rig, wifi_lock: FakeMqttLock, user_id: str | None
 ) -> None:
     device = lock()
     account = await _served(rig, device)
-    locks = MqttLocks(account, user_id="", user_name="Nick", emit=lambda _event: None)
+    locks = MqttLocks(account, user=AccountUser(user_id), emit=lambda _event: None)
     try:
         with pytest.raises(UnsupportedError, match="cloud user id"):
             await locks.async_command(
@@ -352,8 +383,7 @@ async def test_a_request_error_beside_the_state_is_retrieved() -> None:
         account = _StateThenFailure()
         locks = MqttLocks(
             account,  # type: ignore[arg-type]
-            user_id=SYNTHETIC.account_id,
-            user_name="Nick",
+            user=AccountUser(),
             emit=lambda _e: None,
         )
         account.locks = locks
@@ -402,8 +432,7 @@ async def test_an_mqtt_lock_command_waits_as_the_app_unless_bounded(
     account = _Recording()
     locks = MqttLocks(
         account,  # type: ignore[arg-type]
-        user_id=SYNTHETIC.account_id,
-        user_name="Nick",
+        user=AccountUser(),
         emit=lambda _e: None,
     )
     device = lock()
@@ -421,8 +450,7 @@ async def test_a_lock_message_naming_no_text_serial_is_skipped() -> None:
     account = _Recording()
     locks = MqttLocks(
         account,  # type: ignore[arg-type]
-        user_id=SYNTHETIC.account_id,
-        user_name="Nick",
+        user=AccountUser(),
         emit=lambda _e: None,
     )
     trans = encode_trans(1940, {"dev_sn": [LOCK_SN], "lock_payload": "ff", "time": "00"})

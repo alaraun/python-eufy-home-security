@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Final, NoReturn
+from typing import TYPE_CHECKING, Final, NoReturn, Protocol
 
 from .._logging import redact_serial
 from ..devices.lock_routes import LockForm
@@ -33,6 +33,21 @@ SEQUENCE_REFUSED: Final = -151
 through-data forms the eufy app keeps waiting for the lock's answer."""
 GUEST_MEMBER_TYPE: Final = 0
 """``member.member_type`` of a guest."""
+
+
+class LockAccount(Protocol):
+    """The account a lock command is sent for (the cloud client), read per command."""
+
+    @property
+    def user_id(self) -> str | None:
+        """The account's cloud user id; None before a login."""
+        ...
+
+    @property
+    def display_name(self) -> str:
+        """The account's name a command names as its sender."""
+        ...
+
 
 TARGET_STATES: Final[Mapping[LockAction, LockState]] = {
     LockAction.LOCK: LockState.LOCKED,

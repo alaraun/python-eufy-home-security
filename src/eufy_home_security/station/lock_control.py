@@ -48,6 +48,7 @@ from ..lock_commands.control import (
     LOCK_CONFIRM_TIMEOUT,
     SEQUENCE_REFUSED,
     TARGET_STATES,
+    LockAccount,
     LockControl,
     LockPath,
     check_control,
@@ -76,14 +77,8 @@ KEY_TYPE_ECDH: Final = 3
 _THROUGH_DATA: Final = frozenset({cm2.P2P_COMMAND, anker.COMMAND_1930})
 
 
-class LockCloud(Protocol):
+class LockCloud(LockAccount, Protocol):
     """What a lock command needs from the account's cloud client."""
-
-    @property
-    def user_id(self) -> str | None: ...
-
-    @property
-    def display_name(self) -> str: ...
 
     async def async_get_lock_public_key(self, device_sn: str, key_type: int) -> bytes: ...
 

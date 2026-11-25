@@ -217,8 +217,9 @@ publishes ([cli.md](../reference/cli.md)).
 
 `EufySecurity.use_mqtt(account)` serves the locks whose route is MQTT
 ([locks.md](locks.md#routes)) through an `EufyMqttAccount` the consumer started for the
-account (`None` stops). `async_lock`/`async_unlock` then publish the lock command as the
-eufy app's lock card and lock screens send it, for every MQTT lock:
+account (`None` stops; it may come before the login: each command reads the account's
+user id and nickname when it is sent). `async_lock`/`async_unlock` then publish the lock
+command as the eufy app's lock card and lock screens send it, for every MQTT lock:
 
 - the 1940 payload object of the station path
   ([locks.md](locks.md#1940-cm2-frame-in-through-data)), unchanged: the cm2 frame (version
