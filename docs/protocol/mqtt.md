@@ -176,7 +176,11 @@ without it raises `MissingDependencyError` naming the `mqtt` extra.
 `aiomqtt`'s connect step (the broker's name lookup, the socket connect and the TLS
 handshake) runs in the event loop's default executor; every read and write after that runs
 on the event loop. A stop or a device-set restart during that step waits for it (30 s at
-most) and closes the connection it opened, so none outlives the stop.
+most, which the step normally stays within; the name lookup has no timeout of its own) and
+closes the connection it opened. A step still running after the wait is closed when it
+ends, and a connect that fails (a CONNACK timeout too) has its socket closed. Start,
+device update and stop run one at a time: a stop during a device update waits for it, then
+stops what it started.
 
 `eufy-security mqtt` lists the account's MQTT devices and their topics; with `--connect`
 it fetches the certificate, connects, subscribes and counts what arrives, and never

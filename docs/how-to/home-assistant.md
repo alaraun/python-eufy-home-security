@@ -3612,5 +3612,6 @@ after each device-list refresh: the library decides which devices are MQTT devic
 login scope's connection serves each (one connection per scope holding MQTT devices),
 reuses each scope's certificate and reconnects by itself. Call `async_publish` and
 `async_request` on the account; it routes them by device. A request pending when a
-connection ends raises `CommunicationError` at once. Call `async_stop()` on unload: a stop
-during a connect step waits for that step (30 s at most) and closes what it opened.
+connection ends raises `CommunicationError` at once. Call `async_stop()` on unload: it waits
+for a device update in progress and for a connect step (30 s at most) and closes what they
+opened; a connect step still running after that is closed when it ends.
