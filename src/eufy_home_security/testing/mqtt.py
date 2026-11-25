@@ -463,6 +463,8 @@ class FakeMqttLock:
     the asked state, or to ``move_to`` (a lock-state code), reported unless ``report`` is
     False; ``answer`` False: the lock sends nothing back. ``mismatch_first`` sends an answer
     to another request first. ``status_code`` is the status report's code (0: a state).
+    ``report_first`` sends the status report (of the state the command leaves) before the
+    answer, also when ``answer`` is False.
     ``received``
     records each command as decrypted: ``(action, seq_num)``. Call :meth:`attach`.
     """
@@ -478,6 +480,7 @@ class FakeMqttLock:
     mismatch_first: bool = False
     answer: bool = True
     status_code: int = 0
+    report_first: bool = False
     received: list[tuple[LockAction, int]] = field(default_factory=list)
     users: list[tuple[str, str]] = field(default_factory=list)
     _tasks: set[asyncio.Task[None]] = field(default_factory=set)
@@ -501,7 +504,7 @@ class FakeMqttLock:
         action = LockAction.LOCK if entries[0xA3] == b"\x00" else LockAction.UNLOCK
         self.received.append((action, int(payload["seq_num"])))
         self.users.append((entries[0xA2].decode(), entries[0xA5].hex()))
-        if not self.answer:
+        if not self.answer and not self.report_first:
             return
         task = asyncio.get_running_loop().create_task(
             self._answer(body["head"], key, iv, time_value, action)
@@ -527,19 +530,26 @@ class FakeMqttLock:
             answer_head = {"cmd": 8, "msg_seq": head["msg_seq"] + 1000, "sess_id": "beef"}
             return json.dumps({"head": answer_head, "payload": json.dumps(payload)}).encode()
 
-        if self.mismatch_first:
-            other = time_value ^ 0x40
-            stale = message(
-                cm2.time_key(self.owner_user_id, other), 0x23, b"\x00\x00", f"{other:08x}"
-            )
-            await self.broker.send(topic, stale)
         time_text = f"{time_value:08x}"
-        await self.broker.send(topic, message(key, 0x23, bytes([self.answer_code, 0]), time_text))
-        if self.answer_code != 0:
-            return
-        self.state_code = (
-            self.move_to if self.move_to is not None else (4 if action is LockAction.LOCK else 3)
-        )
-        if self.report:
-            report = bytes([self.status_code, 0xA1, 1, 90, 0xA2, 1, self.state_code])
-            await self.broker.send(topic, message(key, cm2.STATUS_COMMAND, report, time_text))
+        moved = self.answer_code == 0
+        if moved:
+            self.state_code = (
+                self.move_to
+                if self.move_to is not None
+                else (4 if action is LockAction.LOCK else 3)
+            )
+        report = bytes([self.status_code, 0xA1, 1, 90, 0xA2, 1, self.state_code])
+        status = message(key, cm2.STATUS_COMMAND, report, time_text)
+        if self.report and self.report_first:
+            await self.broker.send(topic, status)
+        if self.answer:
+            if self.mismatch_first:
+                other = time_value ^ 0x40
+                stale = message(
+                    cm2.time_key(self.owner_user_id, other), 0x23, b"\x00\x00", f"{other:08x}"
+                )
+                await self.broker.send(topic, stale)
+            answer = message(key, 0x23, bytes([self.answer_code, 0]), time_text)
+            await self.broker.send(topic, answer)
+        if moved and self.report and not self.report_first:
+            await self.broker.send(topic, status)

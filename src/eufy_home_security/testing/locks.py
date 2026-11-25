@@ -61,7 +61,10 @@ class FakeLock:
     sends an answer to another request before the real one; ``seq_report`` answers the
     next command with a sequence report of that number while the station refuses it (-151);
     a 1940 client resends, a 1961 one fails.
-    ``answer`` False: the lock sends no answer after the station's result.
+    ``answer`` False: the lock sends no answer after the station's result; ``result`` False:
+    the station sends no result for a 1961 command (only its acknowledgement).
+    ``seq_after_answer`` sends a sequence report of that number naming the on/off command
+    right after a 1940 answer.
     ``status_code`` is the code of a 1940 lock's status report (0: a state).
     ``received`` records each command as decrypted: ``(command, action, seq_num)``.
     """
@@ -78,6 +81,8 @@ class FakeLock:
     mismatch_first: bool = False
     seq_report: int | None = None
     answer: bool = True
+    result: bool = True
+    seq_after_answer: int | None = None
     status_code: int = 0
     ecc_key: ec.EllipticCurvePrivateKey = field(
         default_factory=lambda: ec.generate_private_key(ec.SECP256R1())
@@ -179,6 +184,10 @@ class FakeLock:
             self._through(station, cm2.P2P_COMMAND, {"lock_payload": stale, "time": f"{other:08x}"})
         answer = sealed(cm2.COMMAND_ON_OFF, bytes([self.answer_code, 0]))
         self._through(station, cm2.P2P_COMMAND, {"lock_payload": answer, "time": time_text})
+        if self.seq_after_answer is not None:
+            seq, self.seq_after_answer = self.seq_after_answer, None
+            report = {"seq_num": seq, "bus_type": cm2.FUNCTION_TYPE, "lock_cmd": cm2.COMMAND_ON_OFF}
+            self._through(station, _SEQ_REPORT, report)
         if self.answer_code != 0:
             return
         state = self._moved(action)
@@ -202,6 +211,8 @@ class FakeLock:
             seq, self.seq_report = self.seq_report, None
             self._through(station, _SEQ_REPORT, {"seq_num": seq, "bus_type": 0, "lock_cmd": 0})
             self._result(station, anker.COMMAND_1961, -151)
+            return
+        if not self.result:
             return
         code = self.result_code if self.result_code != 0 else self.answer_code
         self._result(station, anker.COMMAND_1961, code)

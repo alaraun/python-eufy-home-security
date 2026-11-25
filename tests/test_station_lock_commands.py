@@ -26,9 +26,10 @@ from eufy_home_security.exceptions import (
     UnsupportedError,
 )
 from eufy_home_security.lock_commands import control
-from eufy_home_security.lock_commands.actions import LockAction
+from eufy_home_security.lock_commands.actions import LockAction, LockReply, LockResult
 from eufy_home_security.lock_commands.control import LockPath
 from eufy_home_security.mqtt.locks import MqttLocks
+from eufy_home_security.p2p import session as session_module
 from eufy_home_security.p2p.session import P2PCredentials, StationSession
 from eufy_home_security.station import Station
 from eufy_home_security.station import lock_control as lock_control_module
@@ -267,6 +268,64 @@ async def test_a_1961_lock_without_a_state_waits_the_answer_and_the_state_time(
                 await station.async_lock(serial)
     finally:
         await station.async_close()
+
+
+async def test_a_1961_command_the_station_only_acknowledges_has_no_answer(
+    fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A station that takes a 1961 command without a result gave no lock answer: the
+    command times out waiting for it, not for the state."""
+    monkeypatch.setattr(session_module, "COMMAND_TIMEOUT", 0.2)
+    monkeypatch.setattr(session_module, "COMMAND_RECEIPT_TIMEOUT", 0.3)
+    serial = "T8530P2000000001"
+    lock = FakeLock(serial=serial, channel=1, result=False)
+    station = await _hub(fake, _lock(serial), lock)
+    try:
+        async with asyncio.timeout(5):
+            with pytest.raises(DeviceTimeoutError, match="no answer"):
+                await station.async_lock(serial, timeout=1.5)
+    finally:
+        await station.async_close()
+    assert len(lock.received) == 1
+
+
+async def test_the_state_wins_over_a_refusing_answer_taken_in_the_same_turn(
+    fake: FakeStation, lock_1940: FakeLock
+) -> None:
+    """When the asked state and a refusing answer are both in when the wait ends, the
+    state decides."""
+    station = await _hub(fake, _lock(LOCK_1940), lock_1940)
+    loop = asyncio.get_running_loop()
+    pending = lock_control_module._Pending(
+        LOCK_1940,
+        LockForm.P2P_1940,
+        LockAction.LOCK,
+        lock_control_module._Sent(1940, {}),
+        answer=loop.create_future(),
+        state=loop.create_future(),
+    )
+    pending.answer.set_result(LockReply(1, LockResult.REFUSED))
+    pending.state.set_result(LockState.LOCKED)
+    try:
+        done = await station._lock_control._first(pending, 1.0, LOCK_1940, "answer")
+    finally:
+        await station.async_close()
+    assert done is pending.state
+
+
+async def test_a_sequence_report_after_the_answer_sends_no_second_command(
+    fake: FakeStation, lock_1940: FakeLock
+) -> None:
+    """A 1916 that names the command after the lock answered it resends nothing."""
+    lock_1940.seq_after_answer, lock_1940.report = 900, False
+    station = await _hub(fake, _lock(LOCK_1940), lock_1940)
+    try:
+        async with asyncio.timeout(5):
+            with pytest.raises(DeviceTimeoutError, match="locked state"):
+                await station.async_lock(LOCK_1940, timeout=0.5)
+    finally:
+        await station.async_close()
+    assert len(lock_1940.received) == 1
 
 
 async def test_a_sequence_report_of_another_form_leaves_the_1961_counter(
