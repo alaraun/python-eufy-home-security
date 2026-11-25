@@ -1835,7 +1835,11 @@ as the app's wait ends), and meanwhile the next open or close of the
 door is sent even where its last report is the asked state (a close after a cancelled open
 of a door last reported closed). "Took" means the library has processed the camera's
 receipt: a call cancelled before that, or in the same instant as the receipt arrives,
-leaves the door at its last reported state. A door in an `unknown` state raises
+leaves the door at its last reported state. A reversing call can end on the cancelled
+command's own report (the door notify of the open, say): it then raises `DoorNotMovedError`
+with that state while the door may still reverse, so take the error as no final state and
+let the door's next report (`GarageDoorChanged`) set the entity. A door in an `unknown`
+state raises
 `DoorStateUnknownError` (an `UnsupportedError`), since open and close cannot be told
 apart: pass `operate=True` for the app's operate command, which runs the motor whichever
 way it moves the door (offer it as a separate button or confirm it, never as a plain open). A door without a bound motor raises
