@@ -164,7 +164,7 @@ await mqtt.async_stop()
 | `async_publish(sn, trans)` | publishes the command; returns its `MqttHead` once the broker acknowledged it, which is no answer of the device |
 | `async_request(sn, trans, match=None, timeout=20)` | publishes and waits for the device's message: the first that `match` accepts, or without `match` the one with the request's `msg_seq` or `sess_id`. One message ends only the first waiting request it matches. `DeviceTimeoutError` when none comes |
 | `add_listener(fn)` | `fn(MqttMessage)` for every message; returns its remover. An exception from `fn` is logged (once per 5 minutes per listener) and touches neither the connection nor the other listeners |
-| `async_update_devices(devices)` | a changed MQTT device set reconnects with a new certificate; an unchanged one changes nothing. On the account: a scope left without MQTT devices has its client stopped, a new one gets a client |
+| `async_update_devices(devices)` | a changed MQTT device set reconnects with a new certificate; an unchanged one changes nothing. On the account: a scope left without MQTT devices has its client stopped, a new one gets a client. After `async_stop()` it does nothing until the next `async_start()` |
 | `clients`, `client_for(sn)` | the account's client per scope, and the one serving a device |
 
 The calls are the same on both classes. A serial that is not one of the client's (the
@@ -173,14 +173,30 @@ connection within 10 s, or a publish the broker does not take, a
 `CommunicationError`. The library imports without `aiomqtt`; constructing the client
 without it raises `MissingDependencyError` naming the `mqtt` extra.
 
+The `mqtt` extra needs `aiomqtt>=2.2,<3`. The client closes a failed connect's socket
+through `aiomqtt`'s paho client, so the range stops below the next major; 2.2 is the
+first `aiomqtt` that runs on paho-mqtt 2.1 (the version Home Assistant pins) without a
+deprecation warning per connect.
+
 `aiomqtt`'s connect step (the broker's name lookup, the socket connect and the TLS
 handshake) runs in the event loop's default executor; every read and write after that runs
 on the event loop. A stop or a device-set restart during that step waits for it (30 s at
 most, which the step normally stays within; the name lookup has no timeout of its own) and
-closes the connection it opened. A step still running after the wait is closed when it
-ends, and a connect that fails (a CONNACK timeout too) has its socket closed. Start,
-device update and stop run one at a time: a stop during a device update waits for it, then
-stops what it started.
+closes the connection it opened, a DISCONNECT that takes up to `aiomqtt`'s 15 s timeout.
+A stop therefore takes 45 s at most, plus a device update in progress; the account stops
+its clients together. A cancel of the stop's caller (an `asyncio.timeout` around it)
+propagates at once, and the stop still completes in the background.
+
+A step still running after the wait is closed when it ends; a restart past that bound
+can briefly run two connects with the same client id, the left one closed when it ends.
+A connect that fails (a CONNACK timeout too) has its socket closed. A TLS handshake that
+fails can leave paho's own socket, which it never stores, to the garbage collector (an
+`aiomqtt`/paho limitation). If paho's close call itself fails, the socket is left open
+and a warning logged (once per 5 minutes); the connect's own outcome stands.
+
+Start, device update and stop run one at a time: a stop during a device update waits for
+it, then stops what it started, and a device update after a stop (one queued behind it
+too) does nothing until the next start.
 
 `eufy-security mqtt` lists the account's MQTT devices and their topics; with `--connect`
 it fetches the certificate, connects, subscribes and counts what arrives, and never

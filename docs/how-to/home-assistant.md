@@ -3600,7 +3600,9 @@ locks requires the extra:
 "requirements": ["eufy-home-security[mqtt]==<version>"]
 ```
 
-Without it the library imports and serves stations as before; constructing
+The extra pins `aiomqtt>=2.2,<3`, which runs on the paho-mqtt 2.1.0 Home Assistant
+pins ([protocol/mqtt.md](../protocol/mqtt.md) § The client). Without it the library
+imports and serves stations as before; constructing
 `eufy_home_security.mqtt.account.EufyMqttAccount` (or a single scope's `EufyMqttClient`)
 raises `MissingDependencyError` (its `extra` is `"mqtt"`). The transport is declared from the eufy app and not yet tested
 against the broker, and lock commands are not part of it yet; see
@@ -3613,5 +3615,9 @@ login scope's connection serves each (one connection per scope holding MQTT devi
 reuses each scope's certificate and reconnects by itself. Call `async_publish` and
 `async_request` on the account; it routes them by device. A request pending when a
 connection ends raises `CommunicationError` at once. Call `async_stop()` on unload: it waits
-for a device update in progress and for a connect step (30 s at most) and closes what they
-opened; a connect step still running after that is closed when it ends.
+for a device update in progress and for a connect step (30 s at most), then closes what
+they opened (up to 15 s more); a connect step still running after that is closed when it
+ends. A device-list refresh that reaches `async_update_devices()` after the stop (queued
+behind it during an unload) starts nothing; the next `async_start()` serves updates again.
+A cancel of the unload (an `asyncio.timeout` around the stop) raises at once while the
+clients still stop.
