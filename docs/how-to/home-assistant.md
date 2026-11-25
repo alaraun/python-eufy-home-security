@@ -3611,4 +3611,6 @@ against the broker, and lock commands are not part of it yet; see
 after each device-list refresh: the library decides which devices are MQTT devices, which
 login scope's connection serves each (one connection per scope holding MQTT devices),
 reuses each scope's certificate and reconnects by itself. Call `async_publish` and
-`async_request` on the account; it routes them by device.
+`async_request` on the account; it routes them by device. A request pending when a
+connection ends raises `CommunicationError` at once. Call `async_stop()` on unload: a stop
+during a connect step waits for that step (30 s at most) and closes what it opened.

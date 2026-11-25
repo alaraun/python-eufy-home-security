@@ -31,7 +31,8 @@ connection; the library does the same.
 
 ## The certificate
 
-The client authenticates with a TLS client certificate the cloud issues per account:
+The client authenticates with a TLS client certificate the cloud issues per account and
+login scope:
 
 ```
 POST https://<mega domain>/app/mqtt/register/iot
@@ -84,8 +85,11 @@ The PEM pair is written to a private temporary directory (mode 0700, files 0600)
 as long as the TLS context takes to load it, in a worker thread; nothing stays on disk.
 
 A lost connection is retried after 4 s, the wait doubling per failed attempt up to
-64 s. A refused connect counts as no loss. A topic the broker refuses is asked for again
-every 5 s.
+64 s, and then every 64 s for as long as the client runs: the library's choice, where the
+eufy app gives up after ten attempts. A refused connect counts as no loss. A topic the
+broker refuses is asked for again every 5 s. A connection that ends fails every pending
+`async_request` at once with a `CommunicationError` ("MQTT connection lost"). Repeated
+connect and certificate failures log a WARNING once per 5 minutes and DEBUG in between.
 
 ## Topics
 
@@ -158,8 +162,8 @@ await mqtt.async_stop()
 |---|---|
 | `async_start(devices, subscribe=None)` | serves the MQTT devices among `devices`; `subscribe` (serials) narrows the answer topics, the certificate still covering every MQTT device |
 | `async_publish(sn, trans)` | publishes the command; returns its `MqttHead` once the broker acknowledged it, which is no answer of the device |
-| `async_request(sn, trans, match=None, timeout=20)` | publishes and waits for the device's message: by default the one with the request's `msg_seq` or `sess_id`, else the first that `match` accepts. `DeviceTimeoutError` when none comes |
-| `add_listener(fn)` | `fn(MqttMessage)` for every message; returns its remover |
+| `async_request(sn, trans, match=None, timeout=20)` | publishes and waits for the device's message: the first that `match` accepts, or without `match` the one with the request's `msg_seq` or `sess_id`. One message ends only the first waiting request it matches. `DeviceTimeoutError` when none comes |
+| `add_listener(fn)` | `fn(MqttMessage)` for every message; returns its remover. An exception from `fn` is logged (once per 5 minutes per listener) and touches neither the connection nor the other listeners |
 | `async_update_devices(devices)` | a changed MQTT device set reconnects with a new certificate; an unchanged one changes nothing. On the account: a scope left without MQTT devices has its client stopped, a new one gets a client |
 | `clients`, `client_for(sn)` | the account's client per scope, and the one serving a device |
 
@@ -169,8 +173,10 @@ connection within 10 s, or a publish the broker does not take, a
 `CommunicationError`. The library imports without `aiomqtt`; constructing the client
 without it raises `MissingDependencyError` naming the `mqtt` extra.
 
-`aiomqtt` opens the socket and runs the TLS handshake in the event loop's default
-executor; every read and write after that runs on the event loop.
+`aiomqtt`'s connect step (the broker's name lookup, the socket connect and the TLS
+handshake) runs in the event loop's default executor; every read and write after that runs
+on the event loop. A stop or a device-set restart during that step waits for it (30 s at
+most) and closes the connection it opened, so none outlives the stop.
 
 `eufy-security mqtt` lists the account's MQTT devices and their topics; with `--connect`
 it fetches the certificate, connects, subscribes and counts what arrives, and never

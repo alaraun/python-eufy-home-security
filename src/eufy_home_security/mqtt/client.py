@@ -6,8 +6,8 @@ which applies the app's reuse rules), connects with TLS and that client certific
 subscribes the answer topic of every MQTT device (:mod:`.selection`) and publishes commands
 (:mod:`.envelope`). The command itself is the caller's. See docs/protocol/mqtt.md.
 
-``aiomqtt`` connects in the event loop's default executor (its socket connect and TLS
-handshake block); every read and write after that runs on the event loop.
+``aiomqtt`` connects in the event loop's default executor (its name lookup, socket connect
+and TLS handshake block); every read and write after that runs on the event loop.
 """
 
 from __future__ import annotations

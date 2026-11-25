@@ -51,8 +51,8 @@ automatically, so do not add this repository to HACS.
   not part of it yet.
 
 Pure `asyncio` on `aiohttp`, `cryptography`, `firebase-messaging` and `protobuf`: no
-Node.js bridge, no add-on, no threads (the optional MQTT extra's `aiomqtt` opens its
-broker connection in the event loop's executor).
+Node.js bridge, no add-on, no threads (the optional MQTT extra's `aiomqtt` runs its
+broker connect step, name lookup to TLS handshake, in the event loop's executor).
 
 ## Status
 
