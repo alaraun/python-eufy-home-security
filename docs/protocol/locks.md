@@ -52,8 +52,10 @@ or parameter picks between them, and the library ports both.
 
 - **Serial IV**: the lock serial's UTF-8 bytes zero-padded to 16.
 - **AES**: AES-128-CBC with PKCS#7 padding, under the serial IV.
-- **Sequence number**: `seq_num` is the lock's last sequence number plus one (the station
-  reports it); the codec takes the value to send.
+- **Sequence number**: the codec takes the `seq_num` to send. For 1940 and 1930 it is the
+  lock's last sequence number plus one (the station reports it); for 1961 it comes from one
+  counter shared by every lock, set to the last reported sequence number plus one and
+  incremented after each command.
 - **User fields**: the lock member record's `admin_user_id` and `short_user_id` (hex text)
   and the account's nickname. An absent `short_user_id` is sent as each form sends it: 1940
   as an empty `A5` entry, 1961 by leaving the field out; 1930 needs its 2 bytes.
