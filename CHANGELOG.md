@@ -4,6 +4,21 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.19](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.18...v0.4.19) (2026-11-25)
+
+
+### Features
+
+* **devices:** garage-door state, open and close for the garage-door cameras T8452 and T8453 (declared, eufy app) ([#229](https://github.com/alaraun/python-eufy-home-security/issues/229)) ([229786f](https://github.com/alaraun/python-eufy-home-security/commit/229786fc74c88f302743cfc0f526af5eb7b20514))
+* **devices:** smart-lock state and events for every bundled lock model (declared, eufy app) ([#229](https://github.com/alaraun/python-eufy-home-security/issues/229)) ([229786f](https://github.com/alaraun/python-eufy-home-security/commit/229786fc74c88f302743cfc0f526af5eb7b20514))
+* **locks:** lock command codecs (1940 cm2 with time or HKDF key, 1961 ECIES or plain, 1930 ECIES or ECDH) and the per-product route generated from the eufy app's lock data ([#231](https://github.com/alaraun/python-eufy-home-security/issues/231)) ([8bada9b](https://github.com/alaraun/python-eufy-home-security/commit/8bada9b843697e652bf2903c9cf76d0d2a84c6d7))
+* **mqtt:** the MQTT transport for the eufy security broker, the app's path for its Wi-Fi locks: client certificate, device selection from the bundled data, envelope, TLS and an aiomqtt client (extra `mqtt`; declared, eufy app) ([#232](https://github.com/alaraun/python-eufy-home-security/issues/232)) ([6c7f6ce](https://github.com/alaraun/python-eufy-home-security/commit/6c7f6cec6772eacb949b6a639fe91af03b642854))
+
+
+### Bug Fixes
+
+* **garage:** a cancelled door command keeps the door moving until its report (at most the 300 s confirm wait), and the next open or close of that door is sent ([#233](https://github.com/alaraun/python-eufy-home-security/issues/233)) ([57941e1](https://github.com/alaraun/python-eufy-home-security/commit/57941e13223349421abfb8f37c463a0a5512b1bf))
+
 ## [0.4.18](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.17...v0.4.18) (2026-11-24)
 
 
