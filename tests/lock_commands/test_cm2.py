@@ -410,3 +410,95 @@ def test_hkdf_answer_with_an_unusable_time_raises_protocol_error(time_field: str
     answer = _answer(0, time_field=time_field)
     with pytest.raises(ProtocolError):
         cm2.parse_on_off_reply(answer, _request(hkdf=True))
+
+
+# ── status reports ───────────────────────────────────────────────────────────
+
+
+def _report(
+    body: bytes,
+    *,
+    key: bytes | None = None,
+    time_value: int = TIME,
+    command: int = cm2.STATUS_COMMAND,
+    encrypted: bool = True,
+    serial: str = SERIAL,
+) -> dict[str, object]:
+    key = key if key is not None else cm2.time_key(USER_ID, time_value)
+    if encrypted:
+        body = cm2.seal_body(body, key, _iv())
+    frame = frames.cm2_frame(body, command=command, function_type=2, version=3, encrypted=encrypted)
+    return {"dev_sn": serial, "lock_payload": frame.hex(), "time": f"{time_value:08x}"}
+
+
+def test_status_report_reads_its_state_and_battery_entries() -> None:
+    body = bytes([0, 0xA1, 1, 87, 0xA2, 1, 4, 0xA3, 1, 1])
+    report = cm2.parse_status_report(_report(body), serial=SERIAL, user_id=USER_ID)
+    assert report == cm2.LockStatusReport(code=0, state_code=4, battery=87)
+
+
+def test_status_report_opens_with_the_key_of_its_own_time() -> None:
+    other = TIME ^ 0x55
+    body = bytes([0, 0xA2, 1, 3])
+    report = cm2.parse_status_report(
+        _report(body, time_value=other), serial=SERIAL, user_id=USER_ID
+    )
+    assert report is not None
+    assert report.state_code == 3
+
+
+def test_status_report_entries_in_any_order_and_missing_ones_read_0() -> None:
+    body = bytes([0, 0xA3, 2, 9, 9, 0xA2, 1, 7])
+    report = cm2.parse_status_report(_report(body), serial=SERIAL, user_id=USER_ID)
+    assert report == cm2.LockStatusReport(code=0, state_code=7, battery=0)
+
+
+def test_status_report_with_a_non_zero_code_carries_no_state() -> None:
+    body = bytes([2, 0xA1, 1, 50, 0xA2, 1, 4])
+    report = cm2.parse_status_report(_report(body), serial=SERIAL, user_id=USER_ID)
+    assert report == cm2.LockStatusReport(code=2, state_code=None, battery=None)
+
+
+def test_status_report_entry_with_a_backward_length_stops_the_scan() -> None:
+    body = bytes([0, 0xA3, 0xFE, 0xA2, 1, 4])  # length -2 would revisit the entry forever
+    report = cm2.parse_status_report(_report(body), serial=SERIAL, user_id=USER_ID)
+    assert report == cm2.LockStatusReport(code=0, state_code=0, battery=0)
+
+
+def test_status_report_of_another_command_is_none() -> None:
+    answer = _report(bytes([0, 0x11]), command=cm2.COMMAND_ON_OFF)
+    assert cm2.parse_status_report(answer, serial=SERIAL, user_id=USER_ID) is None
+
+
+def test_status_report_of_another_lock_is_none() -> None:
+    answer = _report(bytes([0, 0xA2, 1, 4]), serial="T8502P2000099999")
+    assert cm2.parse_status_report(answer, serial=SERIAL, user_id=USER_ID) is None
+
+
+def test_plain_status_report_is_read_without_a_key() -> None:
+    answer = _report(bytes([0, 0xA2, 1, 4]), encrypted=False)
+    report = cm2.parse_status_report(answer, serial=SERIAL, user_id="")
+    assert report is not None
+    assert report.state_code == 4
+
+
+def test_hkdf_status_report_opens_with_the_key_its_time_names() -> None:
+    salt = TIME
+    key = cm2.hkdf_key(USER_ID, salt)
+    body = cm2.seal_body(bytes([0, 0xA2, 1, 3]), key, _iv())
+    frame = frames.cm2_frame(
+        body, command=cm2.STATUS_COMMAND, function_type=2, version=3, encrypted=True
+    )
+    answer = {
+        "dev_sn": SERIAL,
+        "lock_payload": frame.hex(),
+        "time": cm2.hkdf_time_field(USER_ID, salt),
+    }
+    report = cm2.parse_status_report(answer, serial=SERIAL, user_id="ignored", hkdf=True)
+    assert report is not None
+    assert report.state_code == 3
+
+
+def test_status_report_with_an_empty_body_raises_protocol_error() -> None:
+    with pytest.raises(ProtocolError, match="empty"):
+        cm2.parse_status_report(_report(b"", encrypted=False), serial=SERIAL, user_id=USER_ID)
