@@ -350,7 +350,12 @@ class EufyMqttClient:
         self._losses += 1
         if self._losses >= LOSSES_BEFORE_NEW_CERTIFICATE:
             self._losses = 0
-            await self._cloud.async_drop_mqtt_certificate(self._region)
+            try:
+                await self._cloud.async_drop_mqtt_certificate(self._region)
+            except Exception as err:
+                # The certificate is dropped from memory; the consumer's store failing to
+                # save that (any error) must not end the reconnects.
+                self._log_repeated("certificate-drop", "MQTT certificate drop not saved: %s", err)
 
     async def _connect_once(self) -> bool:
         """One connection: certificate, TLS, connect, subscribe, read until it ends.

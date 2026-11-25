@@ -410,6 +410,34 @@ async def test_three_lost_connections_drop_the_certificate_for_a_new_one(rig: Ri
     assert rig.registers() == 2
 
 
+async def test_a_certificate_drop_the_store_cannot_save_warns_and_keeps_reconnecting(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    await rig.client.async_start([lock()])
+    await until(functools.partial(_subscriptions_are, rig, 1))
+    store = rig.eufy.cloud._cache._store
+    real = store.async_save
+    saves = 0
+
+    async def failing_once(data: dict[str, Any]) -> None:
+        nonlocal saves
+        saves += 1
+        if saves == 1:
+            raise OSError("disk full")
+        await real(data)
+
+    monkeypatch.setattr(store, "async_save", failing_once)
+    for count in (1, 2, 3):
+        await until(functools.partial(_subscriptions_are, rig, count))
+        rig.broker.drop_connections()
+    await until(lambda: len(rig.broker.subscriptions) == 4)
+    assert saves >= 1
+    assert rig.registers() == 2  # the dropped certificate is replaced all the same
+    (warning,) = _warnings(caplog, "certificate")
+    assert "disk full" in warning.getMessage()
+    assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []
+
+
 async def test_a_refused_connect_is_retried_and_is_no_loss(rig: Rig) -> None:
     rig.broker.connack_code = 5  # not authorised
     await rig.client.async_start([lock()])

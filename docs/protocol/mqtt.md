@@ -63,7 +63,9 @@ applies the app's rules for reusing it:
 - A changed set (a lock added, removed or bound again) asks for a new certificate; when
   that request fails, the cached one is used.
 - After three lost connections the client drops the cached certificate
-  (`async_drop_mqtt_certificate()`), so its next connect asks for a new one.
+  (`async_drop_mqtt_certificate()`), so its next connect asks for a new one. A store
+  that cannot save the drop logs a WARNING (once per 5 minutes) and the client
+  reconnects all the same.
 - A publish while no certificate was obtained asks for one at once, without waiting out
   the reconnect back-off.
 
