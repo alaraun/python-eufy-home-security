@@ -156,6 +156,16 @@ def test_1961_refuses_a_wrong_sized_aes_key() -> None:
         )
 
 
+@pytest.mark.parametrize("iv", [b"", bytes(15), bytes(17)])
+def test_builders_refuse_a_wrong_sized_ecies_iv(iv: bytes) -> None:
+    with pytest.raises(ValueError, match="ECIES IV must be 16 bytes"):
+        anker.build_1961_request(
+            SERIAL_1961, LockAction.LOCK, USER, seq_num=1, lock_public_key=LOCK_PUB64, ecies_iv=iv
+        )
+    with pytest.raises(ValueError, match="ECIES IV must be 16 bytes"):
+        _request_1930(ecies_iv=iv)
+
+
 def test_1961_plain_form_sends_the_json_object_without_seq_or_key() -> None:
     request = anker.build_1961_plain_request(LockAction.UNLOCK, USER)
     assert request.key is None

@@ -56,6 +56,7 @@ VERSION_PLAIN_ANSWER: Final = 33
 """An answer frame of this version carries its body unencrypted."""
 
 _AES_KEY_LEN: Final = 16
+_ECIES_IV_LEN: Final = 16
 _PUBLIC_KEY_LEN: Final = 64
 _SHORT_USER_ID_LEN: Final = 2
 # Gson's default escaping: HTML-sensitive characters and the two JS line separators.
@@ -107,6 +108,17 @@ def _aes_key(aes_key: bytes | None) -> bytes:
     return key
 
 
+def _ecies(
+    plain: bytes,
+    public: ec.EllipticCurvePublicKey,
+    iv: bytes | None,
+    ephemeral: ec.EllipticCurvePrivateKey | None,
+) -> bytes:
+    if iv is not None and len(iv) != _ECIES_IV_LEN:
+        raise ValueError(f"ECIES IV must be 16 bytes, got {len(iv)}")
+    return ecies_encrypt(plain, public, iv=iv, ephemeral=ephemeral)
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Anker1961Request:
     """A built 1961 request. ``key`` is None in the plain form."""
@@ -146,7 +158,7 @@ def build_1961_request(
     key = _aes_key(aes_key)
     body = _on_off_object(action, user) | {"seq_num": seq_num}
     sealed = cbc_encrypt(gson_json(body).encode(), key, serial_iv(serial))
-    wrapped = ecies_encrypt(key.hex().upper().encode(), public, iv=ecies_iv, ephemeral=ephemeral)
+    wrapped = _ecies(key.hex().upper().encode(), public, ecies_iv, ephemeral)
     return Anker1961Request(
         payload=base64.b64encode(sealed).decode(), key=wrapped.hex(), aes_key=key
     )
@@ -226,7 +238,7 @@ def build_1930_request(
     elif lock_public_key is not None:
         public = parse_lock_public_key(lock_public_key)
         key = _aes_key(aes_key)
-        key_field = ecies_encrypt(key, public, iv=ecies_iv, ephemeral=ephemeral)
+        key_field = _ecies(key, public, ecies_iv, ephemeral)
         version = VERSION_ECC
     else:
         raise ValueError("give one of lock_public_key and lock_ecdh_public_key")
