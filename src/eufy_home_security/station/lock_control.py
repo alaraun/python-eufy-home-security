@@ -53,6 +53,7 @@ from ..lock_commands.control import (
     LockPath,
     check_control,
     ends_wait,
+    has_member_record,
     is_guest,
     lock_control,
 )
@@ -321,7 +322,7 @@ class StationLockControl:
             return _Sent(
                 request.command, request.payload, read=lambda a: cm2.parse_on_off_reply(a, request)
             )
-        user = anker.AnkerUser(device.owner_user_id or "", user_name, device.short_user_id)
+        user = anker.AnkerUser(device.owner_user_id, user_name, device.short_user_id)
         if form is LockForm.P2P_1961_PLAIN:
             plain = anker.build_1961_plain_request(action, user)
             return _Sent(plain.command, plain.payload)
@@ -373,7 +374,7 @@ class StationLockControl:
         reading = self._locks.reading(device_sn)
         if reading is not None and reading.state is target:
             return target
-        if not device.owner_user_id:  # as the app: no member record, no command
+        if not has_member_record(device):  # as the app: no member record, no command
             raise UnsupportedError(
                 f"{redact_serial(device_sn)}: the cloud record names no member for the lock",
                 device_sn=device_sn,

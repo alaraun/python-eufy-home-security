@@ -577,16 +577,48 @@ async def test_a_guest_is_refused_before_sending(fake: FakeStation, lock_1940: F
     assert lock_1940.received == []
 
 
+_NO_MEMBER = {"owner_user_id": None, "member_type": None, "member_user_id": None}
+
+
 async def test_a_lock_without_a_member_record_is_refused(
     fake: FakeStation, lock_1940: FakeLock
 ) -> None:
-    station = await _hub(fake, _lock(LOCK_1940, owner_user_id=None), lock_1940)
+    device = _lock(LOCK_1940, 1, **_NO_MEMBER, short_user_id=None)
+    station = await _hub(fake, device, lock_1940)
     try:
         with pytest.raises(UnsupportedError, match="member"):
             await station.async_lock(LOCK_1940)
     finally:
         await station.async_close()
     assert lock_1940.received == []
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"owner_user_id": None},
+        {**_NO_MEMBER, "owner_user_id": "0" * 40, "short_user_id": None},
+        {**_NO_MEMBER, "member_type": 1, "short_user_id": None},
+        {**_NO_MEMBER, "member_user_id": SYNTHETIC.account_id, "short_user_id": None},
+        dict(_NO_MEMBER),
+    ],
+    ids=["no-admin-id", "only-an-admin-id", "only-a-type", "only-a-member-id", "only-a-short-id"],
+)
+@pytest.mark.parametrize("serial", [LOCK_1940, "T8530P2000000001"])
+async def test_a_partial_member_record_still_sends(
+    fake: FakeStation, serial: str, changes: dict[str, object]
+) -> None:
+    """As the app: only a missing member record refuses, any of its fields makes one; a
+    1940 command of a record without ``admin_user_id`` is keyed by the account's own user
+    id, a 1961 one names no ``userId``."""
+    lock = FakeLock(serial=serial, channel=1, user_id=SYNTHETIC.account_id)
+    station = await _hub(fake, _lock(serial, 1, **changes), lock)
+    try:
+        assert await station.async_lock(serial) is LockState.LOCKED
+    finally:
+        await station.async_close()
+    named = SYNTHETIC.account_id if serial == LOCK_1940 else changes["owner_user_id"]
+    assert lock.user_ids == [named]
 
 
 @pytest.mark.parametrize(

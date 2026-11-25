@@ -60,10 +60,11 @@ or parameter picks between them, and the library ports both.
   counter shared by every lock, set to the last reported sequence number plus one and
   incremented after each command.
 - **User fields**: the lock member record's `admin_user_id` (1940: the key user id, below)
-  and `short_user_id` (hex text)
-  and the account's nickname as the sender (`EufyCloudApi.display_name`: the login's or the
-  profile's `nick_name`, the e-mail's local part only without one). An absent `short_user_id` is sent as each form sends it: 1940
-  as an empty `A5` entry, 1961 by leaving the field out; 1930 needs its 2 bytes.
+  and `short_user_id` (hex text) and the account's nickname as the sender
+  (`EufyCloudApi.display_name`: the login's or the profile's `nick_name`, the e-mail's local
+  part only without one). An absent `short_user_id` is sent as each form sends it: 1940 as
+  an empty `A5` entry, 1961 by leaving the field out; 1930 needs its 2 bytes. 1961 leaves an
+  absent `admin_user_id` out too.
 - **Result**: an answer code 0 is accepted (the state change follows), anything else is
   refused; the 1940 answer also names "already unlocked" (48) and "already locked" (49).
   A well-formed answer for another lock, another command or another time value (both
@@ -118,7 +119,8 @@ the body is the result code.
 ## 1961: JSON
 
 `{"shortUserId", "slOperation", "userId", "userName"}` with `slOperation` **1 lock, 0
-unlock** and `userId` the member's `admin_user_id` (`shortUserId` left out when absent),
+unlock** and `userId` the member's `admin_user_id` (`shortUserId` and `userId` left out
+when absent),
 written compact with the app's JSON escaping (`<`, `>`, `&`, `=`, `'` as `\u` escapes).
 
 - **ECIES form**: the object gains `seq_num`, is encrypted under a random 16-byte AES key
@@ -171,10 +173,12 @@ acknowledgement alone never counts. In order:
    1911 form, or a station route whose station this client does not run raise
    `UnsupportedError`; an account whose member record for the lock names a
    guest (`member_type` 0, or none named, which the app reads as 0) raises
-   `GuestAccessError`, as the app refuses guests. A record
-   without the owner's `admin_user_id` raises `UnsupportedError`; an MQTT route with no
-   account given to `use_mqtt()` raises `MqttAccountRequiredError`; a command still waiting
-   for the same lock raises `DeviceBusyError`. A lock whose last reading already is the
+   `GuestAccessError`, as the app refuses guests. A cloud entry without a member record
+   raises `UnsupportedError`, as the app sends nothing then; a record without
+   `admin_user_id` is enough (a 1940 command is then keyed by the account's own user id, a
+   1961 one names no `userId`). An MQTT route with no account given to `use_mqtt()` raises
+   `MqttAccountRequiredError`; a command still waiting for the same lock raises
+   `DeviceBusyError`. A lock whose last reading already is the
    asked state returns it at once and sends nothing (the app's lock card offers lock only
    for a lock it shows open, unlock otherwise). An unknown or offline reading refuses
    nothing.

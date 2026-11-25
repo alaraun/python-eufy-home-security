@@ -156,15 +156,19 @@ def _same(obj: dict[str, Any]) -> dict[str, Any]:
 
 @pytest.mark.parametrize(
     "member",
-    [{"member_user_id": "89abcdef0123456789abcdef0123456789abcdef"}, {"member_type": 2}],
-    ids=["record-names-another-account", "member-type-2"],
+    [
+        {"member_user_id": "89abcdef0123456789abcdef0123456789abcdef"},
+        {"member_type": 2},
+        {"admin_user_id": None},
+    ],
+    ids=["record-names-another-account", "member-type-2", "no-admin-id"],
 )
 async def test_an_mqtt_lock_command_is_keyed_by_the_accounts_own_id_otherwise(
     rig: Rig, member: dict[str, Any]
 ) -> None:
     """The member record's ``admin_user_id`` keys and names the command only when the record
-    names this account and its type is not 2; otherwise the account's own user id does, in
-    the frame, its key and the message's ``account_id``."""
+    names this account, holds one and its type is not 2; otherwise the account's own user id
+    does, in the frame, its key and the message's ``account_id``."""
     record = {"admin_user_id": OWNER, "member_type": 1, "short_user_id": SHORT_USER}
     record |= {"member_user_id": SYNTHETIC.account_id} | member
     device = CloudDevice.from_api(
@@ -544,7 +548,10 @@ async def test_a_second_mqtt_command_while_one_waits_is_busy(
 async def test_an_mqtt_lock_without_a_member_record_is_refused(
     rig: Rig, wifi_lock: FakeMqttLock
 ) -> None:
-    account = await _served(rig, dataclasses.replace(lock(), owner_user_id=None))
+    device = CloudDevice.from_api(
+        {"device_sn": LOCK_SN, "device_type": 0, "device_new_pn": "T85D0"}
+    )
+    account = await _served(rig, device)
     try:
         with pytest.raises(UnsupportedError, match="member"):
             await rig.eufy.async_lock(LOCK_SN)

@@ -48,6 +48,7 @@ from ..lock_commands.control import (
     LockPath,
     check_control,
     ends_wait,
+    has_member_record,
     is_guest,
     lock_control,
 )
@@ -187,8 +188,7 @@ class MqttLocks:
         :meth:`~..station.Station.async_lock` does."""
         serial = device.device_sn
         check_control(control, serial, LockPath.MQTT)
-        owner = device.owner_user_id
-        if not owner:  # as the app: no member record, no command
+        if not has_member_record(device):  # as the app: no member record, no command
             raise UnsupportedError(
                 f"{redact_serial(serial)}: the cloud record names no member for the lock",
                 device_sn=serial,
@@ -210,7 +210,7 @@ class MqttLocks:
             return target
         user_id = cm2.key_user_id(
             account_user_id=account_user_id,
-            admin_user_id=owner,
+            admin_user_id=device.owner_user_id,
             member_type=device.member_type,
             member_user_id=device.member_user_id,
         )

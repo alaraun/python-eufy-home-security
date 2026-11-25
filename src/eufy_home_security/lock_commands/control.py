@@ -95,6 +95,22 @@ def is_guest(device: CloudDevice) -> bool:
     return device.has_member_relation
 
 
+def has_member_record(device: CloudDevice) -> bool:
+    """Whether ``device``'s cloud entry carries a member record for the account (any of its
+    fields; a record without ``admin_user_id`` is enough), which a lock command needs, as
+    the eufy app sends none without one. A record naming none of them reads as a guest's
+    (:func:`is_guest`), refused before this matters."""
+    return any(
+        value is not None
+        for value in (
+            device.owner_user_id,
+            device.member_type,
+            device.member_user_id,
+            device.short_user_id,
+        )
+    )
+
+
 def lock_control(form: LockForm | None, *, guest: bool) -> LockControl:
     """The control a lock with route ``form`` offers this account (``guest``: its member
     record names a guest)."""

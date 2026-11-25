@@ -179,6 +179,19 @@ def test_1961_plain_form_sends_the_json_object_without_seq_or_key() -> None:
     assert list(info) == ["account_id", "cmd", "mChannel", "mValue3", "payload"]
 
 
+def test_1961_leaves_out_an_absent_admin_user_id() -> None:
+    """A member record without ``admin_user_id``: the JSON names no ``userId``, as the
+    app's writer leaves out a null field."""
+    user = anker.AnkerUser(admin_user_id=None, user_name="Synth User", short_user_id="0a1b")
+    request = anker.build_1961_request(
+        SERIAL_1961, LockAction.LOCK, user, seq_num=7, lock_public_key=LOCK_PUB64, aes_key=AES_KEY
+    )
+    assert isinstance(request.payload, str)
+    plain = _open(AES_KEY, _iv(SERIAL_1961), base64.b64decode(request.payload))
+    assert plain == b'{"shortUserId":"0a1b","slOperation":1,"userName":"Synth User","seq_num":7}'
+    assert "userId" not in anker.build_1961_plain_request(LockAction.LOCK, user).payload
+
+
 def test_1961_leaves_out_an_absent_short_user_id() -> None:
     user = anker.AnkerUser(admin_user_id=ADMIN, user_name="Synth User")
     assert user.short_user_id is None

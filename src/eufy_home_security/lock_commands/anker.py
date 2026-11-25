@@ -3,8 +3,8 @@
 Declared, eufy app; not tested on hardware (docs/protocol/locks.md § 1961, § 1930).
 
 **1961** ``{"shortUserId", "slOperation", "userId", "userName"}`` (``slOperation`` 1 =
-lock, 0 = unlock; ``userId`` the member's ``admin_user_id``; an absent ``shortUserId`` is
-left out). In the encrypted form the object gains ``seq_num``, is AES-128-CBC encrypted
+lock, 0 = unlock; ``userId`` the member's ``admin_user_id``; an absent ``shortUserId`` or
+``userId`` is left out). In the encrypted form the object gains ``seq_num``, is AES-128-CBC encrypted
 under a random 16-byte key and the serial IV, and travels base64 as ``payload``; ``key``
 is the hex of the ECIES (P-256, the lock's public key) of that AES key's upper-case hex
 text. The plain form sends the object itself.
@@ -65,11 +65,11 @@ _GSON_ESCAPES: Final = {c: f"\\u{ord(c):04x}" for c in "<>&='\u2028\u2029"}
 
 @dataclass(frozen=True, slots=True)
 class AnkerUser:
-    """Who an Anker lock command names: the lock member's ``admin_user_id``, the account's
-    nickname and the member's ``short_user_id`` (hex text; 1961 leaves an absent one out,
-    1930 needs 2 bytes)."""
+    """Who an Anker lock command names: the lock member's ``admin_user_id`` (1961 leaves an
+    absent one out), the account's nickname and the member's ``short_user_id`` (hex text;
+    1961 leaves an absent one out, 1930 needs 2 bytes)."""
 
-    admin_user_id: str
+    admin_user_id: str | None
     user_name: str
     short_user_id: str | None = None
 
@@ -94,11 +94,10 @@ def _on_off_object(action: LockAction, user: AnkerUser) -> dict[str, object]:
     obj: dict[str, object] = (
         {} if user.short_user_id is None else {"shortUserId": user.short_user_id}
     )
-    return obj | {
-        "slOperation": int(action),
-        "userId": user.admin_user_id,
-        "userName": user.user_name,
-    }
+    obj["slOperation"] = int(action)
+    if user.admin_user_id is not None:
+        obj["userId"] = user.admin_user_id
+    return obj | {"userName": user.user_name}
 
 
 def _aes_key(aes_key: bytes | None) -> bytes:
