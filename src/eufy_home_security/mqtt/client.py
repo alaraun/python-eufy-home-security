@@ -68,6 +68,11 @@ type Match = Callable[[MqttMessage], bool]
 type Listener = Callable[[MqttMessage], None]
 
 
+def next_reconnect_delay(delay: float) -> float:
+    """The wait after a failed reconnect that followed a wait of ``delay`` seconds."""
+    return min(delay * 2, RECONNECT_MAX_SECONDS)
+
+
 def _require_aiomqtt() -> Any:
     try:
         import aiomqtt  # noqa: PLC0415 - optional dependency
@@ -247,7 +252,7 @@ class EufyMqttClient:
             with contextlib.suppress(TimeoutError):
                 async with asyncio.timeout(delay):
                     await self._wake.wait()
-            delay = min(delay * 2, RECONNECT_MAX_SECONDS)
+            delay = next_reconnect_delay(delay)
 
     async def _count_loss(self) -> None:
         self._losses += 1

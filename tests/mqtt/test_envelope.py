@@ -148,10 +148,11 @@ def test_an_answer_parses_into_its_device_head_and_payload() -> None:
     assert message.trans == "abc"
 
 
-def test_a_payload_that_is_no_json_object_is_kept_raw() -> None:
-    message = parse_message(response_topic("T85D0", _SN), _answer({"cmd": 8}, "not json"))
+@pytest.mark.parametrize("payload", ["not json", "[1, 2]", '"text"'])
+def test_a_payload_that_is_no_json_object_is_kept_raw(payload: str) -> None:
+    message = parse_message(response_topic("T85D0", _SN), _answer({"cmd": 8}, payload))
     assert message.payload is None
-    assert message.raw_payload == "not json"
+    assert message.raw_payload == payload
     assert message.trans is None
 
 
@@ -162,6 +163,7 @@ def test_a_payload_that_is_no_json_object_is_kept_raw() -> None:
         (f"cmd/eufy_security/T85D0/{_SN}/res", b"[]"),
         (f"cmd/eufy_security/T85D0/{_SN}/res", b'{"payload": ""}'),
         (f"cmd/eufy_security/T85D0/{_SN}/res", b'{"head": {"cmd": "x"}, "payload": ""}'),
+        (f"cmd/eufy_security/T85D0/{_SN}/res", b'{"head": {"msg_seq": true}, "payload": ""}'),
         ("not/a/topic", b'{"head": {}, "payload": ""}'),
     ],
 )

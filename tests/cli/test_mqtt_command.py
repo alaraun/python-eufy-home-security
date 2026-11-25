@@ -105,6 +105,21 @@ async def test_a_refused_topic_fails_the_check(
     assert setup.broker.published == []
 
 
+LOCK2_SN = "T85L0P2000054322"
+LOCK2 = {"device_sn": LOCK2_SN, "device_type": 0, "device_name": "Gate", "device_new_pn": "T85L0"}
+
+
+@pytest.mark.parametrize("setup", [[station_device(), LOCK, LOCK2]], indirect=True)
+async def test_the_device_filter_keeps_the_named_devices(
+    setup: Setup, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert await setup.run("--device", LOCK2_SN, "--connect", "--seconds", "0.1") == 0
+    out = capsys.readouterr().out
+    assert LOCK2_SN in out
+    assert LOCK_SN not in out
+    assert [t for _c, t, _q in setup.broker.subscriptions] == [response_topic("T85L0", LOCK2_SN)]
+
+
 async def test_the_device_filter_names_only_mqtt_devices(setup: Setup) -> None:
     with pytest.raises(UsageError, match="no MQTT device"):
         await setup.run("--device", SYNTHETIC.camera_sn)

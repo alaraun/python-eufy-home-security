@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
 
 from eufy_home_security.client import EufySecurity
 from eufy_home_security.cloud import const
@@ -36,6 +38,7 @@ from eufy_home_security.mqtt.envelope import (
     request_topic,
     response_topic,
 )
+from eufy_home_security.mqtt.selection import device_key
 from eufy_home_security.testing import SYNTHETIC, FakeCloud, build_eufy_security, warm_store
 from eufy_home_security.testing.mqtt import FakeMqttBroker, MqttTestPki, make_mqtt_pki
 
@@ -221,6 +224,28 @@ async def test_a_publish_without_a_certificate_asks_for_one_at_once(
     assert len(rig.broker.published) == 1
 
 
+async def test_a_publish_after_an_unusable_cached_certificate_asks_for_a_new_one(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(client_module, "RECONNECT_MIN_SECONDS", 30.0)
+    other_key = ec.generate_private_key(ec.SECP256R1()).private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    cache = rig.eufy.cloud._cache
+    cache.set_mqtt_certificate("eu", rig.pki.register_answer(private_key=other_key.decode()))
+    cache.set_mqtt_devices("eu", [device_key(_lock())])
+    await rig.client.async_start([_lock()])
+    await asyncio.sleep(0.2)
+    assert rig.registers() == 0  # the cached pair was tried and did not load
+    assert rig.broker.connects == []
+    async with asyncio.timeout(5):
+        await rig.client.async_publish(LOCK_SN, "x")
+    assert rig.registers() == 1
+    assert len(rig.broker.published) == 1
+
+
 # ── answers ──────────────────────────────────────────────────────────────────
 
 
@@ -264,6 +289,17 @@ async def test_a_request_without_an_answer_times_out_naming_the_device(rig: Rig)
     with pytest.raises(DeviceTimeoutError, match=r"0\.2 s") as caught:
         await rig.client.async_request(LOCK_SN, "ask", timeout=0.2)
     assert caught.value.device_sn == LOCK_SN
+
+
+async def test_stop_ends_a_pending_request_with_a_communication_error(rig: Rig) -> None:
+    await rig.client.async_start([_lock()])
+    await rig.client.async_wait_connected(5)
+    task = asyncio.create_task(rig.client.async_request(LOCK_SN, "ask", timeout=10))
+    await _until(lambda: len(rig.broker.published) == 1)
+    await rig.client.async_stop()
+    async with asyncio.timeout(2):
+        with pytest.raises(CommunicationError, match="stopped"):
+            await task
 
 
 async def test_listeners_get_every_message_until_removed(rig: Rig) -> None:

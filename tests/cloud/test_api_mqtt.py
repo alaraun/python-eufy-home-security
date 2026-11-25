@@ -74,6 +74,19 @@ async def test_register_goes_to_the_sessions_own_mega_domain(
     assert [h["host"] for h in fake_mega.headers["mqtt_register"]] == [own]
 
 
+async def test_a_session_domain_of_another_cluster_is_not_used(
+    fake_mega: FakeMega, cache: SessionCache, pki: MqttTestPki
+) -> None:
+    fake_mega.login_data["mega_domain"] = "mega-us-pr.eufy.com"
+    fake_mega.mqtt_answer = pki.register_answer()
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = await _api(session, cache)
+            await api.async_register_iot()
+    assert [h["host"] for h in fake_mega.headers["mqtt_register"]] == [const.mega_host("eu")]
+
+
 @pytest.mark.parametrize(
     "missing", ["certificate_pem", "private_key", "endpoint_addr", "user_id", "app_name"]
 )
@@ -114,6 +127,7 @@ async def test_the_secrets_never_reach_the_debug_log_or_the_repr(
         async with aiohttp.ClientSession() as session:
             api = await _api(session, cache)
             certificate = await api.async_register_iot()
+    assert certificate.endpoint not in repr(certificate)
     text = caplog.text + repr(certificate)
     assert "/app/mqtt/register/iot" in caplog.text  # the answer was logged
     for secret in (
@@ -141,6 +155,11 @@ async def test_the_api_names_the_client_id_with_its_own_install_id(
         api = EufyCloudApi(session, cache, SYNTHETIC.email, SYNTHETIC.password, region="eu")
         certificate = MqttCertificate.from_api(pki.register_answer())
         assert api.mqtt_client_id(certificate) == certificate.client_id(cache.openudid)
+        # An extra country's scope has an install id of its own.
+        scope = f"eu{const.SCOPE_SEPARATOR}FR"
+        other = api.mqtt_client_id(certificate, scope)
+        assert other == certificate.client_id(api._install_id(scope))
+        assert other != api.mqtt_client_id(certificate)
 
 
 # ── the cached certificate (the app's reuse and re-issue rules) ──────────────
