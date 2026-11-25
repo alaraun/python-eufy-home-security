@@ -581,6 +581,18 @@ class ModelDataError(EufySecurityError):
     """A bundled model settings file is malformed; the message names the file."""
 
 
+class MissingDependencyError(EufySecurityError):
+    """A feature needs an optional dependency that is not installed.
+
+    ``extra`` names the package extra that installs it (``pip install
+    eufy-home-security[<extra>]``); the message says the same.
+    """
+
+    def __init__(self, feature: str, *, extra: str) -> None:
+        self.extra = extra
+        super().__init__(f"{feature} needs eufy-home-security[{extra}]; install that extra")
+
+
 class RecordNotFoundError(EufySecurityError):
     """The station's event database has no such record, or the record lacks the media asked for.
 

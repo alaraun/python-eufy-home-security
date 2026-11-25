@@ -13,6 +13,10 @@ Never imported by the package itself: import it from a test suite only.
 - :func:`short_timeouts`: the library's hardware waits shortened for a test.
 - :func:`mode_list_params`, :func:`schedule_params`: a station's mode list and schedule
   as parameter values, for the fake station's dump or the cloud's copy.
+- :mod:`.mqtt` (import it directly): :func:`~.mqtt.make_mqtt_pki`, a throwaway PKI whose
+  :meth:`~.mqtt.MqttTestPki.register_answer` the fake cloud issues as the MQTT certificate
+  (``FakeCloud(mqtt_answer=...)``), and :class:`~.mqtt.FakeMqttBroker`, a loopback MQTT
+  broker for :class:`~eufy_home_security.mqtt.client.EufyMqttClient`.
 """
 
 from __future__ import annotations
