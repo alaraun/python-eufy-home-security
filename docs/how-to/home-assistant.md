@@ -1817,8 +1817,9 @@ report ([events.md](../protocol/events.md#lock-pushes-declared-app)). Keep `stat
 `raw`) as attributes when the entity maps passage and privacy mode to unlocked and
 locked.
 A lock the library reaches through no station (a Wi-Fi lock without a P2P id is skipped,
-`SkippedDevice`) has no `lock_state`; once served through `use_mqtt` its status reports
-arrive as `LockStateChanged` with `station_sn` None.
+`SkippedDevice`) has no `lock_state`. Served through `use_mqtt`, its status reports arrive
+as `LockStateChanged` with `station_sn` None once this client has sent it a command (the
+reports are read with the key the command names, [mqtt.md](../protocol/mqtt.md#lock-commands)).
 
 ### Garage doors
 
