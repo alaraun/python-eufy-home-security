@@ -311,7 +311,10 @@ class EufyMqttClient:
                 if run is not None and run.cancelling():
                     raise
             except Exception:
-                if self._throttle.should_log("unexpected"):
+                if run is not None and run.cancelling():
+                    # A DISCONNECT that failed on a stop or an outside cancel: the run still ends.
+                    _LOGGER.debug("MQTT connection ended with an error on a stop", exc_info=True)
+                elif self._throttle.should_log("unexpected"):
                     _LOGGER.exception("MQTT connection ended unexpectedly; reconnecting")
                 else:
                     _LOGGER.debug("MQTT connection ended unexpectedly; reconnecting", exc_info=True)

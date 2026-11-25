@@ -580,6 +580,24 @@ async def test_a_cancel_from_outside_ends_the_background_task(
     assert task.cancelled()
 
 
+async def test_a_stop_whose_disconnect_raises_logs_no_error(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.DEBUG, logger=client_module.__name__)
+    _held_disconnect(monkeypatch, "raising", hold=0.1)
+    await rig.client.async_start([lock()])
+    await rig.client.async_wait_connected(5)
+    await until(lambda: len(rig.client.topics) == 1)  # no SUBSCRIBE round trip left open
+    run = rig.client._run_task
+    assert run is not None
+    await rig.client.async_stop()
+    assert run.cancelled()
+    assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []
+    (ended,) = [r for r in caplog.records if "ended with an error on a stop" in r.msg]
+    assert ended.levelno == logging.DEBUG
+    assert ended.exc_info is not None
+
+
 async def test_a_restart_whose_disconnect_fails_is_no_loss(
     rig: Rig, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
