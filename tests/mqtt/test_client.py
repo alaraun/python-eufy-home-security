@@ -38,7 +38,19 @@ from eufy_home_security.mqtt.envelope import (
 from eufy_home_security.mqtt.selection import device_key
 from eufy_home_security.testing import SYNTHETIC
 
-from .conftest import CAMERA, LOCK2_SN, LOCK_SN, OWNER, SCOPE, Rig, answer, lock, until
+from .conftest import (
+    CAMERA,
+    LOCK2_SN,
+    LOCK_SN,
+    OWNER,
+    SCOPE,
+    Rig,
+    answer,
+    hold_selection,
+    lock,
+    mqtt_tasks,
+    until,
+)
 
 
 @contextlib.asynccontextmanager
@@ -558,6 +570,33 @@ async def test_stop_disconnects_and_ends_its_task(rig: Rig) -> None:
     assert not rig.client.connected
     names = {t.get_name() for t in asyncio.all_tasks()}
     assert not any(name.startswith("eufy-mqtt") for name in names)
+
+
+@pytest.mark.parametrize("running", [True, False], ids=["running", "stopped-to-empty"])
+async def test_a_stop_during_a_device_update_leaves_nothing_running(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, running: bool
+) -> None:
+    await rig.client.async_start([lock()])
+    await rig.client.async_wait_connected(5)
+    if not running:
+        await rig.client.async_update_devices([CAMERA])
+    held = hold_selection(monkeypatch, client_module)
+    try:
+        update = asyncio.create_task(
+            rig.client.async_update_devices([lock(), lock(LOCK2_SN, "T85L0")])
+        )
+        await until(held.entered.is_set)
+        stop = asyncio.create_task(rig.client.async_stop())
+        await asyncio.sleep(0.05)  # the stop arrives while the update reads the list
+    finally:
+        held.release.set()
+    async with asyncio.timeout(5):
+        await update
+        await stop
+    await asyncio.sleep(0.3)
+    assert not rig.client.connected
+    assert rig.broker.connected_clients == []
+    assert mqtt_tasks() == []
 
 
 class _SlowProxy:

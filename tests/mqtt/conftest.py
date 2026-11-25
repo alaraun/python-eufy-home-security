@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from types import ModuleType
 from typing import Any
 
 import pytest
@@ -102,3 +104,34 @@ async def until(predicate: Callable[[], bool], timeout: float = 5.0) -> None:
     async with asyncio.timeout(timeout):
         while not predicate():
             await asyncio.sleep(0.01)
+
+
+def mqtt_tasks() -> list[str]:
+    """The names of the MQTT client's unfinished background tasks."""
+    return [
+        t.get_name()
+        for t in asyncio.all_tasks()
+        if not t.done() and t.get_name().startswith("eufy-mqtt")
+    ]
+
+
+@dataclass
+class HeldSelection:
+    """A device selection that blocks in its worker thread until ``release`` is set."""
+
+    entered: threading.Event = field(default_factory=threading.Event)
+    release: threading.Event = field(default_factory=threading.Event)
+
+
+def hold_selection(monkeypatch: pytest.MonkeyPatch, module: ModuleType) -> HeldSelection:
+    """Make ``module``'s MQTT device selection wait for :attr:`HeldSelection.release`."""
+    held = HeldSelection()
+    real = module.mqtt_devices
+
+    def slow(devices: list[CloudDevice]) -> list[CloudDevice]:
+        held.entered.set()
+        held.release.wait(10)
+        return list(real(devices))
+
+    monkeypatch.setattr(module, "mqtt_devices", slow)
+    return held

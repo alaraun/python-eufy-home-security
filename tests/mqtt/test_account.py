@@ -9,10 +9,22 @@ from collections.abc import AsyncIterator
 import pytest
 
 from eufy_home_security.exceptions import CommunicationError, UnsupportedError
+from eufy_home_security.mqtt import account as account_module
 from eufy_home_security.mqtt.account import EufyMqttAccount
 from eufy_home_security.mqtt.envelope import MqttMessage, response_topic
 
-from .conftest import CAMERA, LOCK2_SN, LOCK_SN, SCOPE, Rig, answer, lock, until
+from .conftest import (
+    CAMERA,
+    LOCK2_SN,
+    LOCK_SN,
+    SCOPE,
+    Rig,
+    answer,
+    hold_selection,
+    lock,
+    mqtt_tasks,
+    until,
+)
 
 EU_LOCK = lock(region="eu")
 SCOPE_LOCK = lock(LOCK2_SN, "T85L0", region=SCOPE)
@@ -81,6 +93,28 @@ async def test_the_clients_follow_the_scopes_of_the_device_list(
     assert account.clients == {}
     assert not account.connected
     await until(lambda: rig.broker.connected_clients == [])
+
+
+async def test_a_stop_during_a_device_update_leaves_no_client(
+    rig: Rig, account: EufyMqttAccount, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await account.async_start([EU_LOCK])
+    await account.async_wait_connected(5)
+    held = hold_selection(monkeypatch, account_module)
+    try:
+        update = asyncio.create_task(account.async_update_devices([EU_LOCK, SCOPE_LOCK]))
+        await until(held.entered.is_set)
+        stop = asyncio.create_task(account.async_stop())
+        await asyncio.sleep(0.05)  # the stop arrives while the update reads the list
+    finally:
+        held.release.set()
+    async with asyncio.timeout(5):
+        await update
+        await stop
+    await asyncio.sleep(0.3)
+    assert account.clients == {}
+    assert rig.broker.connected_clients == []
+    assert mqtt_tasks() == []
 
 
 async def test_no_mqtt_device_starts_no_client_unless_a_check_asks(

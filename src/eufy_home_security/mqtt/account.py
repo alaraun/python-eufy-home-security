@@ -57,6 +57,8 @@ class EufyMqttAccount:
         self._clients: dict[str, EufyMqttClient] = {}
         self._listeners: list[Listener] = []
         self._subscribe: frozenset[str] | None = None
+        self._lifecycle = asyncio.Lock()
+        """Held by start, device update and stop, so a stop never interleaves with them."""
 
     # ── state ────────────────────────────────────────────────────────────────
 
@@ -141,36 +143,40 @@ class EufyMqttAccount:
         on the cloud's :attr:`~..cloud.api.EufyCloudApi.region`). ``subscribe`` is each
         client's (:meth:`.EufyMqttClient.async_start`).
         """
-        if self._clients:
-            raise RuntimeError("the MQTT account is already started")
-        listed = list(devices)
-        self._subscribe = None if subscribe is None else frozenset(subscribe)
-        scopes = await self._scopes(listed)
-        if not scopes and connect_without_devices:
-            await self._start_client(self._cloud.region, listed, connect_without_devices=True)
-        for scope in scopes:
-            await self._start_client(scope, listed)
+        async with self._lifecycle:
+            if self._clients:
+                raise RuntimeError("the MQTT account is already started")
+            listed = list(devices)
+            self._subscribe = None if subscribe is None else frozenset(subscribe)
+            scopes = await self._scopes(listed)
+            if not scopes and connect_without_devices:
+                await self._start_client(self._cloud.region, listed, connect_without_devices=True)
+            for scope in scopes:
+                await self._start_client(scope, listed)
 
     async def async_update_devices(self, devices: Iterable[CloudDevice]) -> None:
         """Follow a new device list: a scope without MQTT devices left has its client
         stopped, a new one gets a client, and the others follow the list
         (:meth:`.EufyMqttClient.async_update_devices`)."""
-        listed = list(devices)
-        scopes = await self._scopes(listed)
-        for scope in [s for s in self._clients if s not in scopes]:
-            await self._clients.pop(scope).async_stop()
-        for scope in scopes:
-            client = self._clients.get(scope)
-            if client is None:
-                await self._start_client(scope, listed)
-            else:
-                await client.async_update_devices(listed)
+        async with self._lifecycle:
+            listed = list(devices)
+            scopes = await self._scopes(listed)
+            for scope in [s for s in self._clients if s not in scopes]:
+                await self._clients.pop(scope).async_stop()
+            for scope in scopes:
+                client = self._clients.get(scope)
+                if client is None:
+                    await self._start_client(scope, listed)
+                else:
+                    await client.async_update_devices(listed)
 
     async def async_stop(self) -> None:
-        """Stop every client; their pending requests get a :class:`CommunicationError`."""
-        clients, self._clients = list(self._clients.values()), {}
-        for client in clients:
-            await client.async_stop()
+        """Stop every client; their pending requests get a :class:`CommunicationError`.
+        A start or device update in progress finishes first, then is stopped."""
+        async with self._lifecycle:
+            clients, self._clients = list(self._clients.values()), {}
+            for client in clients:
+                await client.async_stop()
 
     async def async_wait_connected(self, timeout: float) -> None:
         """Wait until every client's connection is up; :class:`CommunicationError` when

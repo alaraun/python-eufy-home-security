@@ -141,6 +141,8 @@ class EufyMqttClient:
         self._run_task: asyncio.Task[None] | None = None
         self._connection_task: asyncio.Task[bool] | None = None
         self._stopping = False
+        self._lifecycle = asyncio.Lock()
+        """Held by start, device update and stop, so a stop never interleaves with them."""
         self._throttle = LogThrottle()
         """Repeated lines: dropped messages, failing listeners, connect failures."""
 
@@ -206,14 +208,15 @@ class EufyMqttClient:
         The connection runs in a background task that reconnects by itself; use
         :meth:`async_wait_connected` to wait for it.
         """
-        if self._run_task is not None:
-            raise RuntimeError("the MQTT client is already started")
-        self._subscribe = None if subscribe is None else frozenset(subscribe)
-        self._devices = await self._select(devices)
-        if not self._devices and not connect_without_devices:
-            _LOGGER.debug("no MQTT device: no broker connection")
-            return
-        self._start_task()
+        async with self._lifecycle:
+            if self._run_task is not None:
+                raise RuntimeError("the MQTT client is already started")
+            self._subscribe = None if subscribe is None else frozenset(subscribe)
+            self._devices = await self._select(devices)
+            if not self._devices and not connect_without_devices:
+                _LOGGER.debug("no MQTT device: no broker connection")
+                return
+            self._start_task()
 
     def _start_task(self) -> None:
         self._stopping = False
@@ -222,22 +225,28 @@ class EufyMqttClient:
     async def async_update_devices(self, devices: Iterable[CloudDevice]) -> None:
         """Follow a new device list: a changed MQTT device set asks for a new certificate
         and reconnects with it (the app's rule); an unchanged one keeps the connection."""
-        selected = await self._select(devices)
-        before = self._keys()
-        self._devices = selected
-        if self._run_task is None:
-            if selected:
-                self._start_task()
-            return
-        if not selected:
-            await self.async_stop()
-            return
-        if self._keys() != before:
-            _LOGGER.debug("MQTT device set changed: reconnecting with its certificate")
-            self._restart()
+        async with self._lifecycle:
+            selected = await self._select(devices)
+            before = self._keys()
+            self._devices = selected
+            if self._run_task is None:
+                if selected:
+                    self._start_task()
+                return
+            if not selected:
+                await self._stop()
+                return
+            if self._keys() != before:
+                _LOGGER.debug("MQTT device set changed: reconnecting with its certificate")
+                self._restart()
 
     async def async_stop(self) -> None:
-        """Disconnect and end the background task; the waiters get a CommunicationError."""
+        """Disconnect and end the background task; the waiters get a CommunicationError.
+        A start or device update in progress finishes first, then is stopped."""
+        async with self._lifecycle:
+            await self._stop()
+
+    async def _stop(self) -> None:
         self._stopping = True
         task, self._run_task = self._run_task, None
         if task is not None:
