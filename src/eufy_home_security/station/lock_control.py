@@ -395,8 +395,8 @@ class StationLockControl:
         serial = device.device_sn
         loop = asyncio.get_running_loop()
         deadline = None if timeout is None else loop.time() + timeout
+        await _within(deadline, timeout, serial, self._station.session.async_connect())
         sent = await _within(deadline, timeout, serial, self._build(device, form, action))
-        session = self._station.session
         channel = self._station.channel_for(serial)
         pending = _Pending(
             serial, form, action, sent, answer=loop.create_future(), state=loop.create_future()
@@ -421,10 +421,11 @@ class StationLockControl:
                 pending.resends.append(loop.create_task(again()))
 
             pending.resend = resend
+        # Armed at the send, as the app's wait starts there: a reading the connect brought
+        # (a dump repeating an old fault) does not end the command.
         self._pending[serial] = pending
         unwatch = self._locks.watch(serial, on_reading)
         try:
-            await _within(deadline, timeout, serial, session.async_connect())
             applied = await _within(deadline, timeout, serial, self._send(sent, channel, pending))
             if sent.read is None and applied:  # the station's result is the lock's answer
                 pending.answer.set_result(LockReply(0, LockResult.ACCEPTED))

@@ -420,6 +420,40 @@ async def test_a_second_command_while_one_waits_is_busy(
     assert len(lock_1940.received) == 1
 
 
+async def test_a_reading_taken_while_connecting_does_not_end_the_command(
+    fake: FakeStation, lock_1940: FakeLock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The connect's parameter dump repeats a fault code from before the command: only a
+    reading after the send counts, as the app's wait starts at the send. The command
+    connects before it is built."""
+    lock_1940.state_code = 5
+    fake.locks[lock_1940.channel] = lock_1940
+    fake.params.setdefault(lock_1940.channel, {})[1912] = "5"
+    station = Station(
+        STATION, _session(fake), sub_devices=[_lock(LOCK_1940)], lock_cloud=_Cloud(lock_1940)
+    )
+    connect = station.session.async_connect
+    dumped: list[bool] = []
+
+    async def connect_with_dump() -> None:
+        await connect()
+        if not dumped:
+            dumped.append(True)
+            fake.send_param_dump()
+            async with asyncio.timeout(5):
+                while station.lock_state(LOCK_1940) is None:
+                    await asyncio.sleep(0.01)
+
+    monkeypatch.setattr(station.session, "async_connect", connect_with_dump)
+    try:
+        assert station.lock_state(LOCK_1940) is None
+        assert await station.async_lock(LOCK_1940) is LockState.LOCKED
+        assert dumped
+    finally:
+        await station.async_close()
+    assert len(lock_1940.received) == 1
+
+
 async def test_the_hkdf_variant_from_the_firmware_thresholds(
     fake: FakeStation, lock_1940: FakeLock
 ) -> None:
