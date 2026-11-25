@@ -1358,7 +1358,7 @@ class Station:
         ``DeviceBusyError`` while another door command of this client waits on the device
         (to reverse a moving door, cancel the waiting call first). Cancelling sends nothing:
         once the device took the open or close, the door reads opening or closing until a
-        report of it (its notify, or a report of a new state), at most
+        report of that door or of a new state, at most
         :data:`~.garage.GARAGE_CONFIRM_TIMEOUT` after the take (then its last report again,
         with a :class:`~..events.GarageDoorChanged`), and meanwhile the next open or close
         of that door is sent even where the last report is the asked state. The device took

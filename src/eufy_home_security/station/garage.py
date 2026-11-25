@@ -86,8 +86,8 @@ class StationGarage:
     parameter) or the device's door-state notify, whose bits become the held state
     parameter. While a command of this client waits, the door reads opening or closing
     until its report; so does a door whose open or close the device took when its call was
-    cancelled, until a report of that door (its notify, or a report that changes its
-    state), at most :data:`GARAGE_CONFIRM_TIMEOUT` after the take.
+    cancelled, until a report of that door or of a new state, at most
+    :data:`GARAGE_CONFIRM_TIMEOUT` after the take.
     """
 
     def __init__(self, station: Station, bus: EventBus) -> None:
