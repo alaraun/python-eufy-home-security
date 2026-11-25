@@ -1776,22 +1776,26 @@ and for a device that is no lock): `state`, a `LockState`, `source` (`p2p`, `not
 `cloud` or `push`), `raw` (the parameter's value) or `event_type` (the push's). Every change
 of `state` emits `LockStateChanged(device_sn, state, source, station_sn, raw, event_type)`
 on the client's stream, the first state included; read the state from the event or from
-`lock_state`. The state follows the eufy app's lock card:
+`lock_state`. The state is the lock-state code as the eufy app's lock controls read the
+lock's `smart_lock_onoff_status`, or what a push about the lock sets:
 
-| `LockState` | lock-state code (param 1912 behind a station, 6000 for a lock that is its own station) | push `event_type` |
-|---|---|---|
-| `locked` | 4 | a lock event: 262-268, 271, 531, 533, 551, 552, 561 |
-| `unlocked` | 3, 8 | an unlock event: 257-261, 269, 270, 530, 532, 538, 549, 550, 562 |
-| `locking` / `unlocking` | 7 / 6 | |
-| `jammed` | 2, 5, 9 and any other code (the card's fault state) | 517, 519 (mechanical fault) |
-| `not_calibrated` | 1 | |
-| `syncing` | 0 | |
-| `unknown` | nothing reported, a value that is no number | 516 (the lock went offline) |
+| `LockState` | lock-state code (param 1912 behind a station, 6000 for a lock that is its own station) | push `event_type` | suggested HA lock state (the library's suggestion) |
+|---|---|---|---|
+| `initial` | 0 (nothing reported yet) | | unknown |
+| `uncalibrated` / `calibrating` | 1 / 2 | | unknown |
+| `unlocked` | 3 | an unlock event: 257-261, 269, 270, 530, 532, 538, 549, 550, 562 | unlocked |
+| `locked` | 4 | a lock event: 262-268, 271, 531, 533, 551, 552, 561 | locked |
+| `intermediate` | 5 (the bolt stopped between its positions; the app shows it as jammed) | | jammed |
+| `unlocking` / `locking` | 6 / 7 | | unlocking / locking |
+| `passage_mode` | 8 (held unlocked) | | unlocked |
+| `privacy_mode` | 9 (locked against every key but the owner's) | | locked |
+| `jammed` | | 517, 519 (mechanical fault) | jammed |
+| `unknown` | any other code, a value that is no number, nothing reported | 516 (the lock went offline) | unknown |
 
 The latest news wins: a parameter value is taken when it differs from that parameter's
 previous value (a dump that repeats it does not undo a push), and a push older than the
-last one taken is ignored. Map `locked`/`unlocked` to `is_locked`, `locking`/`unlocking`
-to `is_locking`/`is_unlocking`, `jammed` to `is_jammed`, the rest to an unknown state.
+last one taken is ignored. Keep `state` (and `raw`) as attributes when the entity maps
+passage and privacy mode to unlocked and locked.
 A lock the library reaches through no station (a Wi-Fi lock without a P2P id is skipped,
 `SkippedDevice`) has no state here.
 

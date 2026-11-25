@@ -76,7 +76,7 @@ class Capability(StrEnum):
     :attr:`~..events.DetectionType.DOORBELL_PRESS` with the device's own serial, and the
     eufy app shows it as a ring (see :func:`ring_evidence`)."""
     LOCK = "lock"
-    """A smart lock's state: locked, unlocked, jammed and the app's other states
+    """A smart lock's state: locked, unlocked and the app's other lock states
     (:mod:`.locks`); state only, no lock or unlock command."""
     GARAGE_DOOR = "garage_door"
     """The doors of a garage-door camera: their state and the open and close commands

@@ -102,7 +102,7 @@ async def test_a_lock_behind_a_station_reads_its_1912(hub: Station, fake: FakeSt
     )
     fake.params[1][1912] = "3"
     await hub.async_update()
-    fake.params[1][1912] = "8"  # another unlocked code: no event
+    fake.params[1][1912] = " 3 "  # another value of the same state: no event
     await hub.async_update()
     assert _locks(events) == [
         (LockState.LOCKED, LockStateSource.P2P, "4"),
@@ -111,7 +111,7 @@ async def test_a_lock_behind_a_station_reads_its_1912(hub: Station, fake: FakeSt
     first = next(e for e in events if isinstance(e, LockStateChanged))
     assert (first.device_sn, first.station_sn) == (LOCK_SN, SYNTHETIC.station_sn)
     assert hub.lock_state(LOCK_SN) == LockReading(
-        state=LockState.UNLOCKED, source=LockStateSource.P2P, raw="8"
+        state=LockState.UNLOCKED, source=LockStateSource.P2P, raw=" 3 "
     )
     assert hub.lock_state(SYNTHETIC.station_sn) is None  # no lock
     with pytest.raises(UnsupportedError, match="not paired"):
@@ -137,13 +137,13 @@ async def test_a_lock_push_sets_the_state_until_the_parameter_moves(
     assert hub.lock_state(LOCK_SN) == LockReading(
         state=LockState.UNLOCKED, source=LockStateSource.PUSH, event_type=259
     )
-    fake.params[1][1912] = "2"
+    fake.params[1][1912] = "5"
     await hub.async_update()
     assert hub.note_lock_push(_push(516, 4_000)) is True  # offline
     assert _locks(events) == [
         (LockState.LOCKED, LockStateSource.P2P, "4"),
         (LockState.UNLOCKED, LockStateSource.PUSH, None),
-        (LockState.JAMMED, LockStateSource.P2P, "2"),
+        (LockState.INTERMEDIATE, LockStateSource.P2P, "5"),
         (LockState.UNKNOWN, LockStateSource.PUSH, None),
     ]
     pushed = [e for e in events if isinstance(e, LockStateChanged) and e.event_type]

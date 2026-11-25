@@ -1,10 +1,9 @@
-"""The lock state of a smart lock, as the eufy app shows it on the lock's card (declared,
-eufy app).
+"""The lock state of a smart lock, as the eufy app reads it (declared, eufy app).
 
 The state parameter per context comes from the model's file (``lock``, generated from its
-handler's read of ``smart_lock_onoff_status``); its raw code, a push's ``event_type`` and
-their meanings are the app's. See docs/how-to/home-assistant.md § Locks and
-docs/protocol/events.md § Lock pushes.
+handler's read of ``smart_lock_onoff_status``); its codes are read as the app's lock
+controls read that property, a push's ``event_type`` as the app sets the lock from it.
+See docs/how-to/home-assistant.md § Locks and docs/protocol/events.md § Lock pushes.
 """
 
 from __future__ import annotations
@@ -21,20 +20,28 @@ from .support import Evidence, Support
 
 
 class LockState(StrEnum):
-    """The state of a lock."""
+    """The state of a lock: the lock-state codes as the eufy app's lock controls name them,
+    plus the push-only :attr:`JAMMED` and :attr:`UNKNOWN`."""
 
-    LOCKED = "locked"
+    INITIAL = "initial"
+    """Code 0: the lock reported no state yet."""
+    UNCALIBRATED = "uncalibrated"
+    CALIBRATING = "calibrating"
     UNLOCKED = "unlocked"
-    LOCKING = "locking"
+    LOCKED = "locked"
+    INTERMEDIATE = "intermediate"
+    """Code 5: the bolt stopped between its positions; the app shows it as jammed."""
     UNLOCKING = "unlocking"
+    LOCKING = "locking"
+    PASSAGE_MODE = "passage_mode"
+    """Code 8: held unlocked (passage mode)."""
+    PRIVACY_MODE = "privacy_mode"
+    """Code 9: locked against every key but the owner's (privacy mode)."""
     JAMMED = "jammed"
-    """The app's fault state, which its card shows as jammed: a mechanical fault the lock
-    reports, and every code the app names no state for."""
-    NOT_CALIBRATED = "not_calibrated"
-    SYNCING = "syncing"
+    """A mechanical fault the lock's push reports (no lock-state code)."""
     UNKNOWN = "unknown"
-    """Nothing reported yet, a value that is no code, or a lock the eufy cloud reports
-    offline."""
+    """Nothing reported, a value that is no code or a code the app names no state for, or a
+    lock the eufy cloud reports offline."""
 
 
 class LockStateSource(StrEnum):
@@ -52,31 +59,27 @@ class LockStateSource(StrEnum):
 
 CODE_STATES: Final[Mapping[int, LockState]] = MappingProxyType(
     {
-        0: LockState.SYNCING,
-        1: LockState.NOT_CALIBRATED,
-        2: LockState.JAMMED,
+        0: LockState.INITIAL,
+        1: LockState.UNCALIBRATED,
+        2: LockState.CALIBRATING,
         3: LockState.UNLOCKED,
         4: LockState.LOCKED,
-        5: LockState.JAMMED,
+        5: LockState.INTERMEDIATE,
         6: LockState.UNLOCKING,
         7: LockState.LOCKING,
-        8: LockState.UNLOCKED,
-        9: LockState.JAMMED,
+        8: LockState.PASSAGE_MODE,
+        9: LockState.PRIVACY_MODE,
     }
 )
-"""The state of each raw code of the lock-state parameter; any other integer is
-:attr:`LockState.JAMMED`, as the app's card shows it (declared, eufy app)."""
+"""The state of each code of the lock-state parameter, as the eufy app's lock controls read
+the lock's ``smart_lock_onoff_status`` (declared, eufy app)."""
 
 
 def state_of_code(raw: object) -> LockState:
     """The state of a lock-state parameter's value (its text or number): the code's state,
-    :attr:`LockState.JAMMED` for an integer no state is named for, and
-    :attr:`LockState.UNKNOWN` for None or a value that is no integer (the library's
-    reading; the app shows its syncing state when the parameter is missing)."""
+    :attr:`LockState.UNKNOWN` for None, a value that is no integer, or another integer."""
     code = json_int(raw.strip() if isinstance(raw, str) else raw)
-    if code is None:
-        return LockState.UNKNOWN
-    return CODE_STATES.get(code, LockState.JAMMED)
+    return LockState.UNKNOWN if code is None else CODE_STATES.get(code, LockState.UNKNOWN)
 
 
 _UNLOCK_EVENTS: Final = (257, 258, 259, 260, 261, 269, 270, 530, 532, 538, 549, 550, 562)

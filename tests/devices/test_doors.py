@@ -143,16 +143,16 @@ def test_a_door_state_notify_carries_the_state_bits(
         ("4", LockState.LOCKED),
         (4, LockState.LOCKED),
         ("3", LockState.UNLOCKED),
-        ("8", LockState.UNLOCKED),
         ("7", LockState.LOCKING),
         ("6", LockState.UNLOCKING),
-        ("0", LockState.SYNCING),
-        ("1", LockState.NOT_CALIBRATED),
-        ("2", LockState.JAMMED),
-        ("5", LockState.JAMMED),
-        ("9", LockState.JAMMED),
-        ("10", LockState.JAMMED),  # a code the app names no state for: its fault state
-        ("-1", LockState.JAMMED),
+        ("0", LockState.INITIAL),
+        ("1", LockState.UNCALIBRATED),
+        ("2", LockState.CALIBRATING),
+        ("5", LockState.INTERMEDIATE),
+        ("8", LockState.PASSAGE_MODE),
+        ("9", LockState.PRIVACY_MODE),
+        ("10", LockState.UNKNOWN),  # a code the app names no state for
+        ("-1", LockState.UNKNOWN),
         (" 4 ", LockState.LOCKED),
         (None, LockState.UNKNOWN),  # never reported
         ("", LockState.UNKNOWN),
@@ -164,8 +164,10 @@ def test_a_lock_state_code_reads_as_the_apps_card(raw: object, state: LockState)
     assert state_of_code(raw) is state
 
 
-def test_the_code_table_names_codes_0_to_9() -> None:
+def test_the_code_table_names_codes_0_to_9_each_its_own_state() -> None:
     assert sorted(CODE_STATES) == list(range(10))
+    assert len(set(CODE_STATES.values())) == 10
+    assert LockState.JAMMED not in CODE_STATES.values()  # set by a push only
 
 
 @pytest.mark.parametrize(
