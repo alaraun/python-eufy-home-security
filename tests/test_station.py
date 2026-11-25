@@ -3068,9 +3068,11 @@ async def _standalone(
     *,
     raw: dict[str, Any] | None = None,
     firmware: str | None = None,
+    update: bool = True,
 ) -> Station:
     """A standalone camera ``serial`` that is its own station, on ``fake`` (``raw``: its
-    cloud entry's raw fields; ``firmware``: its listed main firmware)."""
+    cloud entry's raw fields; ``firmware``: its listed main firmware; ``update``: its
+    parameters read once, so it has a state)."""
     fake.serial = serial
     fake.static_key = static_key(serial, fake.did)
 
@@ -3088,7 +3090,8 @@ async def _standalone(
         main_sw_version=firmware,
     )
     station = Station(device, session)
-    await station.async_update()
+    if update:
+        await station.async_update()
     return station
 
 
@@ -5935,6 +5938,31 @@ async def test_a_standalone_detection_still_is_read_in_the_device_zone(
         _standalone_detection(trigger), ImageSource.THUMBNAIL
     )
     assert cam_img.data == image
+
+
+async def test_a_standalone_detection_still_without_state_is_read_in_the_cloud_zone(
+    fake: FakeStation,
+) -> None:
+    """A device whose parameters were never read: its still's name is read in the zone
+    of its cloud entry's ``time_zone``."""
+    station = await _standalone(
+        fake, "T8170P2000054321", raw={"time_zone": encode_zone("Asia/Tokyo")}, update=False
+    )
+    try:
+        assert station.state is None
+        trigger = datetime(2026, 10, 2, 11, 48, 50, tzinfo=UTC)
+        path = "/media/mmcblk0p1/Camera00/event/20261002204852_snapshot.jpg"  # 2 s later
+        fake.event_summaries = {
+            "T8170P2000054321": {"event_count": 1, "crop_hb3_path": path, "crop_cloud_path": ""}
+        }
+        image = b"\xff\xd8\xff\xe0" + bytes(400) + b"\xff\xd9"
+        fake.images[path] = v1_still(image, "T8170P2000054321", did=SYNTHETIC.did)
+        cam_img = await station.async_event_image(
+            _standalone_detection(trigger), ImageSource.THUMBNAIL
+        )
+        assert cam_img.data == image
+    finally:
+        await station.async_close()
 
 
 async def test_a_standalone_detection_without_a_time_is_refused(
