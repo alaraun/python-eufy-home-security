@@ -250,28 +250,28 @@ class EufyMqttClient:
                 self._restart()
 
     async def async_stop(self) -> None:
-        """Disconnect and end the background task; the waiters get a CommunicationError.
-        A start or device update in progress finishes first, then is stopped; a later
-        device update is ignored until the next :meth:`async_start`. A cancel of the caller
-        propagates at once; the background task still ends by itself."""
+        """Disconnect and end the background task; pending requests get a CommunicationError
+        at once, before the DISCONNECT completes. A start or device update in progress
+        finishes first, then is stopped; a later device update is ignored until the next
+        :meth:`async_start`. A cancel of the caller propagates at once; the background task
+        still ends by itself."""
         async with self._lifecycle:
             self._stopped = True
             await self._stop()
 
     async def _stop(self) -> None:
         task, self._run_task = self._run_task, None
-        # The stopped run's connection may still be closing: it is no longer this client's.
+        # The stopped run's connection may still be closing: it is no longer this client's,
+        # and its answers are not waited for.
         self._end_connection()
-        try:
-            if task is not None:
-                task.cancel()
-                # asyncio.wait, not await task: a cancel of the caller ends the wait and
-                # propagates, and the cancelled task still ends on its own.
-                await asyncio.wait({task})
-                if not task.cancelled():
-                    task.result()
-        finally:
-            self._fail_waiters("the MQTT client stopped")
+        self._fail_waiters("the MQTT client stopped")
+        if task is not None:
+            task.cancel()
+            # asyncio.wait, not await task: a cancel of the caller ends the wait and
+            # propagates, and the cancelled task still ends on its own.
+            await asyncio.wait({task})
+            if not task.cancelled():
+                task.result()
 
     async def async_wait_connected(self, timeout: float) -> None:
         """Wait until the broker connection is up; :class:`CommunicationError` when it is

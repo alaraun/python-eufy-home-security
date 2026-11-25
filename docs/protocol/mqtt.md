@@ -90,7 +90,8 @@ A lost connection is retried after 4 s, the wait doubling per failed attempt up 
 64 s, and then every 64 s for as long as the client runs: the library's choice, where the
 eufy app gives up after ten attempts. A refused connect counts as no loss. A topic the
 broker refuses is asked for again every 5 s. A connection that ends fails every pending
-`async_request` at once with a `CommunicationError` ("MQTT connection lost"). Repeated
+`async_request` at once with a `CommunicationError` ("MQTT connection lost"); a stop
+does the same ("the MQTT client stopped") before its DISCONNECT completes. Repeated
 connect and certificate failures log a WARNING once per 5 minutes and DEBUG in between.
 
 ## Topics

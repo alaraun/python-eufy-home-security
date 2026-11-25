@@ -331,6 +331,23 @@ async def test_stop_ends_a_pending_request_with_a_communication_error(rig: Rig) 
             await task
 
 
+async def test_a_stop_ends_a_pending_request_before_its_disconnect_completes(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _held_disconnect(monkeypatch, "slow", hold=1.0)
+    await rig.client.async_start([lock()])
+    await rig.client.async_wait_connected(5)
+    request = asyncio.create_task(rig.client.async_request(LOCK_SN, "ask", timeout=10))
+    await until(lambda: len(rig.broker.published) == 1)
+    stop = asyncio.create_task(rig.client.async_stop())
+    async with asyncio.timeout(0.5):
+        with pytest.raises(CommunicationError, match="stopped") as caught:
+            await request
+    assert not isinstance(caught.value, DeviceTimeoutError)
+    assert not stop.done()  # the DISCONNECT is still held
+    await stop
+
+
 async def test_a_lost_connection_ends_a_pending_request_at_once(rig: Rig) -> None:
     await rig.client.async_start([lock()])
     await rig.client.async_wait_connected(5)
