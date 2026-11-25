@@ -78,12 +78,19 @@ def next_reconnect_delay(delay: float) -> float:
     return min(delay * 2, RECONNECT_MAX_SECONDS)
 
 
-def _require_aiomqtt() -> Any:
+def require_aiomqtt() -> Any:
+    """The ``aiomqtt`` module; :class:`MissingDependencyError` without the ``mqtt`` extra."""
     try:
         import aiomqtt  # noqa: PLC0415 - optional dependency
     except ImportError as err:
         raise MissingDependencyError("the MQTT transport", extra="mqtt") from err
     return aiomqtt
+
+
+def device_scope(device: CloudDevice, cloud: EufyCloudApi) -> str:
+    """The login scope whose client serves ``device``: its ``region``, the cloud's
+    :attr:`~..cloud.api.EufyCloudApi.region` for a device without one."""
+    return device.region or cloud.region
 
 
 def _refused(code: object) -> bool:
@@ -93,7 +100,9 @@ def _refused(code: object) -> bool:
 
 class EufyMqttClient:
     """The MQTT connection of one login scope (``region``, the cloud's :attr:`region` when
-    None) to the eufy security broker.
+    None) to the eufy security broker. It serves the MQTT devices of that scope among the
+    devices it is given and ignores the others; :class:`~.account.EufyMqttAccount` runs one
+    client per scope of an account.
 
     ``port`` and ``server_ca_pem`` exist for tests against a local broker: the client
     connects to the certificate's endpoint on :data:`MQTT_PORT` and verifies it with the
@@ -110,7 +119,7 @@ class EufyMqttClient:
         keepalive: int = KEEPALIVE_SECONDS,
         server_ca_pem: str | None = None,
     ) -> None:
-        self._aiomqtt = _require_aiomqtt()
+        self._aiomqtt = require_aiomqtt()
         self._cloud = cloud
         self._region = region
         self._port = port
@@ -155,14 +164,26 @@ class EufyMqttClient:
     def add_listener(self, listener: Listener) -> Callable[[], None]:
         """Call ``listener`` with every message a device publishes; returns its remover."""
         self._listeners.append(listener)
-        return lambda: self._listeners.remove(listener) if listener in self._listeners else None
+        return lambda: self.remove_listener(listener)
+
+    def remove_listener(self, listener: Listener) -> None:
+        """Stop calling ``listener`` (once per :meth:`add_listener`); no-op when absent."""
+        if listener in self._listeners:
+            self._listeners.remove(listener)
 
     # ── lifecycle ────────────────────────────────────────────────────────────
 
+    @property
+    def scope(self) -> str:
+        """The login scope this client serves."""
+        return self._cloud.region if self._region is None else self._region
+
     async def _select(self, devices: Iterable[CloudDevice]) -> dict[str, CloudDevice]:
+        """The MQTT devices of this client's scope (:func:`device_scope`) among ``devices``."""
         # The selection reads package data on first use: off the loop.
         selected = await asyncio.to_thread(mqtt_devices, list(devices))
-        return {device.device_sn: device for device in selected}
+        scope = self.scope
+        return {d.device_sn: d for d in selected if device_scope(d, self._cloud) == scope}
 
     def _keys(self) -> frozenset[str]:
         return frozenset(device_key(device) for device in self._devices.values())

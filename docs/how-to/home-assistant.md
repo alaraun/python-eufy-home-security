@@ -3601,12 +3601,14 @@ locks requires the extra:
 ```
 
 Without it the library imports and serves stations as before; constructing
-`eufy_home_security.mqtt.client.EufyMqttClient` raises `MissingDependencyError` (its
-`extra` is `"mqtt"`). The transport is declared from the eufy app and not yet tested
+`eufy_home_security.mqtt.account.EufyMqttAccount` (or a single scope's `EufyMqttClient`)
+raises `MissingDependencyError` (its `extra` is `"mqtt"`). The transport is declared from the eufy app and not yet tested
 against the broker, and lock commands are not part of it yet; see
 [protocol/mqtt.md](../protocol/mqtt.md). Its loggers are under `eufy_home_security.mqtt`;
 `aiomqtt` logs each MQTT packet under `mqtt`, outside the library's tree and unredacted
-(the client id carries the account's user id), so leave `mqtt` out of `loggers`. Start one client per account with the cloud
-device list and call `async_update_devices()` after each device-list refresh: the
-library decides which devices are MQTT devices, reuses the account's certificate and
-reconnects by itself.
+(the client id carries the account's user id), so leave `mqtt` out of `loggers`. Start one
+`EufyMqttAccount` per account with the cloud device list and call `async_update_devices()`
+after each device-list refresh: the library decides which devices are MQTT devices, which
+login scope's connection serves each (one connection per scope holding MQTT devices),
+reuses each scope's certificate and reconnects by itself. Call `async_publish` and
+`async_request` on the account; it routes them by device.

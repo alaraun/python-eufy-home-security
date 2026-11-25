@@ -135,11 +135,18 @@ kept as text. A topic that names no serial, a body that is no JSON object, one w
 
 ## The client
 
-```python
-from eufy_home_security.mqtt.client import EufyMqttClient
+A login scope (the login country's region, each extra country) has its own session, install
+id and certificate, so each scope holding MQTT devices gets a connection of its own.
+`EufyMqttClient` is the connection of one scope: of the devices it is given it serves the
+MQTT devices whose `region` is its scope (a device without one counts as the cloud's
+`region`'s). `EufyMqttAccount` runs one client per scope of the account's device list and
+sends each call to the client of its device's scope:
 
-mqtt = EufyMqttClient(eufy.cloud)  # needs the `mqtt` extra
-await mqtt.async_start(devices)  # the cloud device list; the MQTT ones are kept
+```python
+from eufy_home_security.mqtt.account import EufyMqttAccount
+
+mqtt = EufyMqttAccount(eufy.cloud)  # needs the `mqtt` extra
+await mqtt.async_start(devices)  # the cloud device list; a client per scope with MQTT devices
 await mqtt.async_wait_connected(30)
 answer = await mqtt.async_request(serial, trans, timeout=20)
 remove = mqtt.add_listener(on_message)  # every message any device publishes
@@ -153,9 +160,11 @@ await mqtt.async_stop()
 | `async_publish(sn, trans)` | publishes the command; returns its `MqttHead` once the broker acknowledged it, which is no answer of the device |
 | `async_request(sn, trans, match=None, timeout=20)` | publishes and waits for the device's message: by default the one with the request's `msg_seq` or `sess_id`, else the first that `match` accepts. `DeviceTimeoutError` when none comes |
 | `add_listener(fn)` | `fn(MqttMessage)` for every message; returns its remover |
-| `async_update_devices(devices)` | a changed MQTT device set reconnects with a new certificate; an unchanged one changes nothing |
+| `async_update_devices(devices)` | a changed MQTT device set reconnects with a new certificate; an unchanged one changes nothing. On the account: a scope left without MQTT devices has its client stopped, a new one gets a client |
+| `clients`, `client_for(sn)` | the account's client per scope, and the one serving a device |
 
-A serial that is not one of the client's MQTT devices is an `UnsupportedError`; no
+The calls are the same on both classes. A serial that is not one of the client's (the
+account's) MQTT devices is an `UnsupportedError`; no
 connection within 10 s, or a publish the broker does not take, a
 `CommunicationError`. The library imports without `aiomqtt`; constructing the client
 without it raises `MissingDependencyError` naming the `mqtt` extra.

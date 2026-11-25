@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     from ..client import EufySecurity
     from ..cloud.api import EufyCloudApi
     from ..devices.model_settings import Setting, Value
-    from ..mqtt.client import EufyMqttClient
+    from ..mqtt.account import EufyMqttAccount
     from ..p2p.session.media_stream import MediaStream
     from ..station import Station
 
@@ -327,11 +327,11 @@ async def cmd_devices(ctx: Context) -> int:
     return 0
 
 
-def mqtt_client(cloud: EufyCloudApi, region: str | None) -> EufyMqttClient:
-    """The MQTT client of ``region`` (a seam for tests against a local broker)."""
-    from ..mqtt.client import EufyMqttClient  # noqa: PLC0415 - the optional extra
+def mqtt_account(cloud: EufyCloudApi) -> EufyMqttAccount:
+    """The account's MQTT connections (a seam for tests against a local broker)."""
+    from ..mqtt.account import EufyMqttAccount  # noqa: PLC0415 - the optional extra
 
-    return EufyMqttClient(cloud, region=region)
+    return EufyMqttAccount(cloud)
 
 
 async def cmd_mqtt(ctx: Context) -> int:
@@ -369,19 +369,19 @@ async def cmd_mqtt(ctx: Context) -> int:
             raise UsageError(
                 "the account has no MQTT device; --connect-empty connects without a subscription"
             )
-        region = devices[0].region if devices and devices[0].region else ctx.args.region
-        client = mqtt_client(eufy.cloud, region)
+        # One connection per login scope holding MQTT devices.
+        account = mqtt_account(eufy.cloud)
         received: list[object] = []
-        client.add_listener(received.append)
+        account.add_listener(received.append)
         try:
-            await client.async_start(
+            await account.async_start(
                 every, subscribe=subscribe, connect_without_devices=ctx.args.connect_empty
             )
-            await client.async_wait_connected(_MQTT_CONNECT_WAIT)
+            await account.async_wait_connected(_MQTT_CONNECT_WAIT)
             await asyncio.sleep(ctx.args.seconds)
-            accepted = len(client.topics & set(topics.values()))
+            accepted = len(account.topics & set(topics.values()))
         finally:
-            await client.async_stop()
+            await account.async_stop()
     print("Broker: connected (TLS with the account's client certificate)")
     print(f"Topics accepted: {accepted} of {len(topics)}")
     print(f"Messages received in {ctx.args.seconds:g} s: {len(received)}")
