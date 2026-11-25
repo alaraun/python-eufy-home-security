@@ -28,6 +28,7 @@ import struct
 from collections.abc import Callable, Iterable, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Any
 
 from cryptography.hazmat.primitives import serialization
@@ -74,6 +75,7 @@ from ..p2p.messages import (
     CMD_RECORD_VIEW,
     CMD_SET_DEVS_TONE_FILE,
     CMD_SET_TONE_FILE,
+    DB_QUERY_HISTORY,
     ECB_CHANNEL_VALUE_CMDS,
     HISTORY_RECORD_COUNTER,
     HISTORY_RECORD_ID_MIN,
@@ -87,6 +89,7 @@ from ..p2p.messages import (
     STRING_CMDS,
     decode_json_payload,
     decode_string_command_body,
+    history_query_verb,
     string_command_number,
 )
 from ..p2p.mode_actions import CMD_SET_ALL_ACTION, applied_params
@@ -390,6 +393,26 @@ def _record_day(row: dict[str, Any]) -> str | None:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _RunningRecording:
+    """A recording :meth:`FakeStation.add_detection_recording` added: listed from
+    ``listed_at`` on, its end growing with the clock until ``seconds`` after its start."""
+
+    row: dict[str, Any]
+    started_at: datetime
+    seconds: float
+    listed_at: datetime
+
+    def listed(self, now: datetime) -> dict[str, Any] | None:
+        if now < self.listed_at:
+            return None
+        end = min(now, self.started_at + timedelta(seconds=self.seconds))
+        return {**self.row, "end_time": end.strftime(_ROW_TIME)}
+
+
+_ROW_TIME = "%Y-%m-%d %H:%M:%S"
+
+
 def _local_event_day(row: dict[str, Any]) -> str | None:
     """``YYYYMMDD`` a 10017 query lists ``row`` under: its ``record_id``'s day, else its
     ``start_time``'s; None (every day) without either."""
@@ -469,6 +492,10 @@ class FakeStation:
     image_requests: list[str] = field(default_factory=list)
     """The path of every 1308 received, answered or not."""
     rows: list[dict[str, Any]] = field(default_factory=list)
+    """History rows as the station lists them (``history_record_info``)."""
+    running_recordings: list[_RunningRecording] = field(default_factory=list)
+    """Recordings that run on the host's clock (:meth:`add_detection_recording`), listed
+    after :attr:`rows`."""
     history_side_tables: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     """Other tables the station appends to every history page (AI crops, the person
     library), by ``table_name``."""
@@ -1315,6 +1342,59 @@ class FakeStation:
                     cipher=self.state_cipher,
                 )
 
+    def add_detection_recording(
+        self,
+        device_sn: str,
+        started_at: datetime,
+        seconds: float,
+        *,
+        record_id: int | None = None,
+        listed_after: float = 0.0,
+        camera_dir: int = 0,
+    ) -> int:
+        """A recording of ``device_sn`` that starts at ``started_at`` (aware) and runs
+        ``seconds`` on the host's clock; returns its ``record_id``.
+
+        The history lists it from ``listed_after`` seconds after its start on, with its
+        end time growing with the clock until it is done (a running row), in the
+        station's own shapes: on a HomeBase 3 (history verb 10011) a day-prefixed id and
+        a ``/zx/…/….zxvideo`` path with a thumbnail, elsewhere (10017, a HomeBase 2) a
+        plain id and a ``/media/mmcblk0p1/CameraNN/<stamp>.dat`` path. Times are written
+        in the host's zone, as a station keeps local time.
+        """
+        local = started_at.astimezone().replace(microsecond=0)
+        stamp = local.strftime("%Y%m%d%H%M%S")
+        number = len(self.running_recordings) + 90001
+        directory = f"Camera{camera_dir:02d}"
+        row: dict[str, Any] = {
+            "device_sn": device_sn,
+            "station_sn": self.serial,
+            "start_time": local.strftime(_ROW_TIME),
+            "frame_num": max(1, round(seconds * 15)),
+        }
+        if history_query_verb(self.serial) == DB_QUERY_HISTORY:
+            folder = f"/zx/hdd_data0/{directory}/{stamp[:6]}/{stamp}"
+            row["record_id"] = (
+                record_id
+                if record_id is not None
+                else int(stamp[:8]) * HISTORY_RECORD_COUNTER + number % HISTORY_RECORD_COUNTER
+            )
+            row["storage_path"] = f"{folder}/{stamp}.zxvideo"
+            row["thumb_path"] = f"{folder}/snapshort.jpg"
+        else:
+            row["record_id"] = record_id if record_id is not None else number
+            row["storage_path"] = f"/media/mmcblk0p1/{directory}/{stamp}.dat"
+        self.running_recordings.append(
+            _RunningRecording(row, local, seconds, local + timedelta(seconds=listed_after))
+        )
+        return int(row["record_id"])
+
+    def _history_rows(self) -> list[dict[str, Any]]:
+        """:attr:`rows`, then every running recording listed by now."""
+        now = datetime.now().astimezone()
+        running = (recording.listed(now) for recording in self.running_recordings)
+        return [*self.rows, *(row for row in running if row is not None)]
+
     def _answer_history(self, inner: dict[str, Any]) -> None:
         """A history page (10011), shaped and cut like the real station's.
 
@@ -1330,7 +1410,7 @@ class FakeStation:
         day = str(query.get("start_date", ""))
         start_id = int(query.get("start_id") or 0)
         rows = sorted(
-            (row for row in self.rows if _record_day(row) in (None, day)),
+            (row for row in self._history_rows() if _record_day(row) in (None, day)),
             key=lambda row: _record_id(row) or 0,
             reverse=True,
         )
@@ -1366,7 +1446,7 @@ class FakeStation:
         day = str(query.get("start_date", ""))
         cursor = str(query.get("start_time") or "0")
         rows = sorted(
-            (row for row in self.rows if _local_event_day(row) in (None, day)),
+            (row for row in self._history_rows() if _local_event_day(row) in (None, day)),
             key=lambda row: _record_id(row) or 0,
             reverse=True,
         )

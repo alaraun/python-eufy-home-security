@@ -11,7 +11,7 @@ import time
 from collections import Counter
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime, timedelta, tzinfo
+from datetime import UTC, date, datetime, timedelta, tzinfo
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -99,6 +99,7 @@ from ..devices.types import DeviceKind, DeviceModel, model_for_serial
 from ..devices.variants import setting_in_use
 from ..devices.webrtc import app_uses_webrtc, route_device
 from ..events import (
+    DETECTION_KINDS,
     MEDIA_PATH_PREFIX,
     RECORDING_SUFFIX,
     STILL_SUFFIX,
@@ -201,7 +202,7 @@ from ..p2p.storage_info import (
     sd_status_group,
     storage_query,
 )
-from ..recordings import RecordingsPage
+from ..recordings import DetectionRecording, DetectionRecordingState, RecordingsPage
 from ..station_config import ModeInfo, StationConfig, build_station_config, stored_device_params
 from .activity import StationActivity
 from .alarms import AlarmWaits, StationAlarms
@@ -236,6 +237,17 @@ reads it off without an end frame."""
 RECORDING_QUIET = 30.0
 """Seconds past a history row's end time before :meth:`Station.recording_settled` calls its
 clip finished (clips of 6 to 37 s seen; a detection's row exists while it records)."""
+RECORDING_MATCH_WINDOW: Final = (-10.0, 10.0)
+"""Seconds a recording's start may lie before and after a detection's time to be that
+detection's (:meth:`Station.async_recording_for_detection`). Inferred, not measured on a
+HomeBase 2: on a HomeBase 3 a recording starts in the second of its detection's inner
+time, and a cloud push without one carries a time about 3 s later."""
+RECORDING_MATCH_RETRY: Final = 15.0
+"""Seconds between two history listings while a detection's recording is not listed, or
+listed without an end time."""
+RECORDING_MATCH_GIVE_UP: Final = 180.0
+"""Seconds after a detection when the search for its recording ends: the longest clip
+length the eufy app offers (120 s), :data:`RECORDING_QUIET` and one more listing."""
 STANDALONE_STILL_WINDOW: Final = (-2.0, 30.0)
 """Seconds a standalone device's newest still may lie before and after a detection's time
 to be that detection's (its file name is the device's local second)."""
@@ -4062,6 +4074,139 @@ class Station:
             until=until,
             page_days=page_days,
             timeout=timeout,
+        )
+
+    def needs_recording_match(self, event: SecurityEvent) -> bool:
+        """Whether ``event`` is a camera detection whose recording only
+        :meth:`async_wait_recording_for_detection` can find: an event of this station
+        (not a standalone device) with a time and a :data:`~..events.DETECTION_KINDS`
+        detection, naming no recording (no ``video_path``, no ``record_id``), of a
+        paired device whose model has a camera (:attr:`~..devices.types.DeviceModel.has_camera`)
+        or is unknown, whose detections this station does not send over P2P
+        (:meth:`local_detections_for` not ``VERIFIED``).
+
+        A station that sends them (a HomeBase 3) delivers each detection with its
+        recording named, so its detections never need the match.
+        """
+        if event.station_sn is not None and event.station_sn != self.serial:
+            return False
+        if self.is_standalone or event.event_time_ms is None:
+            return False
+        if event.video_path is not None or event.record_id:
+            return False
+        if event.detection not in DETECTION_KINDS:
+            return False
+        try:
+            device_sn, _ = self._event_camera(event)
+        except UnsupportedError:
+            return False
+        model = model_for_serial(device_sn)
+        if model is not None and not model.has_camera:
+            return False
+        return self.local_detections_for(device_sn).support is not Support.VERIFIED
+
+    async def async_recording_for_detection(
+        self,
+        event: SecurityEvent,
+        *,
+        quiet: float = RECORDING_QUIET,
+        timeout: float | None = None,
+    ) -> DetectionRecording:
+        """Where the recording of a detection stands now: one look at the history, no
+        waiting (:meth:`async_wait_recording_for_detection` waits).
+
+        An event naming a ``record_id`` that carries a day is looked up by it (one
+        query). Otherwise the event's camera's recordings are listed around the event's
+        time and matched: the row named by the event's ``video_path``; else the row
+        whose start lies within :data:`RECORDING_MATCH_WINDOW` of the event's time
+        (bounds included), the closest start first, on a tie the one that began first,
+        then the lower ``record_id``; else the row that holds that time (it began
+        earlier and had not ended by then, or runs still), the latest start first. So a
+        second detection of the same camera inside one clip gets that clip's row. The
+        window is inferred, not measured on a HomeBase 2.
+
+        The answer is ``SETTLED`` (:meth:`recording_settled` with ``quiet``),
+        ``RECORDING`` (``retry_at``: the row's end plus ``quiet``, or
+        :data:`RECORDING_MATCH_RETRY` from now while it has no end) or ``NOT_LISTED``
+        (``retry_at``: :data:`RECORDING_MATCH_RETRY` from now). ``retry_at`` is never
+        later than :data:`RECORDING_MATCH_GIVE_UP` after the event, and None past it.
+
+        ``timeout`` bounds each history query (None:
+        :data:`~..p2p.session.HISTORY_QUERY_TIMEOUT`). Raises
+        :class:`~..exceptions.UnsupportedError`, before anything is sent, for an event of
+        another station, naming no camera paired here, without a time (unless its
+        ``record_id`` carries a day) and on a standalone device (it lists no history);
+        :class:`~..exceptions.RecordNotFoundError` when its ``record_id`` names another
+        camera's row.
+        """
+        self._require_own_event(event)
+        device_sn, _ = self._event_camera(event)
+        found = await self._history.recording_for_detection(
+            event,
+            device_sn,
+            window=RECORDING_MATCH_WINDOW,
+            retry=RECORDING_MATCH_RETRY,
+            give_up=RECORDING_MATCH_GIVE_UP,
+            quiet=quiet,
+            timeout=timeout,
+        )
+        _LOGGER.debug(
+            "%s: recording of a detection of %s: %s, row %s, offset %s",
+            self._log_name,
+            redact_serial(device_sn),
+            found.state,
+            None if found.record is None else found.record.record_id,
+            None if found.offset_s is None else f"{found.offset_s:+.0f}s",
+        )
+        return found
+
+    async def async_wait_recording_for_detection(
+        self,
+        event: SecurityEvent,
+        *,
+        quiet: float = RECORDING_QUIET,
+        timeout: float | None = None,
+    ) -> HistoryRecord | None:
+        """The recording of a detection once it has settled, or None when none is
+        listed by :data:`RECORDING_MATCH_GIVE_UP` after the event (or its row never
+        settles by then).
+
+        Asks :meth:`async_recording_for_detection` (same match, ``quiet`` and
+        ``timeout``) and, until it answers ``SETTLED``, sleeps to its ``retry_at`` and
+        asks again. The wait is the clip's length plus ``quiet`` plus at most one
+        :data:`RECORDING_MATCH_RETRY`, never past :data:`RECORDING_MATCH_GIVE_UP` after
+        the event (180 s); each ask lists the camera's recordings of those minutes. A
+        second detection of the same camera inside one clip gets the same row. For the
+        trigger frame and thumbnail pass :meth:`event_with_recording` to
+        :meth:`async_event_image`. Raises what :meth:`async_recording_for_detection`
+        raises; cancel the call to stop waiting.
+        """
+        while True:
+            found = await self.async_recording_for_detection(event, quiet=quiet, timeout=timeout)
+            if found.state is DetectionRecordingState.SETTLED:
+                return found.record
+            if found.retry_at is None:
+                return None
+            await asyncio.sleep(max(0.0, (found.retry_at - datetime.now(UTC)).total_seconds()))
+
+    def event_with_recording(self, event: SecurityEvent, record: HistoryRecord) -> SecurityEvent:
+        """``event`` naming ``record`` as its recording: its ``video_path``, its
+        ``record_id`` when it has one, and its ``thumb_path`` when that is a valid still
+        path. Pass it to :meth:`async_event_image` for the trigger frame
+        (``TRIGGER_FRAME``) or the thumbnail. Raises :class:`ValueError` for a record of
+        another camera or one without a recording.
+        """
+        device_sn, _ = self._event_camera(event)
+        if record.device_sn != device_sn:
+            raise ValueError("the record is another camera's")
+        if record.video_path is None:
+            raise ValueError("the record carries no recording")
+        thumb = record.thumb_path
+        return replace(
+            event,
+            video_path=record.video_path,
+            record_id=record.record_id if record.record_id > 0 else event.record_id,
+            thumb_path=thumb if is_station_media_path(thumb, STILL_SUFFIX) else event.thumb_path,
         )
 
     @staticmethod
