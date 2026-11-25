@@ -38,7 +38,9 @@ dependencies = [
 
 [project.optional-dependencies]
 # The MQTT transport (eufy's broker for Wi-Fi locks): eufy_home_security.mqtt.client.
-mqtt = ["aiomqtt>=2"]
+# Bounded: the client reaches aiomqtt's paho client; 2.2 is the first release that runs
+# on paho-mqtt 2.1 (Home Assistant's pin) without deprecation warnings.
+mqtt = ["aiomqtt>=2.2,<3"]
 
 [project.scripts]
 eufy-security = "eufy_home_security.cli:main"
@@ -59,7 +61,7 @@ dev = [
   "pytest-xdist>=3.8",
   "hypothesis>=6.130",
   "aioresponses>=0.7.8",
-  "aiomqtt>=2",  # the mqtt extra, so its tests and type checks run
+  "aiomqtt>=2.2,<3",  # the mqtt extra, so its tests and type checks run
   "mypy>=1.17",
   "ruff>=0.13",
   "prek>=0.2",

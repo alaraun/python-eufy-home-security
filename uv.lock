@@ -512,7 +512,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.11" },
-    { name = "aiomqtt", marker = "extra == 'mqtt'", specifier = ">=2" },
+    { name = "aiomqtt", marker = "extra == 'mqtt'", specifier = ">=2.2,<3" },
     { name = "cryptography", specifier = ">=44" },
     { name = "firebase-messaging", specifier = ">=0.4" },
     { name = "protobuf", specifier = ">=5" },
@@ -522,7 +522,7 @@ provides-extras = ["mqtt"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "aiomqtt", specifier = ">=2" },
+    { name = "aiomqtt", specifier = ">=2.2,<3" },
     { name = "aioresponses", specifier = ">=0.7.8" },
     { name = "hypothesis", specifier = ">=6.130" },
     { name = "mypy", specifier = ">=1.17" },
