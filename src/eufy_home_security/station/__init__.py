@@ -123,6 +123,7 @@ from ..exceptions import (
     CommandNotAppliedError,
     CommandRejectedError,
     CommandUnsupportedError,
+    CommunicationError,
     DeviceTimeoutError,
     EufySecurityError,
     ModelDataError,
@@ -4190,16 +4191,59 @@ class Station:
         the waits of one camera's detections share their listings. A
         second detection of the same camera inside one clip gets the same row. For the
         trigger frame and thumbnail pass :meth:`event_with_recording` to
-        :meth:`async_event_image`. Raises what :meth:`async_recording_for_detection`
-        raises; cancel the call to stop waiting.
+        :meth:`async_event_image`. Cancel the call to stop waiting.
+
+        A look that fails with a :class:`~..exceptions.CommunicationError` (the station
+        unreachable, a query unanswered) is logged (once per 5 minutes) and asked again
+        :data:`RECORDING_MATCH_RETRY` later, within the same bound; at the bound the wait
+        returns None when some look was answered, and raises the last error when none
+        was. An event without a time has no bound: its error is raised at once. Any
+        other error of :meth:`async_recording_for_detection` (``UnsupportedError``,
+        ``RecordNotFoundError``) is raised at once.
         """
+        answered = False
         while True:
-            found = await self.async_recording_for_detection(event, quiet=quiet, timeout=timeout)
-            if found.state is DetectionRecordingState.SETTLED:
-                return found.record
-            if found.retry_at is None:
-                return None
-            await asyncio.sleep(max(0.0, (found.retry_at - datetime.now(UTC)).total_seconds()))
+            try:
+                found = await self.async_recording_for_detection(
+                    event, quiet=quiet, timeout=timeout
+                )
+            except CommunicationError as err:
+                retry_at = self._match_retry_after(event, err)
+                if retry_at is None:
+                    if answered:
+                        return None
+                    raise
+            else:
+                answered = True
+                if found.state is DetectionRecordingState.SETTLED:
+                    return found.record
+                if found.retry_at is None:
+                    return None
+                retry_at = found.retry_at
+            await asyncio.sleep(max(0.0, (retry_at - datetime.now(UTC)).total_seconds()))
+
+    def _match_retry_after(self, event: SecurityEvent, err: CommunicationError) -> datetime | None:
+        """When to look again for ``event``'s recording after a failed look:
+        :data:`RECORDING_MATCH_RETRY` from now, no later than
+        :data:`RECORDING_MATCH_GIVE_UP` after the event; None past that bound or without
+        an event time."""
+        if event.event_time_ms is None:
+            return None
+        now = datetime.now(UTC)
+        bound = datetime.fromtimestamp(event.event_time_ms / 1000, UTC) + timedelta(
+            seconds=RECORDING_MATCH_GIVE_UP
+        )
+        if now >= bound:
+            return None
+        retry_at = min(now + timedelta(seconds=RECORDING_MATCH_RETRY), bound)
+        if self._throttle.should_log(("recording match failed", event.device_sn, event.channel)):
+            _LOGGER.info(
+                "%s: recording of a detection: listing failed (%s); asking again in %.0fs",
+                self._log_name,
+                err,
+                (retry_at - now).total_seconds(),
+            )
+        return retry_at
 
     def event_with_recording(self, event: SecurityEvent, record: HistoryRecord) -> SecurityEvent:
         """``event`` naming ``record`` as its recording: its ``video_path``, its

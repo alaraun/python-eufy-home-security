@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import gc
+import logging
 from collections.abc import AsyncIterator
 from datetime import UTC, date, datetime, timedelta, tzinfo
 from typing import Any
@@ -1519,3 +1520,111 @@ async def test_a_failed_listing_fails_the_looks_sharing_it_and_answers_no_later_
         assert seen == []
     finally:
         loop.set_exception_handler(None)
+
+
+# ── a wait that rides out a failed listing ───────────────────────────────────
+
+
+def _failing_lists(
+    station: Station, monkeypatch: pytest.MonkeyPatch, failures: int | None
+) -> list[int]:
+    """Make the first ``failures`` history listings (None: every one) raise
+    :class:`StationUnreachableError`; returns the running count of listings."""
+    real = station.session.async_list_history
+    calls = [0]
+
+    async def listing(*args: Any, **kwargs: Any) -> list[HistoryRecord]:
+        calls[0] += 1
+        if failures is None or calls[0] <= failures:
+            raise StationUnreachableError(f"no route {calls[0]}")
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(station.session, "async_list_history", listing)
+    return calls
+
+
+@pytest.mark.usefixtures("short_match")
+async def test_a_wait_asks_again_after_a_failed_listing(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started = datetime.now(UTC).replace(microsecond=0) - timedelta(seconds=3)
+    record_id = fake.add_detection_recording(SYNTHETIC.camera_sn, started, 1.0)
+    calls = _failing_lists(station, monkeypatch, 1)
+    async with asyncio.timeout(3.0):
+        row = await station.async_wait_recording_for_detection(_detection(started), quiet=1.1)
+    assert row is not None
+    assert row.record_id == record_id
+    assert calls[0] == 2
+
+
+@pytest.mark.usefixtures("short_match")
+async def test_a_wait_whose_every_listing_fails_raises_the_last_error_at_its_bound(
+    station: Station, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No look ever answered: the bound ends the wait with the last listing's error,
+    logged once."""
+    monkeypatch.setattr(station_module, "RECORDING_MATCH_GIVE_UP", 1.0)
+    calls = _failing_lists(station, monkeypatch, None)
+    event = _detection(datetime.now(UTC))
+    with caplog.at_level(logging.INFO, logger="eufy_home_security.station"):
+        async with asyncio.timeout(3.0):
+            with pytest.raises(StationUnreachableError) as raised:
+                await station.async_wait_recording_for_detection(event)
+    assert calls[0] > 2
+    assert str(raised.value) == f"no route {calls[0]}"
+    assert datetime.now(UTC) >= _from_ms(event.event_time_ms) + timedelta(seconds=1.0)
+    failed = [r for r in caplog.records if "listing failed" in r.getMessage()]
+    assert len(failed) == 1
+
+
+@pytest.mark.usefixtures("short_match")
+async def test_a_wait_that_listed_once_gives_none_at_its_bound_whatever_fails_after(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(station_module, "RECORDING_MATCH_GIVE_UP", 1.0)
+    real = station.session.async_list_history
+    calls = 0
+
+    async def fail_after_first(*args: Any, **kwargs: Any) -> list[HistoryRecord]:
+        nonlocal calls
+        calls += 1
+        if calls > 1:
+            raise DeviceTimeoutError("no reply")
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(station.session, "async_list_history", fail_after_first)
+    async with asyncio.timeout(3.0):
+        assert (
+            await station.async_wait_recording_for_detection(_detection(datetime.now(UTC))) is None
+        )
+    assert calls > 2
+
+
+async def test_a_wait_raises_at_once_what_no_retry_can_change(
+    two_cameras: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Another camera's row named by ``record_id``, and an event without a time whose
+    lookup fails: raised by the first look."""
+    started = datetime.now(UTC).replace(microsecond=0) - timedelta(seconds=30)
+    fake.rows = [_at(started, OTHER_SN, _dayed(started, 4))]
+    async with asyncio.timeout(3.0):
+        with pytest.raises(RecordNotFoundError):
+            await two_cameras.async_wait_recording_for_detection(
+                _detection(started, record_id=_dayed(started, 4))
+            )
+        lookups = len(fake.history_queries)
+
+        async def unreachable(*args: Any, **kwargs: Any) -> HistoryRecord | None:
+            raise StationUnreachableError("no route")
+
+        monkeypatch.setattr(two_cameras.session, "async_history_record", unreachable)
+        with pytest.raises(StationUnreachableError):
+            await two_cameras.async_wait_recording_for_detection(
+                _detection(started, record_id=_dayed(started, 5), event_time_ms=None)
+            )
+    assert len(fake.history_queries) == lookups
+
+
+def _from_ms(value: int | None) -> datetime:
+    assert value is not None
+    return datetime.fromtimestamp(value / 1000, UTC)

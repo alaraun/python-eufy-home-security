@@ -2480,8 +2480,13 @@ if station.needs_recording_match(event):
 
 Errors: `UnsupportedError` before anything is sent for an event of another station, one
 naming no camera paired here, one without a time, and on a standalone device;
-`RecordNotFoundError` when an event's `record_id` names another camera's row;
-`DeviceTimeoutError` from a history query (see *Slow pages*). In tests,
+`RecordNotFoundError` when an event's `record_id` names another camera's row; a
+`CommunicationError` (`DeviceTimeoutError` from a history query, see *Slow pages*,
+`StationUnreachableError`) from `async_recording_for_detection`. The waiting call rides
+out a `CommunicationError`: it logs it (once per 5 minutes) and asks again
+`RECORDING_MATCH_RETRY` later within the same 180 s; at the bound it returns None when
+some look was answered and raises the last error when none was (an event without a time
+has no bound: raised at once). The other errors it raises at once. In tests,
 `FakeStation.add_detection_recording(device_sn, started_at, seconds, listed_after=…)`
 adds a row in the station's own shapes that is listed from `listed_after` on and runs on
 the host's clock (its end grows until `seconds`), so a test sees it not listed, then
