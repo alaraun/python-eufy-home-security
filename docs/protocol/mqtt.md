@@ -137,12 +137,12 @@ kept as text. A topic that names no serial, a body that is no JSON object, one w
 ```python
 from eufy_home_security.mqtt.client import EufyMqttClient
 
-mqtt = EufyMqttClient(eufy.cloud)          # needs the `mqtt` extra
-await mqtt.async_start(devices)            # the cloud device list; the MQTT ones are kept
+mqtt = EufyMqttClient(eufy.cloud)  # needs the `mqtt` extra
+await mqtt.async_start(devices)  # the cloud device list; the MQTT ones are kept
 await mqtt.async_wait_connected(30)
 answer = await mqtt.async_request(serial, trans, timeout=20)
-remove = mqtt.add_listener(on_message)     # every message any device publishes
-await mqtt.async_update_devices(devices)   # after a device-list refresh
+remove = mqtt.add_listener(on_message)  # every message any device publishes
+await mqtt.async_update_devices(devices)  # after a device-list refresh
 await mqtt.async_stop()
 ```
 
