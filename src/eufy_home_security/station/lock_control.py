@@ -12,8 +12,10 @@ station's 1350 wrapper on the lock's channel, and counts only once the lock's st
 4. the lock's state: the asked state returns it, a fault state raises
    :class:`LockNotMovedError`; none within the wait raises :class:`DeviceTimeoutError`.
 
-A lock's sequence report (1916) stores its number and resends a pending 1940 command with
-the next one, as the app does.
+A lock's sequence report (1916) stores its number (for a 1961 lock: the shared counter) and
+resends a pending 1940 command with the next one, as the app does. A command the station
+refused for its sequence number (-151) that gets neither answer nor resend within the wait
+raises :class:`CommandRejectedError` with code -151.
 """
 
 from __future__ import annotations
@@ -126,6 +128,8 @@ class _Pending:
     state: asyncio.Future[LockState]
     resend: Callable[[], None] | None = None
     resends: list[asyncio.Task[Any]] = field(default_factory=list)
+    refused: bool = False
+    """The station refused the last send for its sequence number (-151)."""
 
 
 def _payload(obj: Mapping[str, Any]) -> Mapping[str, Any] | None:
@@ -203,6 +207,9 @@ class StationLockControl:
         if seq is None:
             return
         self._sequences.report(serial, seq)
+        device = next((d for d in self._station.devices if d.device_sn == serial), None)
+        if device is not None and self.form(device) is LockForm.P2P_1961:
+            self._shared.report(seq)
         pending = self._pending.get(serial)
         lock_cmd = json_int(payload.get("lock_cmd"))
         if (
@@ -388,7 +395,7 @@ class StationLockControl:
                     try:
                         rebuilt = await self._build(device, form, action)
                         pending.sent = rebuilt
-                        await self._send(rebuilt, channel)
+                        await self._send(rebuilt, channel, pending)
                     except Exception as err:
                         if not pending.answer.done():
                             pending.answer.set_exception(err)
@@ -400,11 +407,22 @@ class StationLockControl:
         unwatch = self._locks.watch(serial, on_reading)
         try:
             await session.async_connect()
-            applied = await self._send(sent, channel)
+            applied = await self._send(sent, channel, pending)
             if sent.read is None and applied:  # the station's result is the lock's answer
                 pending.answer.set_result(LockReply(0, LockResult.ACCEPTED))
             budget = LOCK_ANSWER_TIMEOUT if deadline is None else deadline - loop.time()
-            done = await self._first(pending, budget, serial, "answer")
+            try:
+                done = await self._first(pending, budget, serial, "answer")
+            except DeviceTimeoutError:
+                if not pending.refused:
+                    raise
+                raise CommandRejectedError(
+                    pending.sent.command,
+                    SEQUENCE_REFUSED,
+                    f"{redact_serial(serial)}: sequence number refused, and no answer or "
+                    f"sequence report within {budget:.0f} s",
+                    device_sn=serial,
+                ) from None
             if done is pending.answer:
                 reply = pending.answer.result()
                 if reply.result is not LockResult.ACCEPTED:
@@ -433,17 +451,20 @@ class StationLockControl:
             for task in pending.resends:
                 task.cancel()
 
-    async def _send(self, sent: _Sent, channel: int) -> bool:
+    async def _send(self, sent: _Sent, channel: int, pending: _Pending) -> bool:
         """Send ``sent``; whether the station gave a result. A non-zero result raises,
-        except the sequence refusal of a through-data form (its answer is still awaited)."""
+        except the sequence refusal of a through-data form (its answer is still awaited;
+        ``pending.refused`` records it)."""
         try:
             outcome = await self._station.session.async_send_command(
                 sent.command, channel=channel, payload=sent.payload, head=sent.head
             )
         except CommandRejectedError as err:
             if err.code == SEQUENCE_REFUSED and sent.read is not None:
+                pending.refused = True
                 return False
             raise
+        pending.refused = False
         return outcome is CommandOutcome.APPLIED
 
     async def _first(

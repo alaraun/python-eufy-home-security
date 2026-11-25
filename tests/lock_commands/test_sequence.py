@@ -29,5 +29,12 @@ def test_the_shared_sequence_counts_up_from_its_start() -> None:
     assert [shared.next(), shared.next(), shared.next()] == [5, 6, 7]
 
 
+def test_a_report_moves_the_shared_sequence_to_the_next_number() -> None:
+    shared = SharedSequence(start=5)
+    shared.next()
+    shared.report(700)
+    assert (shared.next(), shared.next()) == (701, 702)
+
+
 def test_the_shared_sequence_starts_below_1000() -> None:
     assert all(0 <= SharedSequence().next() < 1000 for _ in range(20))

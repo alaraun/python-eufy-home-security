@@ -77,7 +77,8 @@ class Capability(StrEnum):
     eufy app shows it as a ring (see :func:`ring_evidence`)."""
     LOCK = "lock"
     """A smart lock's state: locked, unlocked and the app's other lock states
-    (:mod:`.locks`); state only, no lock or unlock command."""
+    (:mod:`.locks`). Whether this client can lock and unlock a given lock depends on its
+    command route, firmware and account: ask :meth:`~..client.EufySecurity.lock_control`."""
     GARAGE_DOOR = "garage_door"
     """The doors of a garage-door camera: their state and the open and close commands
     (:mod:`.garage`)."""

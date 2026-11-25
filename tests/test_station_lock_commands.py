@@ -212,6 +212,28 @@ async def test_a_sequence_refusal_keeps_waiting_for_the_locks_answer(
         await station.async_close()
 
 
+@pytest.mark.parametrize(
+    ("result_code", "error"), [(-151, CommandRejectedError), (0, DeviceTimeoutError)]
+)
+async def test_a_sequence_refusal_without_an_answer_raises_its_code(
+    fake: FakeStation, lock_1940: FakeLock, result_code: int, error: type[Exception]
+) -> None:
+    """A -151 with no answer and no sequence report ends as that refusal, bounded by the
+    timeout; a silent lock after an accepted send is a timeout."""
+    lock_1940.result_code, lock_1940.answer = result_code, False
+    station = await _hub(fake, _lock(LOCK_1940), lock_1940)
+    try:
+        async with asyncio.timeout(5):
+            with pytest.raises(error) as raised:
+                await station.async_lock(LOCK_1940, timeout=0.5)
+    finally:
+        await station.async_close()
+    if result_code:
+        assert raised.value.code == -151  # type: ignore[attr-defined]
+    else:
+        assert "no answer" in str(raised.value)
+
+
 async def test_an_answer_to_another_request_is_skipped(
     fake: FakeStation, lock_1940: FakeLock
 ) -> None:
@@ -408,6 +430,20 @@ async def test_a_1961_sequence_refusal_fails_as_the_app_does(fake: FakeStation) 
     finally:
         await station.async_close()
     assert raised.value.code == -151
+
+
+async def test_a_1961_sequence_report_moves_the_shared_counter(fake: FakeStation) -> None:
+    """The lock's 1916 report after a refusal sets the next 1961 number to report + 1."""
+    serial = "T8520P2000000001"
+    lock = FakeLock(serial=serial, channel=1, seq_report=700)
+    station = await _hub(fake, _lock(serial), lock)
+    try:
+        with pytest.raises(CommandRejectedError):
+            await station.async_lock(serial)
+        assert await station.async_lock(serial) is LockState.LOCKED
+    finally:
+        await station.async_close()
+    assert lock.received[-1][2] == 701
 
 
 # ── the client's entry point ─────────────────────────────────────────────────

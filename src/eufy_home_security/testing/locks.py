@@ -59,7 +59,9 @@ class FakeLock:
     code: 5 stops between positions), and the lock reports it unless ``report`` is False:
     a 1940 lock in its status report, the others in a parameter dump. ``mismatch_first``
     sends an answer to another request before the real one; ``seq_report`` answers the
-    next 1940 command with a sequence report of that number instead (the client resends).
+    next 1940 command with a sequence report of that number instead (the client resends);
+    on a 1961 lock it reports that number and the station refuses the command (-151).
+    ``answer`` False: the lock sends no answer after the station's result.
     ``status_code`` is the code of a 1940 lock's status report (0: a state).
     ``received`` records each command as decrypted: ``(command, action, seq_num)``.
     """
@@ -75,6 +77,7 @@ class FakeLock:
     report: bool = True
     mismatch_first: bool = False
     seq_report: int | None = None
+    answer: bool = True
     status_code: int = 0
     ecc_key: ec.EllipticCurvePrivateKey = field(
         default_factory=lambda: ec.generate_private_key(ec.SECP256R1())
@@ -149,7 +152,7 @@ class FakeLock:
             self._through(station, _SEQ_REPORT, report)
             return
         self._result(station, cm2.P2P_COMMAND, self.result_code)
-        if self.result_code not in (0, -151):
+        if self.result_code not in (0, -151) or not self.answer:
             return
         iv = serial_iv(self.serial)
 
@@ -195,6 +198,11 @@ class FakeLock:
             payload = json.loads(plain)
         action = LockAction(int(payload["slOperation"]))
         self.received.append((anker.COMMAND_1961, action, payload.get("seq_num")))
+        if self.seq_report is not None:
+            seq, self.seq_report = self.seq_report, None
+            self._through(station, _SEQ_REPORT, {"seq_num": seq, "bus_type": 0, "lock_cmd": 0})
+            self._result(station, anker.COMMAND_1961, -151)
+            return
         code = self.result_code if self.result_code != 0 else self.answer_code
         self._result(station, anker.COMMAND_1961, code)
         if code == 0:
@@ -214,7 +222,7 @@ class FakeLock:
         action = LockAction(body[0xA2][0])
         self.received.append((anker.COMMAND_1930, action, int(payload["seq_num"])))
         self._result(station, anker.COMMAND_1930, self.result_code)
-        if self.result_code not in (0, -151):
+        if self.result_code not in (0, -151) or not self.answer:
             return
         plain = bytes([self.answer_code])
         head = bytes([anker.VERSION_PLAIN_ANSWER, frames.ANKER_DEVICE_TYPE, anker.CM_ON_OFF])

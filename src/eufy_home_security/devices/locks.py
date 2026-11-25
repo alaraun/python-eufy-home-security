@@ -124,7 +124,8 @@ _DECLARED: Final = Evidence(
     Support.DECLARED,
     "declared (eufy app): the model's smart_lock_onoff_status read and the lock card's "
     "state codes and push events",
-    "state only: no lock or unlock command; not verified on hardware",
+    "state; lock and unlock where the model's command route allows it "
+    "(EufySecurity.lock_control); not verified on hardware",
 )
 
 
