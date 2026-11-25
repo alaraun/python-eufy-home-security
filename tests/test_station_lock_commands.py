@@ -523,6 +523,22 @@ async def test_an_explicit_timeout_bounds_the_steps_before_the_send(
     assert lock.received == []
 
 
+async def test_a_timeout_while_the_station_result_is_pending_names_the_result(
+    fake: FakeStation,
+) -> None:
+    """The command went out and only the station's result was missing at the deadline."""
+    serial = "T8530P2000000001"
+    lock = FakeLock(serial=serial, channel=1, result=False)
+    station = await _hub(fake, _lock(serial), lock)
+    try:
+        async with asyncio.timeout(3):
+            with pytest.raises(DeviceTimeoutError, match=r"no station result within 0\.3 s"):
+                await station.async_lock(serial, timeout=0.3)
+    finally:
+        await station.async_close()
+    assert len(lock.received) == 1
+
+
 async def test_a_failed_state_is_retrieved_when_the_send_raises_first(
     fake: FakeStation, lock_1940: FakeLock
 ) -> None:

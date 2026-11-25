@@ -205,7 +205,9 @@ acknowledgement alone never counts. In order:
 The waits are the app's: 20 s for the lock's answer (over MQTT counted from the broker's
 acknowledgement, which has 15 s), then 30 s for its state; a `timeout`
 bounds the whole command, the public-key query, the connect and the send included. Nothing
-within it raises `DeviceTimeoutError`.
+within it raises `DeviceTimeoutError`, whose message names what was missing: the send
+("not sent"), the station's result after the send went out ("no station result"), the
+lock's answer or its state.
 
 **Sequence numbers.** The 1940 and 1930 forms (and MQTT) count per lock: a report `R` (the
 station's notify 1916 `{"dev_sn", "seq_num", "bus_type", "lock_cmd"}`) is stored as `R + 1`,

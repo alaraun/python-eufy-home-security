@@ -129,13 +129,21 @@ class _Pending:
     resends: list[asyncio.Task[Any]] = field(default_factory=list)
     refused: bool = False
     """The station refused the last send for its sequence number (-151)."""
+    sent_out: bool = False
+    """The command's frame went out; the station's result may still be pending."""
 
 
 async def _within[T](
-    deadline: float | None, timeout: float | None, serial: str, step: Awaitable[T]
+    deadline: float | None,
+    timeout: float | None,
+    serial: str,
+    step: Awaitable[T],
+    *,
+    sent: Callable[[], bool] = lambda: False,
 ) -> T:
     """Await ``step`` until the loop time ``deadline``, the end of the command's ``timeout``
-    (None: no bound); reaching it raises :class:`DeviceTimeoutError`."""
+    (None: no bound); reaching it raises :class:`DeviceTimeoutError`, naming the station's
+    result when ``sent`` says the command went out."""
     bound = asyncio.timeout_at(deadline)
     try:
         async with bound:
@@ -143,9 +151,9 @@ async def _within[T](
     except TimeoutError:
         if not bound.expired():
             raise
+        missing = "no station result" if sent() else "the command was not sent"
         raise DeviceTimeoutError(
-            f"{redact_serial(serial)}: the command was not sent within {timeout:g} s",
-            device_sn=serial,
+            f"{redact_serial(serial)}: {missing} within {timeout:g} s", device_sn=serial
         ) from None
 
 
@@ -427,7 +435,13 @@ class StationLockControl:
         self._pending[serial] = pending
         unwatch = self._locks.watch(serial, on_reading)
         try:
-            applied = await _within(deadline, timeout, serial, self._send(sent, channel, pending))
+            applied = await _within(
+                deadline,
+                timeout,
+                serial,
+                self._send(sent, channel, pending),
+                sent=lambda: pending.sent_out,
+            )
             if sent.read is None and applied:  # the station's result is the lock's answer
                 pending.answer.set_result(LockReply(0, LockResult.ACCEPTED))
             budget = LOCK_ANSWER_TIMEOUT if deadline is None else deadline - loop.time()
@@ -477,10 +491,19 @@ class StationLockControl:
     async def _send(self, sent: _Sent, channel: int, pending: _Pending) -> bool:
         """Send ``sent``; whether the station gave a result. A non-zero result raises,
         except the sequence refusal of a through-data form (its answer is still awaited;
-        ``pending.refused`` records it)."""
+        ``pending.refused`` records it, ``pending.sent_out`` that the frame went out)."""
+
+        def going_out() -> asyncio.Future[Any]:
+            pending.sent_out = True
+            return asyncio.get_running_loop().create_future()  # the station's result decides
+
         try:
             outcome = await self._station.session.async_send_command(
-                sent.command, channel=channel, payload=sent.payload, head=sent.head
+                sent.command,
+                channel=channel,
+                payload=sent.payload,
+                head=sent.head,
+                confirm=going_out,
             )
         except CommandRejectedError as err:
             if err.code == SEQUENCE_REFUSED and sent.read is not None:
