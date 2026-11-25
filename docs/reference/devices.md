@@ -281,7 +281,7 @@ Model names come in three steps: the product's own name table where it names the
 | T8P00 | character 7 is `A` | eufy-C528P-O |
 | T8P10 | character 7 is `A` | eufy-C538P-O |
 
-Each table below is a model's own profile. For every catalogued model, with or without one, `profile_for_serial` adds `live_stream`, `live_keyframe` and the pan/tilt/zoom capabilities as *declared* where the model's handler sends what the library sends (per station: `Station.live_support`, `Station.ptz_support`), and `doorbell_ring` as *declared* for a video doorbell or a video smart lock (`ring_evidence`). Any other capability of a model without a profile is *unknown*.
+Each table below is a model's own profile. For every catalogued model, with or without one, `profile_for_serial` adds `live_stream`, `live_keyframe` and the pan/tilt/zoom capabilities as *declared* where the model's handler sends what the library sends (per station: `Station.live_support`, `Station.ptz_support`), and `doorbell_ring` as *declared* for a video doorbell or a video smart lock (`ring_evidence`), and `lock` and `garage_door` as *declared* where the model's settings file carries the data ([Locks and garage doors](#locks-and-garage-doors)). Any other capability of a model without a profile is *unknown*.
 
 ## T8010 HomeBase 2
 
@@ -430,6 +430,39 @@ Kind markers (a block without a known serial): 1601, 1605, 1609
 | disarmed | 63 | verified | live guard-mode transitions through the library, T8030 HomeBase 3 fw 3.8.7.4 (each reported over P2P (0x047f) and read back from the parameter dump) |
 
 Modes not listed carry no recorded evidence.
+
+## Locks and garage doors
+
+Lock state (`lock`: the lock-state parameter, behind a station and per other context) and garage doors (`garage_door`: the door-state, motor and sensor parameters and the door command), *declared (eufy app)* from each model's settings file. No lock command is sent.
+
+| model | name | capability | parameters |
+|---|---|---|---|
+| T8452 | Floodlight Cam 2 Pro | garage_door | state 7500, motors 7501, sensors 7502; command 1700 / 7500 |
+| T8453 | Garage-Control Cam Plus | garage_door | state 7500, motors 7501, sensors 7502; command 1700 / 7500 |
+| T8500 | Smart Lock C100 | lock | 1912 (standalone 6000) |
+| T8501 | Smart Lock C110 | lock | 1912 (standalone 6000) |
+| T8502 | Smart Lock C210 | lock | 1912 (standalone 6000) |
+| T8503 | Retrofit Smart Lock R10 | lock | 1912 (standalone 6000) |
+| T8504 | Retrofit Smart Lock R20 | lock | 1912 (standalone 6000) |
+| T8506 | Smart Lock C220 | lock | 1912 (standalone 6000) |
+| T8510 | Smart Lock E130 | lock | 1912 (standalone 6000) |
+| T8510P | T8510P | lock | 1912 (standalone 6000) |
+| T8520 | Smart Lock S230 | lock | 1912 (standalone 6000) |
+| T8520P | T8520P | lock | 1912 (standalone 6000) |
+| T8530 | Video Smart Lock S330 | lock | 1912 (standalone 6000) |
+| T8531 | Video Smart Lock E330 | lock | 1912 (standalone 6000) |
+| T8532 | Smart Lock E38 | lock | 1912 (standalone 6000) |
+| T85D0 | Smart Lock C30 | lock | 1912 (standalone 6000) |
+| T85D2 | Smart Lock C34 | lock | 1912 (standalone 6000) |
+| T85F0 | Smart Lock E31 | lock | 1912 (standalone 6000) |
+| T85F1 | Smart Lock E30 | lock | 1912 (standalone 6000) |
+| T85L0 | Lever Smart Lock C33 | lock | 1912 (standalone 6000) |
+| T85L1 | Smart Lock C32 | lock | 1912 (standalone 6000) |
+| T85M0 | FamiLock E40 | lock | 1912 (standalone 6000) |
+| T85M1 | Smart Lock S4 | lock | 1912 (standalone 6000) |
+| T85P0 | FamiLock E34 | lock | 1912 (standalone 6000) |
+| T85P1 | FamiLock E35 | lock | 1912 (standalone 6000) |
+| T85V0 | FamiLock S3 Max | lock | 1912 (standalone 6000) |
 
 ## Station configuration
 

@@ -4,6 +4,12 @@
    "param": 1101
   }
  ],
+ "lock": {
+  "contexts": {
+   "standalone": 6000
+  },
+  "param": 1912
+ },
  "product_code": "T8520",
  "schema_version": 3,
  "settings": {

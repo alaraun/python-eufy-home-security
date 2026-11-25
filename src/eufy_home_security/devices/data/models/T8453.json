@@ -1,4 +1,13 @@
 {
+ "garage": {
+  "control": {
+   "cmd": 1700,
+   "subCmd": 7500
+  },
+  "motors": 7501,
+  "sensors": 7502,
+  "state": 7500
+ },
  "product_code": "T8453",
  "schema_version": 3,
  "sd_status_groups": {

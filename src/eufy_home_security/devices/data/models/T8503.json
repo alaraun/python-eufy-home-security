@@ -7,6 +7,12 @@
    "param": 6001
   }
  ],
+ "lock": {
+  "contexts": {
+   "standalone": 6000
+  },
+  "param": 1912
+ },
  "product_code": "T8503",
  "schema_version": 3,
  "settings": {
