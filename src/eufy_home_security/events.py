@@ -1505,7 +1505,8 @@ class GarageDoorChanged:
     (``source`` P2P, NOTIFY or CLOUD, as :class:`ParamChanged` names it), from the
     device's door-state notify (NOTIFY), and opening or closing when this client sends a
     door command (COMMAND) until the door's next report (also when the command's call is
-    cancelled after the device took it). ``door`` is 1 or 2 (see
+    cancelled after the device took it, then at most ``GARAGE_CONFIRM_TIMEOUT`` after the
+    take). ``door`` is 1 or 2 (see
     :mod:`~.devices.garage`).
     """
 

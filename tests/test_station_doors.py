@@ -36,6 +36,7 @@ from eufy_home_security.p2p.session import P2PCredentials, StationSession
 from eufy_home_security.p2p.session.param_state import ParamOrigin
 from eufy_home_security.p2p.xzyh import FrameType
 from eufy_home_security.station import Station
+from eufy_home_security.station import garage as garage_module
 from eufy_home_security.station.locks import LOCK_PUSH_MAX_AGE_SECONDS, LOCK_REPORT_SLACK_SECONDS
 from eufy_home_security.testing import SYNTHETIC
 from eufy_home_security.testing.station import FakeStation
@@ -631,6 +632,94 @@ async def test_a_cancelled_open_keeps_the_door_opening_and_a_close_is_sent(
     ]
 
 
+def _hold_expiry(garage: Station, door: int = 1) -> asyncio.TimerHandle:
+    return garage._garage._hold_expiry[(GARAGE_SN, door)]
+
+
+def _takes(garage: Station) -> list[float]:
+    """Loop times of the door's moving events (the device took a command)."""
+    loop = asyncio.get_running_loop()
+    seen: list[float] = []
+
+    def record(event: Event) -> None:
+        if isinstance(event, GarageDoorChanged) and event.source is GarageDoorSource.COMMAND:
+            seen.append(loop.time())
+
+    garage.subscribe(record)
+    return seen
+
+
+async def test_a_cancelled_doors_moving_state_expires_the_confirm_bound_after_the_take(
+    garage: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With no report, the hold ends ``GARAGE_CONFIRM_TIMEOUT`` after the take, as the app's
+    wait does: the door reads its last report again, with an event, and a close of the
+    closed door returns at once."""
+    monkeypatch.setattr(garage_module, "GARAGE_CONFIRM_TIMEOUT", 0.6)
+    loop = asyncio.get_running_loop()
+    takes = _takes(garage)
+    events = _events(garage)
+    fake.garage_moves = False
+    task = asyncio.create_task(garage.async_open_garage_door(GARAGE_SN, 1, timeout=10))
+    await _notified(events, 1)
+    await asyncio.sleep(0.3)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert _hold_expiry(garage).when() == pytest.approx(takes[0] + 0.6, abs=0.02)
+    assert garage.garage_doors()[0].state is GarageDoorState.OPENING
+    await _notified(events, 2)
+    assert loop.time() >= takes[0] + 0.6
+    assert garage.garage_doors()[0].state is GarageDoorState.CLOSED
+    assert _doors(events) == [
+        (1, GarageDoorState.OPENING, GarageDoorSource.COMMAND),
+        (1, GarageDoorState.CLOSED, GarageDoorSource.P2P),
+    ]
+    assert not garage._garage._hold_expiry
+    assert await garage.async_close_garage_door(GARAGE_SN, 1) is GarageDoorState.CLOSED
+    assert len(fake.doorbell_payloads) == 1
+
+
+async def test_a_command_taken_on_a_held_door_ends_its_expiry_and_its_cancel_restarts_it(
+    garage: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The next taken command replaces the hold and its bound; cancelled in turn, it holds
+    the door until ``GARAGE_CONFIRM_TIMEOUT`` after its own take."""
+    monkeypatch.setattr(garage_module, "GARAGE_CONFIRM_TIMEOUT", 0.6)
+    loop = asyncio.get_running_loop()
+    takes = _takes(garage)
+    await _cancelled_while_moving(garage, fake)
+    first = _hold_expiry(garage)
+    events = _events(garage)
+    await asyncio.sleep(0.3)
+    task = asyncio.create_task(garage.async_close_garage_door(GARAGE_SN, 1, timeout=10))
+    await _notified(events, 1)  # closing: taken
+    assert first.cancelled()
+    assert not garage._garage._hold_expiry
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert _hold_expiry(garage).when() == pytest.approx(takes[1] + 0.6, abs=0.02)
+    await asyncio.sleep(takes[0] + 0.7 - loop.time())
+    assert garage.garage_doors()[0].state is GarageDoorState.CLOSING
+    await _notified(events, 2)
+    assert loop.time() >= takes[1] + 0.6
+    assert _doors(events) == [
+        (1, GarageDoorState.CLOSING, GarageDoorSource.COMMAND),
+        (1, GarageDoorState.CLOSED, GarageDoorSource.P2P),
+    ]
+
+
+async def test_closing_the_station_cancels_a_held_doors_expiry(
+    garage: Station, fake: FakeStation
+) -> None:
+    await _cancelled_while_moving(garage, fake)
+    timer = _hold_expiry(garage)
+    await garage.async_close()
+    assert timer.cancelled()
+    assert not garage._garage._hold_expiry
+
+
 def _door_param(value: str) -> dict[str, Any]:
     return {"params": [{"dev_type": 255, "param_type": 7500, "param_value": value}]}
 
@@ -673,10 +762,14 @@ async def test_a_cancelled_doors_moving_state_lasts_until_its_report(
 ) -> None:
     monkeypatch.setattr(session_module, "PARAM_SETTLE", 30.0)
     await _cancelled_while_moving(garage, fake)
+    timer = _hold_expiry(garage)
     events = _events(garage)
     fake.send_json(*report)
     await _notified(events, 1)  # door 1 changes, else door 2 opens
     assert garage.garage_doors()[0].state is after
+    held = after is GarageDoorState.OPENING
+    assert timer.cancelled() is not held
+    assert ((GARAGE_SN, 1) in garage._garage._hold_expiry) is held
     assert (1, after, GarageDoorSource.COMMAND) not in _doors(events)
     if after is GarageDoorState.OPENING:
         assert [e[0] for e in _doors(events)] == [2]
@@ -714,12 +807,15 @@ async def test_a_later_command_that_is_not_taken_keeps_the_earlier_moving_state(
     """A refused close after a cancelled open: the open is still unconfirmed, so the door
     reads opening."""
     await _cancelled_while_moving(garage, fake)
+    timer = _hold_expiry(garage)
     events = _events(garage)
     monkeypatch.setattr(fake, "doorbell_receipt_code", lambda: -1)
     with pytest.raises(CommandRejectedError):
         await garage.async_close_garage_door(GARAGE_SN, 1)
     assert garage.garage_doors()[0].state is GarageDoorState.OPENING
     assert _doors(events) == []
+    assert _hold_expiry(garage) is timer
+    assert not timer.cancelled()
 
 
 async def test_a_new_state_while_a_later_command_is_sent_ends_the_earlier_moving_state(

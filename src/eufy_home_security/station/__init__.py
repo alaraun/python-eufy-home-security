@@ -1358,7 +1358,9 @@ class Station:
         ``DeviceBusyError`` while another door command of this client waits on the device
         (to reverse a moving door, cancel the waiting call first). Cancelling sends nothing:
         once the device took the open or close, the door reads opening or closing until a
-        report of it (its notify, or a report of a new state), and the next open or close
+        report of it (its notify, or a report of a new state), at most
+        :data:`~.garage.GARAGE_CONFIRM_TIMEOUT` after the take (then its last report again,
+        with a :class:`~..events.GarageDoorChanged`), and meanwhile the next open or close
         of that door is sent even where the last report is the asked state; cancelled
         before the device took it, the door reads its last reported state. A refused
         command raises as :meth:`~..p2p.session.StationSession.async_run_recipe` does
@@ -1646,11 +1648,13 @@ class Station:
         await self.session.async_start()
 
     async def async_close(self) -> None:
-        """Close the session; forget the device-siren states and cancel their expiry."""
+        """Close the session; forget the device-siren states and cancel their expiry and
+        the held garage doors' expiry."""
         try:
             await self.session.async_close()
         finally:
             await self._activity.close()
+            self._garage.close()
             for timer in self._alarms.siren_expiry.values():
                 timer.cancel()
             self._alarms.siren_expiry.clear()

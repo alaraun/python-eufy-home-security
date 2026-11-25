@@ -1301,7 +1301,8 @@ bits as the held parameter 7500: it returns when the report is the asked state a
 `DoorNotMovedError` with the reported state otherwise (an operate command waits for a
 known state). A parameter report of the asked state also ends the wait. When the call is
 cancelled after the camera took an open or close, the door reads opening or closing until a
-report of that door (its notify, or a report of a new state), and the next open or close
+report of that door (its notify, or a report of a new state), at most 300 s after the take
+(then its last report again, as the app's wait ends), and meanwhile the next open or close
 of that door is sent whatever the last report says.
 
 ## Result codes

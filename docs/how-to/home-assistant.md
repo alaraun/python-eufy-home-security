@@ -1829,7 +1829,9 @@ the asked state returns at once. To reverse a moving door (a close while the ope
 waits), cancel the running task first: a second command while one waits raises
 `DeviceBusyError`. The cancelled call sends nothing; once the camera took its command, the
 door keeps reading `opening`/`closing` (state and `GarageDoorChanged`) until a report of
-that door (its door notify, or a report of a new state), and the next open or close of the
+that door (its door notify, or a report of a new state), at most `GARAGE_CONFIRM_TIMEOUT`
+after the camera took it (then it reads its last report again, with a `GarageDoorChanged`,
+as the app's wait ends), and meanwhile the next open or close of the
 door is sent even where its last report is the asked state (a close after a cancelled open
 of a door last reported closed). A call cancelled before the camera took its command
 leaves the door at its last reported state. A door in an `unknown` state raises
