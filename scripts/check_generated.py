@@ -31,6 +31,7 @@ CHECKS: Mapping[str, tuple[str, ...]] = {
     "gen_device_alarm": ("--check",),
     "gen_station_config": ("--check",),
     "gen_webrtc_routing": ("--check",),
+    "gen_lock_routes": ("--check",),
     "gen_device_matrix": ("--check",),
     "gen_timezones": ("--check",),
 }

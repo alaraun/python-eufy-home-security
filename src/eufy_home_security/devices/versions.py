@@ -78,3 +78,30 @@ def version_equals(a: str, b: str) -> bool:
     if any(_at(left, i) != _at(right, i) for i in range(run)):
         return False
     return left[run:] == right[run:]
+
+
+_REMOTE_DROP: Final = re.compile(r"[^0-9.]")
+
+
+def _remote_fields(version: str) -> list[int] | None:
+    parts = _REMOTE_DROP.sub("", version).split(".")
+    while parts and not parts[-1]:
+        parts.pop()  # a trailing dot splits off nothing
+    if not parts:
+        return None
+    fields = [_int_or_none(p) if p.isdigit() else None for p in parts]
+    return None if any(f is None for f in fields) else [f for f in fields if f is not None]
+
+
+def remote_version_at_least(version: str, threshold: str) -> bool:
+    """Whether ``version`` reaches ``threshold`` as the app compares a device firmware with a
+    Remote Config version: every character but digits and dots dropped, fields compared as
+    integers with missing ones 0; False when either side is empty or has a field that does
+    not parse. **[declared: eufy app]**"""
+    left, right = _remote_fields(version), _remote_fields(threshold)
+    if left is None or right is None:
+        return False
+    width = max(len(left), len(right))
+    left += [0] * (width - len(left))
+    right += [0] * (width - len(right))
+    return left >= right

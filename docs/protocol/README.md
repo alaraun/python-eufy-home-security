@@ -15,6 +15,7 @@ how-to and reference docs.
 | [commands.md](commands.md) | the DeviceMsgBean envelope, arming and how to confirm it, writing settings, the parameter dump, the event database, image fetch, result codes |
 | [events.md](events.md) | local P2P pushes, parameter-change pushes, guard-mode announcements and ordering, liveness, cloud FCM push, P2P vs cloud |
 | [media.md](media.md) | still images, live stream open, video/audio frame headers, keyframe decryption, recording download, what is proven |
+| [locks.md](locks.md) | lock and unlock command forms per lock family (1940 cm2 frame with a time or HKDF key, 1961 JSON with an ECIES-wrapped key or plain, 1930 cm frame with an ECIES or ECDH key), which form a lock takes, how its answer is read; declared, not tested on hardware |
 
 ## The layers
 

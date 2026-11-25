@@ -1,0 +1,156 @@
+# Lock commands
+
+How a lock or unlock command is encoded for a eufy smart lock, per lock family, and how the
+lock's answer is read. The library holds these as pure codecs
+(`eufy_home_security.lock_commands`) and the choice of form as generated data
+(`devices.lock_routes`); nothing in the library sends a lock command yet.
+
+**Grade: declared (eufy app); not tested on hardware.** Every byte below follows the eufy
+app's behaviour; no lock has answered any of it. The ECIES scheme is pinned against the
+app's own output for synthetic keys. Unlock is a physical security action: a command is a
+codec output until a lock owner has tested the path.
+
+All P2P forms travel to the lock's **station** (for a Wi-Fi lock without a HomeBase, the
+lock is its own station) as the payload of a P2P command inside the station's command
+wrapper, on the lock's channel ([commands.md](commands.md)). A command is applied only when
+the lock's state follows: the app confirms by the new state, never by the transport answer.
+
+## Routes
+
+Which form a lock takes is the app's rule over per-product data generated from the app's
+lock configuration (`devices/_lock_routes_data.py`, `scripts/gen_lock_routes.py`):
+
+1. The product's rows: a row for a serial character (the serial's 7th character) wins over
+   the product's plain row.
+2. **MQTT** when the row says so always, or for a lock that is not behind a station when
+   it says so for standalone locks only.
+3. Else the row's P2P form, with two per-unit switches: the **HKDF** key for the 1940 form
+   when the row carries firmware thresholds and both the lock's main and Wi-Fi firmware
+   reach them, and **ECDH** for the 1930 form when the lock reports the row's parameter as
+   `"1"`.
+
+| products | form | path grade |
+|---|---|---|
+| T8502; T8506; T8520 with 7th serial character `8` or `9`; T8531, T8532, T85M0, T85M1, T85V0 behind a station | 1940 (time key) | current |
+| T8502 with main firmware ≥ 2.2.0.0 and Wi-Fi firmware ≥ 0.3.0.0 | 1940 (HKDF key) | current |
+| T8520 (other serials) | 1961 (ECIES-wrapped key) | current |
+| T8530 | 1961 (plain JSON) | current |
+| T8501, T8503 | 1930 (ECIES-wrapped key) | current |
+| T8501, T8503 reporting parameter 6610 = `"1"` | 1930 (ECDH key) | current |
+| T8500, T8510 | 1911 (a BLE frame through the station) | current; no codec here |
+| T85D0, T85D2, T85F0, T85F1, T85F2, T85F3, T85L0, T85L1, T85P0, T85P1, T8506 with 7th serial character `8`; T8531, T8532, T85M0, T85M1, T85V0 not behind a station | MQTT (the 1940 frame over the eufy cloud's broker) | current; no transport here |
+
+The HKDF thresholds are the app's defaults for two Remote Config values; the generator takes
+a fetched Remote Config over them when it names the keys. Versions compare as the app
+compares a firmware with a Remote Config value: every character but digits and dots dropped,
+fields as integers, missing fields 0, an empty or unparsable version reaching nothing.
+Keypads (T8592, T85A3) have no lock command route. No legacy path is ported: where the app
+holds two forms for one lock family (time key and HKDF, ECIES and ECDH), the lock's firmware
+or parameter picks between them, and the library ports both.
+
+## Shared parts
+
+- **Serial IV**: the lock serial's UTF-8 bytes zero-padded to 16.
+- **AES**: AES-128-CBC with PKCS#7 padding, under the serial IV.
+- **Sequence number**: `seq_num` is the lock's last sequence number plus one (the station
+  reports it); the codec takes the value to send.
+- **User fields**: the lock member record's `admin_user_id` and `short_user_id` (hex text,
+  `0000` when absent) and the account's nickname.
+- **Result**: an answer code 0 is accepted (the state change follows), anything else is
+  refused; the 1940 answer also names "already unlocked" (48) and "already locked" (49).
+  A well-formed answer for another lock, another command or another time value raises
+  `LockReplyMismatchError` (the caller keeps waiting); anything that does not decode raises
+  `ProtocolError`.
+
+## 1940: cm2 frame in through-data
+
+Body, a TLV of `[tag, length u8, value]` entries, tags from `A1`:
+
+| tag | value |
+|---|---|
+| A1 | the current Unix time, u32 little-endian |
+| A2 | the key user id, UTF-8 |
+| A3 | operation u8: **0 lock, 1 unlock** |
+| A4 | the account's nickname, UTF-8 |
+| A5 | `short_user_id` as bytes |
+
+The **key user id** is the member record's `admin_user_id` when the record names this
+account (`member_user_id`), holds an admin id and its `member_type` is not 2; otherwise the
+account's own user id.
+
+**Time key.** A time value `t` = the Unix time in whole seconds OR a random 0..99. The key
+is the key user id's last 12 characters (UTF-8) followed by the 4 bytes of `t` as 8 hex
+digits (big-endian). The body is zero-padded to whole AES blocks and then encrypted (so an
+aligned body gains a whole padding block).
+
+**HKDF key.** The key is HKDF-SHA256 (RFC 5869) with the key user id (UTF-8) as input key
+material, `t` as a 4-byte big-endian salt, info `F0 F1 … F9`, 16 bytes. The `time` field is
+then not `t` but the hex of AES-128-CBC/PKCS#7 under the fixed key `ANKER_SMARTLOCK_` and
+IV `OCK_WORLD'S_NO.1` of the user id followed by the salt, and the payload adds
+`"version": "1"`.
+
+Frame: `FF 09 | total length u16 LE | version 03 | slave id 00 | function type 02 |
+u16 BE (encrypted 0x4000 | command 0x23) | encrypted body | XOR of all previous bytes`.
+Payload of P2P command 1940:
+
+```json
+{"apiCommand": 6018, "lock_payload": "<frame hex>", "seq_num": 42, "time": 1700000037}
+```
+
+**Answer**: 1940 through-data `{"dev_sn", "lock_payload", "time"}`. The frame must be
+function type 2, command 0x23. An encrypted body opens with the key its own `time` names:
+for the time key `time` is 8 hex digits and must equal the request's `t` (a different value
+is a late answer to another request); for the HKDF key `time` opens under the fixed key to a
+40-byte user id and a 4-byte salt. The first byte of the body is the result code.
+
+## 1961: JSON
+
+`{"shortUserId", "slOperation", "userId", "userName"}` with `slOperation` **1 lock, 0
+unlock** and `userId` the member's `admin_user_id`, written compact with the app's JSON
+escaping (`<`, `>`, `&`, `=`, `'` as `\u` escapes).
+
+- **ECIES form**: the object gains `seq_num`, is encrypted under a random 16-byte AES key
+  and sent base64 as `payload`; `key` is the lower-case hex of the ECIES (below) of that
+  AES key written as 32 upper-case hex characters (129 bytes). The P2P payload object is
+  `{"key", "account_id", "cmd": 1961, "mChannel", "mValue3": 0, "payload"}`.
+- **Plain form**: the object itself is `payload`, without `seq_num` or `key`.
+
+The lock's public key is 64 bytes, `X || Y` of a P-256 point, from the cloud's
+`app/public_key/query` (type 2) per lock. The **answer** is the command's result code.
+
+## 1930: Anker cm frame in through-data
+
+Body: `A1 02 <short user id, 2 bytes> | A2 01 <slOperation: 1 lock, 0 unlock> |
+A3 04 <Unix time u32 LE> | A4 <length> <nickname UTF-8>`, encrypted under a 16-byte key.
+
+Frame: `FF 09 | total length u16 LE | version | device type FF | command 08 | package flag C0
+| index A0 | key length | key field | encrypted body | XOR of all previous bytes`.
+
+- **ECIES form** (version 18): a random key; the key field is the ECIES of its 16 bytes
+  under the lock's public key (113 bytes).
+- **ECDH form** (version 20): the client's ephemeral P-256 key agrees with the lock's ECDH
+  public key (the cloud's `app/public_key/query` type 3, a SEC1 point); the key is the first
+  16 bytes of the shared x-coordinate and the key field is the client's public key,
+  uncompressed (65 bytes).
+
+Payload of P2P command 1930: `{"apiCommand": 6018, "lock_payload": "<frame hex>",
+"seq_num"}`. **Answer**: 1930 through-data `{"dev_sn", "lock_payload"}`; a single-packet
+answer frame is `FF 09 | length | version | device type | command | C0 | body | XOR` (its
+length field is not read). A version other than 33 means the body is encrypted under the
+request's key. The first byte of the body is the result code.
+
+## ECIES
+
+P-256 ECIES as the station's session handshake uses it ([session-crypto.md](session-crypto.md)):
+an ephemeral key `r`, `S` = x-coordinate of `r · LockKey`, `K` = TLS-1.2 P_SHA256(`S`,
+`"ECIES"`) to 48 bytes, AES-128-CBC/PKCS#7 under `K[0:16]` with a random IV, HMAC-SHA256
+under `K[16:48]` over IV and ciphertext. Output: the compressed ephemeral point (33 bytes),
+the IV (16), the ciphertext and the tag (32).
+
+## Not covered
+
+- Sending: the session wiring (the station command wrapper, sequence numbers from the
+  station, the public key fetch and cache, waiting for the state) is not built.
+- The 1911 form (T8500, T8510) and the MQTT transport.
+- Multi-packet frames: a lock command and its answer fit one packet; a multi-packet answer
+  raises `ProtocolError`.

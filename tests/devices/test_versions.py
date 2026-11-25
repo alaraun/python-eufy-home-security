@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from eufy_home_security.devices.versions import version_bigger_than, version_equals
+from eufy_home_security.devices.versions import (
+    remote_version_at_least,
+    version_bigger_than,
+    version_equals,
+)
 
 
 @pytest.mark.parametrize(
@@ -52,3 +56,26 @@ def test_version_bigger_than(a: str, b: str, bigger: bool) -> None:
 )
 def test_version_equals(a: str, b: str, equal: bool) -> None:
     assert version_equals(a, b) is equal
+
+
+@pytest.mark.parametrize(
+    ("device", "threshold", "expected"),
+    [
+        ("2.2.0.0", "2.2.0.0", True),
+        ("2.2.0.1", "2.2.0.0", True),
+        ("2.1.9.9", "2.2.0.0", False),
+        ("2.10", "2.9.9", True),
+        ("2.2", "2.2.0.0", True),  # missing fields count as 0
+        ("2.2.0.0", "2.2", True),
+        ("v2.2.0.0b", "2.2.0.0", True),  # every character but digits and dots is dropped
+        ("2.2.0.0.", "2.2.0.0", True),  # a trailing dot splits off nothing
+        ("2..2", "2.2", False),  # an empty field does not parse
+        (".2", "0.2", False),
+        ("", "0.3.0.0", False),  # no version reaches no threshold
+        ("abc", "0.3.0.0", False),
+        ("0.3.0.0", "", False),
+        ("99999999999.0", "1.0", False),  # a field over 32 bits does not parse
+    ],
+)
+def test_remote_version_at_least(device: str, threshold: str, expected: bool) -> None:
+    assert remote_version_at_least(device, threshold) is expected

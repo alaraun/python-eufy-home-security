@@ -129,6 +129,18 @@ uv run python scripts/gen_webrtc_routing.py           # rewrite the table
 uv run python scripts/gen_webrtc_routing.py --check   # compare, write nothing
 ```
 
+The lock command routes (`devices/_lock_routes_data.py`: per lock product, the command
+form each serial takes, its MQTT rule, the parameter that switches a 1930 frame to ECDH
+and the firmware thresholds of the HKDF key, read by `devices.lock_routes`) come from the
+per-model lock configuration extracted from the app build (private input
+`.work/tools/data/lock_routes.json`) and a Remote Config fetch (`--remote-config`, default
+`.work/tools/data/firebase_rc_EE.json`) whose values replace the app's defaults when present:
+
+```
+uv run python scripts/gen_lock_routes.py           # rewrite the table
+uv run python scripts/gen_lock_routes.py --check   # compare, write nothing
+```
+
 The pan/tilt/zoom table (`devices/_ptz_data.py`: per product whose thing description
 declares a pan/tilt, preset or zoom action, the library recipe form that reproduces the
 handler's, per connect type) is generated the same way:
