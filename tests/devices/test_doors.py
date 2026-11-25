@@ -23,6 +23,7 @@ from eufy_home_security.devices.garage import (
     command_body,
     door_state,
     garage_evidence,
+    notify_doors,
     parse_bits,
     state_notify_bits,
 )
@@ -135,6 +136,23 @@ def test_a_door_state_notify_carries_the_state_bits(
     obj: dict[str, object], bits: int | None
 ) -> None:
     assert state_notify_bits(obj, PARAMS) == bits
+
+
+@pytest.mark.parametrize(
+    ("payload", "doors"),
+    [
+        ({"door_id": 1, "type": 9}, (1,)),
+        ({"door_id": "2", "type": 9}, (2,)),
+        ({"door_id": 3, "type": 9}, (1, 2)),
+        ({"door_id": "x", "type": 9}, (1, 2)),
+        ({"type": 9}, (1, 2)),
+        ("9", (1, 2)),
+    ],
+)
+def test_a_door_state_notify_reports_on_its_door_or_both(
+    payload: object, doors: tuple[int, ...]
+) -> None:
+    assert notify_doors({"cmd": 7500, "payload": payload}) == doors
 
 
 @pytest.mark.parametrize(

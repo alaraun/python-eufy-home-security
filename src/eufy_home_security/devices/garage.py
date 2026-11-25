@@ -147,6 +147,14 @@ def state_notify_bits(obj: Mapping[str, Any], params: GarageParams) -> int | Non
     return parse_bits(payload.get("type"))
 
 
+def notify_doors(obj: Mapping[str, Any]) -> tuple[int, ...]:
+    """The doors a door-state notify reports on: its payload's ``door_id`` when that is a
+    door, else every door (the state bits carry both)."""
+    payload = obj.get("payload")
+    door = json_int(payload.get("door_id")) if isinstance(payload, Mapping) else None
+    return (door,) if door in DOORS else DOORS
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class GarageDoor:
     """One door of a garage-door camera.

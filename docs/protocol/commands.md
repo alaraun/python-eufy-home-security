@@ -1292,9 +1292,14 @@ app sends operate when the door's state is unknown: the motor runs whichever way
 the door). The receipt only says the camera took it. The door reports its new state in a
 `0x0547` notify `{"cmd": 7500, "payload": {"door_id": d, "type": <state bits>,
 "notify_tag": …}}` ([events.md](events.md#other-station-initiated-frames)); the app waits
-for that report (up to 300 s) and shows the door opening or closing until it arrives. The
-library does the same (`Station.async_open_garage_door`, `async_close_garage_door`): it
-returns once the door reports the asked state.
+for that report (up to 300 s), shows the door opening or closing until it arrives, and
+ends the wait on it whatever state it carries, keeping its bits as the door-state
+parameter. The library (`Station.async_open_garage_door`, `async_close_garage_door`)
+waits as long, ends the wait on the commanded door's notify (one naming the other door is
+taken and the wait goes on; one without `door_id` counts for both) and keeps the notify's
+bits as the held parameter 7500: it returns when the report is the asked state and raises
+`DoorNotMovedError` with the reported state otherwise (an operate command waits for a
+known state). A parameter report of the asked state also ends the wait.
 
 ## Result codes
 

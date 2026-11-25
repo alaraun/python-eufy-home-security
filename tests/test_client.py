@@ -2726,7 +2726,7 @@ async def test_a_lock_push_sets_the_state_of_the_station_it_is_paired_to() -> No
                     station_sn=SYNTHETIC.station_sn,
                     device_sn=lock_sn,
                     event_type=264,  # locked from the app
-                    event_time_ms=1800000000000,
+                    event_time_ms=int(time.time() * 1000),
                     raw={},
                 )
             )

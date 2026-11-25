@@ -38,7 +38,8 @@ class LockState(StrEnum):
     PRIVACY_MODE = "privacy_mode"
     """Code 9: locked against every key but the owner's (privacy mode)."""
     JAMMED = "jammed"
-    """A mechanical fault the lock's push reports (no lock-state code)."""
+    """A mechanical fault the lock's push reports (no lock-state code); it lasts until the
+    next report of the lock's state (a parameter report taken after the push, or a push)."""
     UNKNOWN = "unknown"
     """Nothing reported, a value that is no code or a code the app names no state for, or a
     lock the eufy cloud reports offline."""

@@ -205,7 +205,7 @@ from ..recordings import RecordingsPage
 from ..station_config import ModeInfo, StationConfig, build_station_config, stored_device_params
 from .activity import StationActivity
 from .alarms import AlarmWaits, StationAlarms
-from .base import _NOT_PAIRED, own_channel
+from .base import _NOT_PAIRED, ParamReport, own_channel
 from .configuration import ConfigRules, StationConfiguration
 from .garage import StationGarage
 from .history import StationHistory
@@ -1260,29 +1260,42 @@ class Station:
         params.update({k: v for k, v in (block or {}).items() if v is not None})
         return params
 
-    def _param_report(self, device: CloudDevice, param_id: int) -> tuple[str, ValueSource] | None:
-        """``device``'s value of ``param_id`` as last reported and where it came from: its
-        P2P block (P2P or NOTIFY) over the cloud's copy (CLOUD); None when neither holds
-        it."""
+    def _param_report(self, device: CloudDevice, param_id: int) -> ParamReport | None:
+        """``device``'s value of ``param_id`` as last reported, where it came from and when:
+        its P2P block (P2P or NOTIFY) over the cloud's copy (CLOUD); None when neither
+        holds it."""
         state = self.state
         if state is not None and device is self.device:
             value = state.setting_params.get(param_id)
             if value is not None:
-                return value, state.param_sources.get(param_id, ValueSource.P2P)
+                source = state.param_sources.get(param_id, ValueSource.P2P)
+                cloud = self._cloud.get(param_id)
+                if source is ValueSource.CLOUD and cloud is not None:
+                    return ParamReport(value, source, cloud.updated_at)
+                return ParamReport(
+                    value, source, self.session.param_time((STATION_CHANNEL, param_id))
+                )
         elif state is not None and device.channel is not None:
             sub = state.devices.get(device.channel)
             value = None if sub is None else sub.params.get(param_id)
             if value is not None:
-                origin = self.session.param_origins.get((device.channel, param_id))
-                return value, ValueSource.P2P if origin is None else origin.value_source
-        cloud = next((p.value for p in device.cloud_params if p.param_id == param_id), None)
-        return None if cloud is None else (cloud, ValueSource.CLOUD)
+                key = (device.channel, param_id)
+                origin = self.session.param_origins.get(key)
+                return ParamReport(
+                    value,
+                    ValueSource.P2P if origin is None else origin.value_source,
+                    self.session.param_time(key),
+                )
+        cloud_param = next((p for p in device.cloud_params if p.param_id == param_id), None)
+        if cloud_param is None:
+            return None
+        return ParamReport(cloud_param.value, ValueSource.CLOUD, cloud_param.updated_at)
 
     def lock_state(self, device_sn: str) -> LockReading | None:
         """The lock state of ``device_sn`` (this station's own serial when it is a lock
-        itself): the latest news from its lock-state parameter (a dump, a parameter
-        notify, the device list's copy) or a cloud push about it, see
-        :class:`~.locks.StationLocks`. None for a device not graded
+        itself): from its lock-state parameter (a dump, a parameter notify, the device
+        list's copy) or a cloud push about it, ordered by time as
+        :class:`~.locks.StationLocks` describes. None for a device not graded
         :attr:`~..devices.capabilities.Capability.LOCK` or with nothing reported yet.
         Each change emits :class:`~..events.LockStateChanged`. Sync; raises
         ``UnsupportedError`` when ``device_sn`` is not paired to this station.
@@ -1323,12 +1336,17 @@ class Station:
 
         Sends the eufy app's door command (the model's ``garage`` command: a body with the
         door's ``type`` and the account's nickname) on the device's channel. It confirms
-        by the door's state, as the app does: the receipt only says the device took it, so
-        the call returns once the door reports the asked state (meanwhile the door reads
-        closing, or opening, with a :class:`~..events.GarageDoorChanged`), and raises
-        ``DeviceTimeoutError`` when it does not within ``timeout`` seconds (default
-        :data:`~.garage.GARAGE_CONFIRM_TIMEOUT`, the app's wait). A door already in the
-        asked state returns at once; nothing is sent.
+        by the door's report, as the app does: the receipt only says the device took it,
+        so the call waits for the door's next state notify (meanwhile the door reads
+        closing, or opening, with a :class:`~..events.GarageDoorChanged`). That report
+        ends the wait whatever it says, and the door reads the reported state at once: the
+        asked state returns it, another state (the door did not get there, or reads
+        unknown) raises ``DoorNotMovedError`` naming it. Another report of the asked state
+        (a parameter dump or notify) also returns, and a report of the device's other door
+        is shown while the wait goes on. No report within ``timeout`` seconds (default
+        :data:`~.garage.GARAGE_CONFIRM_TIMEOUT`, the app's wait) raises
+        ``DeviceTimeoutError``. A door already in the asked state returns at once; nothing
+        is sent.
 
         A door whose state is unknown raises ``DoorStateUnknownError`` unless ``operate``
         is set: then the app's operate command is sent, which runs the motor whichever way
@@ -1336,8 +1354,9 @@ class Station:
 
         Raises before anything is sent: ``UnsupportedError`` for a device without garage
         doors or a door without a bound motor, ``ValueError`` for another door number,
-        ``DeviceBusyError`` while another door command of this client waits on the device.
-        A refused command raises as
+        ``DeviceBusyError`` while another door command of this client waits on the device
+        (to reverse a moving door, cancel the waiting call first; cancelling sends nothing
+        and the door reads its last reported state again). A refused command raises as
         :meth:`~..p2p.session.StationSession.async_run_recipe` does
         (``CommandRejectedError`` and its subclasses).
         """

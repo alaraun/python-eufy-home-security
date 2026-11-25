@@ -59,7 +59,7 @@ Node.js bridge, no add-on, no threads.
 | other HomeBases and cameras | *declared* only: known from the app, never tested. Every product the app names is in the model list; settings files for 166 products ship with the library, generated from eufy's own code; a product without one is listed read-only from the cloud |
 | per-mode actions and delays | readable and writable; the Home, Away and Custom 1 delays are verified by write + read-back, the action flags' names are not checked against the app |
 | firmware updates | reported, never installed |
-| smart locks, garage doors | *declared* only, never tested: lock state and events for every bundled lock model (no lock command yet), garage-door state and open/close for the Garage-Control Cams |
+| smart locks, garage doors | *declared* only, never tested: lock state and events for every bundled lock model (no lock command yet), garage-door state and open/close for the garage-door cameras (T8452, T8453) |
 | API | not stable: names and signatures may change in any 0.x release |
 | packaging | a pure-Python wheel with typing (`py.typed`) on PyPI |
 

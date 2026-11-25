@@ -842,6 +842,14 @@ class StationSession:
         """
         self._param_state.apply_local_params(channel, values)
 
+    def apply_reported_params(self, channel: int, values: Mapping[int, str]) -> None:
+        """Merge parameter values a device reported in another notify than a parameter
+        notify (a garage door's state notify), as a parameter notify's: filed on the
+        frame's device, dated now, replaced by the next dump's value. Emits
+        ``ParamChanged`` for each change and notifies the dump listeners.
+        """
+        self._param_state.apply_notify(channel, values)
+
     @property
     def storage(self) -> StorageInfo | None:
         """The last storage record read or pushed on this session; None until one arrives."""

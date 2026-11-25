@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from .devices.garage import GarageDoorState
     from .station_config import StationConfig
 
 
@@ -460,6 +461,29 @@ class CommandNotAppliedError(CommandError):
             device_sn=device_sn,
             device_sns=device_sns,
         )
+
+
+class DoorNotMovedError(CommandNotAppliedError):
+    """A garage door answered a door command with another state than the one asked for:
+    the camera took the command, and the door's next report says ``state`` (closed after
+    an open, open after a close, or unknown), e.g. a blocked or reversed door.
+
+    ``door`` is the door (1 or 2) and ``state`` its reported
+    :class:`~.devices.garage.GarageDoorState`, which the door reads from then on.
+    """
+
+    def __init__(
+        self,
+        command: int,
+        message: str,
+        *,
+        door: int,
+        state: GarageDoorState,
+        device_sn: str | None = None,
+    ) -> None:
+        self.door = door
+        self.state = state
+        super().__init__(command, message, device_sn=device_sn)
 
 
 class PresetSlotsFullError(CommandNotAppliedError):

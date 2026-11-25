@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from typing import TYPE_CHECKING, Any, Final
 
 from .._logging import redact_serial
@@ -21,6 +21,7 @@ from ..devices.garage import (
     calibrated,
     command_body,
     door_state,
+    notify_doors,
     parse_bits,
     state_notify_bits,
 )
@@ -31,10 +32,11 @@ from ..events import EventBus, GarageDoorChanged, ParamChanged
 from ..exceptions import (
     DeviceBusyError,
     DeviceTimeoutError,
+    DoorNotMovedError,
     DoorStateUnknownError,
     UnsupportedError,
 )
-from ..models import FrameCipher, ValueSource
+from ..models import STATION_CHANNEL, FrameCipher, ValueSource
 from ..p2p._json import json_int
 from .base import own_channel
 
@@ -44,8 +46,8 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 GARAGE_CONFIRM_TIMEOUT: Final = 300.0
-"""Seconds a door command waits for the door to report the asked state, as long as the
-eufy app waits (declared, eufy app)."""
+"""Seconds a door command waits for the door's report, as long as the eufy app waits
+(declared, eufy app)."""
 
 _SOURCES: Final[Mapping[ValueSource, GarageDoorSource]] = {
     ValueSource.P2P: GarageDoorSource.P2P,
@@ -71,8 +73,9 @@ class StationGarage:
 
     A door's state is the last report: the state parameter (a dump, a parameter notify,
     the cloud's copy; a value is taken when it differs from the previous one of that
-    parameter) or the device's door-state notify. While a command of this client waits,
-    the door reads opening or closing.
+    parameter) or the device's door-state notify, whose bits become the held state
+    parameter. While a command of this client waits, the door reads opening or closing
+    until its report.
     """
 
     def __init__(self, station: Station, bus: EventBus) -> None:
@@ -124,7 +127,7 @@ class StationGarage:
 
     def _bits(self, device: CloudDevice, param: int) -> int:
         report = self._station._param_report(device, param)
-        bits = None if report is None else parse_bits(report[0])
+        bits = None if report is None else parse_bits(report.value)
         return bits or 0
 
     # ── reports ──────────────────────────────────────────────────────────────
@@ -136,13 +139,13 @@ class StationGarage:
             if params is None:
                 continue
             report = self._station._param_report(device, params.state_param)
-            if report is None or self._raw.get(device.device_sn) == report[0]:
+            if report is None or self._raw.get(device.device_sn) == report.value:
                 continue
-            raw, source = report
-            self._raw[device.device_sn] = raw
-            bits = parse_bits(raw)
+            self._raw[device.device_sn] = report.value
+            bits = parse_bits(report.value)
             if bits is not None:
-                self._take(device.device_sn, bits, _SOURCES.get(source, GarageDoorSource.P2P))
+                source = _SOURCES.get(report.source, GarageDoorSource.P2P)
+                self._take(device.device_sn, bits, source)
 
     def on_param(self, event: ParamChanged) -> None:
         if any(
@@ -153,14 +156,22 @@ class StationGarage:
             self.refresh()
 
     def on_notify(self, obj: Mapping[str, Any], cipher: FrameCipher) -> None:
-        """Take a door-state notify of a garage device (any cipher: display state)."""
+        """Take a door-state notify of a garage device (any cipher: display state).
+
+        Its bits become the device's held door-state parameter, as the eufy app keeps
+        them, so a later report of the value from before the notify is news again.
+        """
         device = self._notify_device(obj)
         if device is None:
             return
         params = self.params_of(device.device_sn)
         bits = None if params is None else state_notify_bits(obj, params)
-        if bits is not None:
-            self._take(device.device_sn, bits, GarageDoorSource.NOTIFY)
+        if params is None or bits is None:
+            return
+        self._take(device.device_sn, bits, GarageDoorSource.NOTIFY, doors=notify_doors(obj))
+        channel = STATION_CHANNEL if device is self._station.device else device.channel
+        if channel is not None:
+            self._station.session.apply_reported_params(channel, {params.state_param: str(bits)})
 
     def _notify_device(self, obj: Mapping[str, Any]) -> CloudDevice | None:
         """The device a notify is about: the one on its ``mChannel``, a standalone
@@ -174,14 +185,24 @@ class StationGarage:
             None,
         )
 
-    def _take(self, device_sn: str, bits: int, source: GarageDoorSource) -> None:
+    def _take(
+        self, device_sn: str, bits: int, source: GarageDoorSource, *, doors: Collection[int] = ()
+    ) -> None:
+        """Take a report of ``device_sn``'s door-state bits; ``doors``: the doors a door
+        notify reports on. A report that ends a waiting command (:func:`_ends`) shows the
+        reported state at once."""
         for door in DOORS:
             key = (device_sn, door)
             state = door_state(bits, door)
             self._reported[key] = state
             self._sources[key] = source
             waiter = self._waiters.get(key)
-            if waiter is not None and _confirms(waiter[0], state) and not waiter[1].done():
+            if (
+                waiter is not None
+                and not waiter[1].done()
+                and _ends(waiter[0], state, door in doors)
+            ):
+                self._moving.pop(key, None)
                 waiter[1].set_result(state)
             self._emit(device_sn, door, source)  # reads moving while a command waits
 
@@ -286,13 +307,23 @@ class StationGarage:
                 self._emit(device_sn, door, GarageDoorSource.COMMAND)
             try:
                 async with asyncio.timeout(max(0.0, deadline - time.monotonic())):
-                    return await future
+                    state = await future
             except TimeoutError as err:
                 raise DeviceTimeoutError(
                     f"{redact_serial(device_sn)}: door {door} reported no "
                     f"{'known state' if target is None else target.value} within {budget:g} s",
                     device_sn=device_sn,
                 ) from err
+            if target is None or state is target:
+                return state
+            raise DoorNotMovedError(
+                params.sub_cmd,
+                f"{redact_serial(device_sn)}: door {door} reported {state.value} after the "
+                f"{action.value} command",
+                door=door,
+                state=state,
+                device_sn=device_sn,
+            )
         finally:
             self._busy.discard(device_sn)
             self._waiters.pop(key, None)
@@ -300,9 +331,11 @@ class StationGarage:
                 self._emit(device_sn, door, self._sources.get(key, GarageDoorSource.COMMAND))
 
 
-def _confirms(target: GarageDoorState | None, state: GarageDoorState) -> bool:
-    """Whether a reported state ends a command's wait: the asked state, or for an operate
-    command any known state."""
+def _ends(target: GarageDoorState | None, state: GarageDoorState, door_report: bool) -> bool:
+    """Whether a reported state ends the wait of a command that asked for ``target`` (None:
+    operate): for an open or close, any report of the door itself (``door_report``, as the
+    eufy app ends its wait on the door's notify) or another report of the asked state; for
+    an operate command, any report of a known state."""
     if target is None:
         return state is not GarageDoorState.UNKNOWN
-    return state is target
+    return door_report or state is target

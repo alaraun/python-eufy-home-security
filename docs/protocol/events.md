@@ -637,11 +637,18 @@ account's stations (`Station.note_lock_push`, called for every delivered push), 
 | 517, 519 (mechanical fault) | `jammed` |
 | 516 (the lock went offline) | `unknown`: the app sets a code its card shows as its fault state; the library does not call an offline lock jammed |
 
-Other lock pushes (low battery, a door left open, tamper) set no state. A push older (by
-its event time) than the last one taken for that lock is ignored. Between pushes the lock
-state comes from its lock-state parameter (1912 behind a station, 6000 for a lock that is
-its own station; the `lock` block of its settings file), from a dump, a parameter notify
-or the device list's copy.
+Other lock pushes (low battery, a door left open, tamper) set no state. Between pushes
+the lock state comes from its lock-state parameter (1912 behind a station, 6000 for a lock
+that is its own station; the `lock` block of its settings file), from a dump, a parameter
+notify or the device list's copy. Both are ordered by time, with the guard mode's bounds:
+
+- a push (dated by its event time, by its arrival without one) is dropped when it is more
+  than 300 s old, older than the last push taken for that lock, or more than 30 s older
+  than the lock's last dated parameter report (its arrival over P2P, the cloud's upload
+  time of its copy);
+- a parameter report is taken when its value moved, and also when it repeats the value
+  but dates from after the push the state came from: a dump taken after a push replaces
+  it. A push-only state (`jammed`) therefore lasts until the next such report.
 
 ## De-duplication across channels
 

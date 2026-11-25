@@ -2,19 +2,38 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import logging
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Final
 
+from .._logging import redact_serial
 from ..cloud.models import CloudDevice
 from ..devices.capabilities import Capability, profile_for_serial
 from ..devices.locks import PUSH_STATES, LockReading, LockStateSource, state_of_code
 from ..devices.model_settings import lock_state_read
 from ..devices.support import Support
-from ..events import EventBus, LockStateChanged, ParamChanged, SecurityEvent
+from ..events import (
+    GUARD_PUSH_MAX_AGE_SECONDS,
+    GUARD_REPORT_SLACK_SECONDS,
+    EventBus,
+    LockStateChanged,
+    ParamChanged,
+    SecurityEvent,
+    wall_ms,
+)
 from ..models import ValueSource
 
 if TYPE_CHECKING:
     from . import Station
+
+_LOGGER = logging.getLogger(__name__)
+
+LOCK_PUSH_MAX_AGE_SECONDS: Final = GUARD_PUSH_MAX_AGE_SECONDS
+"""A lock push whose event time is older than this is a redelivery, not news."""
+LOCK_REPORT_SLACK_SECONDS: Final = GUARD_REPORT_SLACK_SECONDS
+"""A lock push older than the lock's last parameter report by more than this is about an
+earlier change and is dropped; one inside it (the push announcing the change the report
+carries, on another clock) is taken."""
 
 _SOURCES: Final[Mapping[ValueSource, LockStateSource]] = {
     ValueSource.P2P: LockStateSource.P2P,
@@ -27,20 +46,32 @@ class StationLocks:
     """The lock state of every device on a station graded
     :attr:`~..devices.capabilities.Capability.LOCK`.
 
-    The state is the latest news from any source: the lock-state parameter of the
-    device's context (a dump, a parameter notify, the cloud's copy; a value is taken when
-    it differs from the previous one of that parameter) or a cloud push about the lock
-    (one older than the last push taken is ignored: the cloud redelivers and reorders).
+    Two sources feed it, ordered by time as the guard mode's are
+    (:class:`~..events.GuardModeTracker`):
+
+    * the lock-state parameter of the device's context (a dump, a parameter notify, the
+      cloud's copy), the station's own report: taken when its value differs from the one
+      taken before, and also when it repeats but dates from after the push the state came
+      from (a dump taken after a push replaces it);
+    * a cloud push about the lock (its ``event_type``), dated by its event time (its
+      arrival when it has none): dropped when more than :data:`LOCK_PUSH_MAX_AGE_SECONDS`
+      old, older than the last push taken, or older than the lock's last dated parameter
+      report by more than :data:`LOCK_REPORT_SLACK_SECONDS`.
     """
 
-    def __init__(self, station: Station, bus: EventBus) -> None:
+    def __init__(
+        self, station: Station, bus: EventBus, *, now_ms: Callable[[], int] = wall_ms
+    ) -> None:
         self._station = station
         self._bus = bus
+        self._now_ms = now_ms
         self._readings: dict[str, LockReading] = {}
         self._raw: dict[str, str] = {}
         """Per lock, the lock-state parameter's value last taken."""
         self._push_ms: dict[str, int] = {}
-        """Per lock, the event time of the last push taken."""
+        """Per lock, the time of the last push taken (epoch ms)."""
+        self._report_ms: dict[str, int] = {}
+        """Per lock, the latest time a dated parameter report dates from (epoch ms)."""
 
     def reading(self, device_sn: str) -> LockReading | None:
         return self._readings.get(device_sn)
@@ -60,24 +91,36 @@ class StationLocks:
         return read.param_for(station._connect_type_of(device.device_sn))
 
     def refresh(self) -> None:
-        """Take each lock's state parameter where it changed."""
+        """Take each lock's state parameter where it is news (see the class docstring)."""
         for device in self._station.devices:
             param = self.param_of(device)
             if param is None:
                 continue
             report = self._station._param_report(device, param)
-            if report is None or self._raw.get(device.device_sn) == report[0]:
+            if report is None:
                 continue
-            raw, source = report
-            self._raw[device.device_sn] = raw
+            device_sn = device.device_sn
+            at = None if report.at is None else int(report.at * 1000)
+            if at is not None:
+                self._report_ms[device_sn] = max(at, self._report_ms.get(device_sn, at))
+            if self._raw.get(device_sn) == report.value and not self._after_push(device_sn, at):
+                continue
+            self._raw[device_sn] = report.value
             self._set(
-                device.device_sn,
+                device_sn,
                 LockReading(
-                    state=state_of_code(raw),
-                    source=_SOURCES.get(source, LockStateSource.P2P),
-                    raw=raw,
+                    state=state_of_code(report.value),
+                    source=_SOURCES.get(report.source, LockStateSource.P2P),
+                    raw=report.value,
                 ),
             )
+
+    def _after_push(self, device_sn: str, at: int | None) -> bool:
+        """Whether a report dated ``at`` replaces the push the lock's state came from."""
+        reading = self._readings.get(device_sn)
+        if reading is None or reading.source is not LockStateSource.PUSH or at is None:
+            return False
+        return at > self._push_ms[device_sn]
 
     def on_param(self, event: ParamChanged) -> None:
         if any(self.param_of(d) == event.param_id for d in self._station.devices):
@@ -91,11 +134,16 @@ class StationLocks:
         device = next((d for d in self._station.devices if d.device_sn == device_sn), None)
         if device is None or self.param_of(device) is None:
             return False
-        at = event.event_time_ms
-        if at is not None:
-            if at < self._push_ms.get(device_sn, at):
-                return False
-            self._push_ms[device_sn] = at
+        now = self._now_ms()
+        at = now if event.event_time_ms is None else event.event_time_ms
+        if (
+            now - at > LOCK_PUSH_MAX_AGE_SECONDS * 1000
+            or at < self._push_ms.get(device_sn, at)
+            or at < self._report_ms.get(device_sn, at) - LOCK_REPORT_SLACK_SECONDS * 1000
+        ):
+            _LOGGER.debug("%s: dropping a lock push older than its state", redact_serial(device_sn))
+            return False
+        self._push_ms[device_sn] = at
         self._set(
             device_sn,
             LockReading(

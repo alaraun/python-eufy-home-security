@@ -1792,17 +1792,21 @@ lock's `smart_lock_onoff_status`, or what a push about the lock sets:
 | `jammed` | | 517, 519 (mechanical fault) | jammed |
 | `unknown` | any other code, a value that is no number, nothing reported | 516 (the lock went offline) | unknown |
 
-The latest news wins: a parameter value is taken when it differs from that parameter's
-previous value (a dump that repeats it does not undo a push), and a push older than the
-last one taken is ignored. Keep `state` (and `raw`) as attributes when the entity maps
-passage and privacy mode to unlocked and locked.
+The parameter and the pushes are ordered by time, as the guard mode is: a push is ignored
+when it is more than 300 s old, older than the last push taken, or more than 30 s older
+than the lock's last parameter report; a parameter value is taken when it moves, and also
+when it repeats but dates from after the push the state came from. So the next dump after
+a push replaces it, and `jammed`, which only a push reports, lasts until the lock's next
+report ([events.md](../protocol/events.md#lock-pushes-declared-app)). Keep `state` (and
+`raw`) as attributes when the entity maps passage and privacy mode to unlocked and
+locked.
 A lock the library reaches through no station (a Wi-Fi lock without a P2P id is skipped,
 `SkippedDevice`) has no state here.
 
 ### Garage doors
 
 A garage-door camera graded `Capability.GARAGE_DOOR` (*declared (eufy app)*, from its
-settings file's `garage`: the Garage-Control Cams T8452 and T8453) drives up to two doors.
+settings file's `garage`: the garage-door cameras T8452 and T8453) drives up to two doors.
 `station.garage_doors(device_sn)` gives one `GarageDoor` per door its unit reports a motor
 or a sensor bound to: `door` (1 or 2, the app's doors A and B), `motor_bound`,
 `sensor_bound`, `sensor_calibrated` and `state`, a `GarageDoorState` (`open`, `closed`,
@@ -1812,13 +1816,19 @@ with open and close where `motor_bound`. Each change emits
 `cloud` (the door-state parameter or the camera's door notify) or `command`.
 
 `await station.async_open_garage_door(device_sn, door)` and `async_close_garage_door`
-send the app's door command and **confirm by the state change**: the call returns once
-the door reports the asked state, and the door reads `opening`/`closing` meanwhile (the
-camera reports no movement; the app shows the same between its send and the report). No
-report within `timeout` (default `GARAGE_CONFIRM_TIMEOUT`, 300 s, the app's wait) raises
-`DeviceTimeoutError` and the door reads its last reported state again; run the call as a
-task and let the events drive the entity. A door already in the asked state returns at
-once. A door in an `unknown` state raises `DoorStateUnknownError` (an `UnsupportedError`),
+send the app's door command and **confirm by the door's report**: the door reads
+`opening`/`closing` until the camera's next door notify for it (the camera reports no
+movement; the app shows the same between its send and the report). That report ends the
+wait, as it ends the app's, and the door reads the reported state at once: the asked
+state returns, another one (the door stopped, reversed, or reads `unknown`) raises
+`DoorNotMovedError` (`err.state`, `err.door`). A report of the camera's other door is
+shown and the wait goes on. No report within `timeout` (default `GARAGE_CONFIRM_TIMEOUT`,
+300 s, the app's wait) raises `DeviceTimeoutError` and the door reads its last reported
+state again; run the call as a task and let the events drive the entity. A door already in
+the asked state returns at once. To reverse a moving door (a close while the open still
+waits), cancel the running task first: a second command while one waits raises
+`DeviceBusyError`, and the cancelled call sends nothing and leaves the door at its last
+reported state. A door in an `unknown` state raises `DoorStateUnknownError` (an `UnsupportedError`),
 since open and close cannot be told apart: pass `operate=True` for the app's operate
 command, which runs the motor whichever way it moves the door (offer it as a separate
 button or confirm it, never as a plain open). A door without a bound motor raises
@@ -3264,6 +3274,7 @@ The library raises typed errors; translate them at the coordinator / setup bound
 | `CaptureStoppedError` | a live capture's `stop` was set before its first keyframe: nothing was recorded, nothing to store. Not an error for the user who pressed stop |
 | `ConfigChangedError` (`config`, `expected`) | a write's `expect_revision` is stale: the station's configuration changed elsewhere and nothing was sent. Show `err.config` and let the user redo the edit; not an outage |
 | `DoorStateUnknownError` (an `UnsupportedError`) | a garage door's state is unknown, so open and close were refused; nothing was sent. `raise HomeAssistantError` and offer the operate action (`operate=True`) separately |
+| `DoorNotMovedError` (a `CommandNotAppliedError`; `door`, `state`) | the camera took a garage-door command, but the door's report says `state` (closed after an open, open after a close, or unknown): blocked or reversed. The door's entity already shows `state`; `raise HomeAssistantError` naming it, never retry on its own. Catch it before `CommandNotAppliedError` |
 | `ModeInUseError` (an `UnsupportedError`; `reason`) | the mode is in use (current, or named by the schedule or its default); nothing was sent. `raise HomeAssistantError` with `reason` |
 | `KeyExchangeRefusedError` (a `CloudApiError`; `code` 4404 or 463, `status` 463) | the cloud gateway refused the client's key identity and a new key exchange did not restore it. Not a reauth and not a kick-out: no login was attempted and none helps by itself. Carry on from the cache and retry on the next interval; the library re-keys at each attempt. Raise a repair issue only if it persists (hours) |
 | any error with `device_sn` (every `EufySecurityError` has the attribute, None by default) | the message names a device by its redacted serial (`T8030***4321 has no local station`); `err.device_sn` is that device's full serial (the first one the message names). Map it to the device's name for the user instead of matching the redacted form in the text; the message itself stays as it is, fit for logs |
