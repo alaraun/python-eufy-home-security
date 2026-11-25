@@ -388,6 +388,37 @@ async def test_a_status_report_with_an_error_code_fails_the_command(
     assert raised.value.code == 2
 
 
+class _SlowCloud(_Cloud):
+    """A cloud whose public-key query takes longer than any test waits."""
+
+    async def async_get_lock_public_key(self, device_sn: str, key_type: int) -> bytes:
+        await asyncio.sleep(30)
+        return await super().async_get_lock_public_key(device_sn, key_type)
+
+
+@pytest.mark.parametrize("slow", ["public key", "connect"])
+async def test_an_explicit_timeout_bounds_the_steps_before_the_send(
+    fake: FakeStation, monkeypatch: pytest.MonkeyPatch, slow: str
+) -> None:
+    serial = "T8520P2000000001"
+    lock = FakeLock(serial=serial, channel=1)
+    cloud = _SlowCloud(lock) if slow == "public key" else _Cloud(lock)
+    station = await _hub(fake, _lock(serial), lock, cloud)
+    if slow == "connect":
+
+        async def connect() -> None:
+            await asyncio.sleep(30)
+
+        monkeypatch.setattr(station.session, "async_connect", connect)
+    try:
+        async with asyncio.timeout(3):
+            with pytest.raises(DeviceTimeoutError, match=r"not sent within 0\.3 s"):
+                await station.async_lock(serial, timeout=0.3)
+    finally:
+        await station.async_close()
+    assert lock.received == []
+
+
 def test_the_waits_are_the_apps() -> None:
     assert (control.LOCK_ANSWER_TIMEOUT, control.LOCK_CONFIRM_TIMEOUT) == (
         20.0,

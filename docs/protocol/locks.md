@@ -192,7 +192,8 @@ acknowledgement alone never counts. In order:
    status report with code 0, whatever state it names.
 
 The waits are the app's: 20 s for the lock's answer, then 30 s for its state; a `timeout`
-bounds the whole command. Nothing within it raises `DeviceTimeoutError`.
+bounds the whole command, the public-key query, the connect and the send included. Nothing
+within it raises `DeviceTimeoutError`.
 
 **Sequence numbers.** The 1940 and 1930 forms (and MQTT) count per lock: a report `R` (the
 station's notify 1916 `{"dev_sn", "seq_num", "bus_type", "lock_cmd"}`) is stored as `R + 1`,

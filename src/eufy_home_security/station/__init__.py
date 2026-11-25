@@ -1324,8 +1324,9 @@ class Station:
         Sends the lock's P2P command form over this station's session and confirms by the
         lock's state, never by the station's or the lock's acknowledgement (see
         :class:`~.lock_control.StationLockControl`). Returns at once, sending nothing, when
-        the lock already reads locked. ``timeout`` bounds the whole wait (default: the eufy
-        app's 20 s for the lock's answer, then 30 s for its state). Raises before sending:
+        the lock already reads locked. ``timeout`` bounds the whole call, public-key query,
+        connect and send included (default: the eufy app's 20 s for the lock's answer, then
+        30 s for its state, the steps before them unbounded). Raises before sending:
         ``UnsupportedError`` (no lock, no route, a route this library cannot send or one
         served over MQTT: use :meth:`EufySecurity.async_lock`), ``GuestAccessError`` (a
         guest account), ``DeviceBusyError`` (a command for this lock still waits). After:

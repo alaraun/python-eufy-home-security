@@ -25,7 +25,7 @@ import json
 import logging
 import secrets
 import time
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Awaitable, Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final, Protocol
 
@@ -130,6 +130,24 @@ class _Pending:
     resends: list[asyncio.Task[Any]] = field(default_factory=list)
     refused: bool = False
     """The station refused the last send for its sequence number (-151)."""
+
+
+async def _within[T](
+    deadline: float | None, timeout: float | None, serial: str, step: Awaitable[T]
+) -> T:
+    """Await ``step`` until the loop time ``deadline``, the end of the command's ``timeout``
+    (None: no bound); reaching it raises :class:`DeviceTimeoutError`."""
+    bound = asyncio.timeout_at(deadline)
+    try:
+        async with bound:
+            return await step
+    except TimeoutError:
+        if not bound.expired():
+            raise
+        raise DeviceTimeoutError(
+            f"{redact_serial(serial)}: the command was not sent within {timeout:g} s",
+            device_sn=serial,
+        ) from None
 
 
 def _payload(obj: Mapping[str, Any]) -> Mapping[str, Any] | None:
@@ -378,7 +396,7 @@ class StationLockControl:
         serial = device.device_sn
         loop = asyncio.get_running_loop()
         deadline = None if timeout is None else loop.time() + timeout
-        sent = await self._build(device, form, action)
+        sent = await _within(deadline, timeout, serial, self._build(device, form, action))
         session = self._station.session
         channel = self._station.channel_for(serial)
         pending = _Pending(
@@ -407,8 +425,8 @@ class StationLockControl:
         self._pending[serial] = pending
         unwatch = self._locks.watch(serial, on_reading)
         try:
-            await session.async_connect()
-            applied = await self._send(sent, channel, pending)
+            await _within(deadline, timeout, serial, session.async_connect())
+            applied = await _within(deadline, timeout, serial, self._send(sent, channel, pending))
             if sent.read is None and applied:  # the station's result is the lock's answer
                 pending.answer.set_result(LockReply(0, LockResult.ACCEPTED))
             budget = LOCK_ANSWER_TIMEOUT if deadline is None else deadline - loop.time()
