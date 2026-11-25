@@ -27,7 +27,7 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone, tzinfo
 from enum import IntEnum, StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, TypeGuard
@@ -653,9 +653,13 @@ _EPOCH_MS_MIN: Final = 100_000_000_000
 """An epoch value at or above this is milliseconds, below it seconds (year 5138 vs 1973)."""
 
 
-def _row_time(value: str | None, offset: object) -> datetime | None:
+def _row_time(
+    value: str | None, offset: object, zone: tzinfo | None = None, near: datetime | None = None
+) -> datetime | None:
     """A history row time (``YYYY-MM-DD HH:MM:SS`` in the row's ``±HHMM`` offset, or an
-    epoch in seconds or milliseconds) as an aware time; None when it does not parse."""
+    epoch in seconds or milliseconds) as an aware time; None when it does not parse. A
+    time without a valid offset is read in ``zone`` (None: the host's), and in an hour
+    that zone repeats as the reading nearer ``near`` (without ``near``, the first)."""
     if value is None:
         return None
     if value.isdigit():
@@ -671,12 +675,24 @@ def _row_time(value: str | None, offset: object) -> datetime | None:
         return None
     match = _ROW_OFFSET.fullmatch(offset) if isinstance(offset, str) else None
     if match is None:
-        return naive.astimezone()  # the host's zone: stations keep local time
+        return _local_time(naive, zone, near)  # stations keep local time
     sign, hours, minutes = match.groups()
     delta = timedelta(hours=int(hours), minutes=int(minutes))
     if delta >= timedelta(hours=24):
-        return naive.astimezone()
+        return _local_time(naive, zone, near)
     return naive.replace(tzinfo=timezone(-delta if sign == "-" else delta))
+
+
+def _local_time(naive: datetime, zone: tzinfo | None, near: datetime | None) -> datetime:
+    """``naive`` local time of ``zone`` (None: the host's): in an hour the zone repeats
+    (a clock set back), the reading nearer ``near``, else the first."""
+    if zone is None:
+        first, second = naive.astimezone(), naive.replace(fold=1).astimezone()
+    else:
+        first, second = naive.replace(tzinfo=zone), naive.replace(tzinfo=zone, fold=1)
+    if near is None or first.utcoffset() == second.utcoffset():
+        return first
+    return min((first, second), key=lambda moment: abs(moment - near)).astimezone(UTC)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -985,6 +1001,18 @@ class HistoryRecord:
     def ended_at(self) -> datetime | None:
         """``end_time`` as an aware time, read as :attr:`started_at`."""
         return _row_time(self.end_time, self.raw.get("time_zone"))
+
+    def times_near(
+        self, near: datetime, zone: tzinfo | None = None
+    ) -> tuple[datetime | None, datetime | None]:
+        """:attr:`started_at` and :attr:`ended_at`, a time without a valid offset read in
+        ``zone`` (the station's; None: the host's) and, in an hour that zone repeats (a
+        clock set back), as the reading nearer ``near``."""
+        offset = self.raw.get("time_zone")
+        return (
+            _row_time(self.start_time, offset, zone, near),
+            _row_time(self.end_time, offset, zone, near),
+        )
 
     @property
     def duration_s(self) -> float | None:

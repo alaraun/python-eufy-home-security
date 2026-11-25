@@ -87,6 +87,9 @@ class DetectionRecording:
     when asking again can give another answer, None when it cannot (``SETTLED``, or
     past the bound for a row that never came or never ends); ``offset_s`` is the row's
     start minus the detection's time in seconds, None when the detection named its row.
+    ``NOT_LISTED`` gives the offset of the camera's nearest listed recording instead (None
+    when none is listed): a recording that lies a whole number of hours off shows a clock
+    read in the wrong zone.
     """
 
     state: DetectionRecordingState

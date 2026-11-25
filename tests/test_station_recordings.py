@@ -6,8 +6,10 @@ import asyncio
 import dataclasses
 import gc
 import logging
-from collections.abc import AsyncIterator
-from datetime import UTC, date, datetime, timedelta, tzinfo
+import os
+import time
+from collections.abc import AsyncIterator, Iterator
+from datetime import UTC, date, datetime, timedelta, timezone, tzinfo
 from typing import Any
 
 import pytest
@@ -16,6 +18,7 @@ import eufy_home_security.station as station_module
 import eufy_home_security.station.history as station_history
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.devices.support import Support
+from eufy_home_security.devices.timezones import encode_zone
 from eufy_home_security.events import EventSource, HistoryRecord, SecurityEvent
 from eufy_home_security.exceptions import (
     DeviceTimeoutError,
@@ -65,6 +68,8 @@ CAMERA = CloudDevice(
     channel=0,
 )
 OTHER_SN = "T8160P2000099999"
+SAST = timezone(timedelta(hours=2))
+"""Africa/Johannesburg's offset (it keeps no daylight saving)."""
 FORMAT = "%Y-%m-%d %H:%M:%S"
 #: The tests' reference time; the station's clock is frozen to it (see ``today``).
 NOW = datetime(2026, 9, 16, 12, 0, tzinfo=UTC)  # hygiene: ok
@@ -102,7 +107,12 @@ class _AnyDatetime(type):
 def today(monkeypatch: pytest.MonkeyPatch) -> datetime:
     """:data:`NOW`, host-local, with the station's clock frozen to it: rows built from it
     and the window the station asks for fall on the same days at any hour."""
-    now = NOW.astimezone()
+    return _freeze(monkeypatch, NOW)
+
+
+def _freeze(monkeypatch: pytest.MonkeyPatch, moment: datetime) -> datetime:
+    """Freeze the station's clock to ``moment``; returns it host-local."""
+    now = moment.astimezone()
 
     class Frozen(datetime, metaclass=_AnyDatetime):
         @classmethod
@@ -1628,3 +1638,126 @@ async def test_a_wait_raises_at_once_what_no_retry_can_change(
 def _from_ms(value: int | None) -> datetime:
     assert value is not None
     return datetime.fromtimestamp(value / 1000, UTC)
+
+
+# ── rows written without an offset ───────────────────────────────────────────
+
+
+@pytest.fixture
+def host_utc() -> Iterator[None]:
+    """The host's zone is UTC for the test."""
+    old = os.environ.get("TZ")
+    os.environ["TZ"] = "UTC"
+    time.tzset()
+    try:
+        yield
+    finally:
+        if old is None:
+            del os.environ["TZ"]
+        else:
+            os.environ["TZ"] = old
+        time.tzset()
+
+
+def _zoneless(
+    start: datetime, zone: tzinfo, record_id: int, seconds: int = 20
+) -> dict[str, object]:
+    """A recording row written in ``zone``'s local time, with no ``time_zone`` beside it."""
+    local = start.astimezone(zone)
+    return {
+        "record_id": record_id,
+        "device_sn": SYNTHETIC.camera_sn,
+        "start_time": local.strftime(FORMAT),
+        "end_time": (local + timedelta(seconds=seconds)).strftime(FORMAT),
+        "storage_path": f"/zx/hdd_data0/Camera00/{record_id}.zxvideo",
+        "frame_num": 6,
+    }
+
+
+def _in_zone(station: Station, zone: str) -> None:
+    """Give ``station`` the cloud entry of a station set to ``zone``."""
+    station.apply_cloud_device(dataclasses.replace(STATION, raw={"time_zone": encode_zone(zone)}))
+
+
+async def test_a_row_without_an_offset_is_read_in_the_stations_zone(
+    host_utc: None, station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The host keeps UTC, the station runs two hours ahead and writes its local time:
+    its row matches the detection, and settles by the station's clock."""
+    now = _freeze(monkeypatch, NOW)
+    _in_zone(station, "Africa/Johannesburg")  # UTC+2, no daylight saving
+    event = _whole(now, 120)
+    started = event - timedelta(seconds=2)
+    record_id = int(started.astimezone(SAST).strftime("%Y%m%d")) * HISTORY_RECORD_COUNTER + 4
+    fake.rows = [_zoneless(started, SAST, record_id)]
+    found = await station.async_recording_for_detection(_detection(event))
+    assert (found.state, found.offset_s) == (DetectionRecordingState.SETTLED, -2.0)
+    assert found.record is not None
+    assert found.record.record_id == record_id
+
+
+async def test_a_row_without_an_offset_in_a_repeated_hour_is_read_nearest_the_detection(
+    host_utc: None, station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """02:30 happens twice when the station's clock goes back from summer time: a row
+    written at 02:30 is read as the pass nearer the detection, so it matches a detection
+    in either pass."""
+    _in_zone(station, "Europe/Berlin")
+    second_pass = datetime(2026, 10, 25, 1, 30, 2, tzinfo=UTC)  # winter time  # hygiene: ok
+    _freeze(monkeypatch, second_pass + timedelta(seconds=120))
+    naive_row = {**_zoneless(second_pass, UTC, 2026102500004), "time_zone": ""}  # hygiene: ok
+    naive_row["start_time"] = "2026-10-25 02:30:00"  # hygiene: ok
+    naive_row["end_time"] = "2026-10-25 02:30:20"  # hygiene: ok
+    fake.rows = [naive_row]
+    found = await station.async_recording_for_detection(_detection(second_pass))
+    assert (found.state, found.offset_s) == (DetectionRecordingState.SETTLED, -2.0)
+    first_pass = second_pass - timedelta(hours=1)  # the same wall time in summer time
+    _freeze(monkeypatch, first_pass + timedelta(seconds=120))
+    found = await station.async_recording_for_detection(_detection(first_pass))
+    assert (found.state, found.offset_s) == (DetectionRecordingState.SETTLED, -2.0)
+
+
+@pytest.mark.usefixtures("no_reuse")
+async def test_no_row_listed_names_the_offset_of_the_nearest_recording(
+    host_utc: None,
+    station: Station,
+    fake: FakeStation,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A station two hours ahead whose zone is unknown here: nothing matches, and the
+    answer and its log line carry how far the nearest recording of the camera lies."""
+    now = _freeze(monkeypatch, NOW)
+    event = _whole(now, 120)
+    started = event - timedelta(seconds=2)
+    record_id = int(started.astimezone(SAST).strftime("%Y%m%d")) * HISTORY_RECORD_COUNTER + 4
+    far = event - timedelta(seconds=100)
+    fake.rows = [
+        _zoneless(started, SAST, record_id),
+        _at(far, SYNTHETIC.camera_sn, _dayed(far, 3)),  # over before the detection
+        _at(event, OTHER_SN, _dayed(event, 5)),
+    ]
+    with caplog.at_level(logging.DEBUG, logger="eufy_home_security.station"):
+        found = await station.async_recording_for_detection(_detection(event))
+    assert found.state is DetectionRecordingState.NOT_LISTED
+    assert (found.record, found.offset_s) == (None, -100.0)
+    assert any("not_listed, row None, offset -100s" in r.getMessage() for r in caplog.records)
+    fake.rows = fake.rows[:1]
+    ahead = await station.async_recording_for_detection(_detection(event))
+    assert (ahead.state, ahead.offset_s) == (DetectionRecordingState.NOT_LISTED, 7198.0)
+
+
+@pytest.mark.usefixtures("no_reuse")
+async def test_a_row_before_a_detections_own_bound_never_holds_it(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    """The camera's listing reaches back to an older detection still searched; a row that
+    started before the newer detection's own bound (still running) is not the newer's."""
+    older_event = _whole(today, 150)
+    newer_event = _whole(today, 10)
+    stuck = newer_event - timedelta(seconds=RECORDING_MATCH_GIVE_UP + 20)
+    fake.rows = [_at(stuck, SYNTHETIC.camera_sn, _dayed(stuck, 1), end_time="")]
+    older = await station.async_recording_for_detection(_detection(older_event))
+    assert older.record is not None  # it holds the older detection
+    newer = await station.async_recording_for_detection(_detection(newer_event))
+    assert newer.state is DetectionRecordingState.NOT_LISTED

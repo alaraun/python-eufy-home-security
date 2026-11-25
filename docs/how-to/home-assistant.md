@@ -1933,7 +1933,8 @@ image.
 - **A standalone camera's detection** (cloud push only, no path or record):
   `async_event_image(event, THUMBNAIL)` wakes it, reads its newest still and returns it
   only when the still's time lies within `STANDALONE_STILL_WINDOW` (2 s before to 30 s
-  after) of the detection, read in the camera's own `timezone_set`. Otherwise
+  after) of the detection, read in the camera's own `timezone_set` (else its cloud
+  entry's `time_zone`, else the host's zone). Otherwise
   `StillNotWrittenError` when the newest still is older than the detection (retry once,
   about 20 s later; `offset` is the still's time minus the detection's), a plain
   `RecordNotFoundError` when a later detection's still replaced it or there is no dated
@@ -2451,7 +2452,10 @@ its trigger frame. The library finds it:
   first, then the lower `record_id`; else the camera's row that holds the event's time (it
   began earlier and had not ended by then, or still runs), the latest start first. A row of
   another camera never matches. So a second detection of the same camera inside one clip
-  gets that clip's row: key the copy and the frame by its `ref` and do it once. An event
+  gets that clip's row: key the copy and the frame by its `ref` and do it once. A row
+  time written without an offset (a HomeBase 2's) is read in the station's zone (its cloud
+  entry's `time_zone`), not the host's; in the hour a clock set back repeats, as the
+  reading nearer the event. An event
   that names a `record_id` with a day is looked up by it instead. The window is inferred,
   not measured on a HomeBase 2: on a HomeBase 3 a recording started in the second of its
   detection's time (one sample), and a cloud push without the station's own time carries
@@ -2467,7 +2471,10 @@ its trigger frame. The library finds it:
   same look without waiting: a `DetectionRecording(state, record, retry_at, offset_s)`
   whose `state` is `SETTLED`, `RECORDING` (the row is listed, its clip may still grow) or
   `NOT_LISTED`, and `retry_at` when asking again can give another answer (None: it
-  cannot). For a scheduler of its own instead of a waiting task.
+  cannot). `offset_s` is the matched row's start minus the event's time; for
+  `NOT_LISTED` the camera's nearest listed recording's (a whole number of hours off
+  shows the station's clock read in the wrong zone). For a scheduler of its own instead
+  of a waiting task.
 
 ```python
 if station.needs_recording_match(event):

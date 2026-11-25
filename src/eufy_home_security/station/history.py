@@ -7,7 +7,7 @@ import contextlib
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, tzinfo
 from typing import Any, Protocol
 
 from ..cloud.models import CloudDevice
@@ -37,20 +37,40 @@ def _host_day(value: date) -> date:
     return value.astimezone().date() if isinstance(value, datetime) else value
 
 
-def _holds(row: HistoryRecord, moment: datetime) -> bool:
-    """Whether ``row`` has not ended before ``moment`` (a row without an end still runs)."""
-    ended = row.ended_at
-    return ended is None or ended >= moment
+@dataclass(frozen=True, slots=True)
+class _Timed:
+    """A recording row read against a detection's time."""
+
+    row: HistoryRecord
+    offset: float
+    """Its start minus the detection's time, in seconds."""
+    ended: datetime | None
+
+
+def _timed_rows(
+    rows: list[HistoryRecord], event_at: datetime, zone: tzinfo | None, give_up: float
+) -> list[_Timed]:
+    """The rows with a start no earlier than ``give_up`` seconds before ``event_at``, read
+    in the station's ``zone`` (see :meth:`HistoryRecord.times_near`)."""
+    timed = []
+    for row in rows:
+        started, ended = row.times_near(event_at, zone)
+        if started is None:
+            continue
+        offset = (started - event_at).total_seconds()
+        if offset >= -give_up:
+            timed.append(_Timed(row, offset, ended))
+    return timed
 
 
 def _detection_match(
-    rows: list[HistoryRecord],
+    timed: list[_Timed],
     event_at: datetime,
     video_path: str | None,
     early: float,
     late: float,
-) -> tuple[HistoryRecord, float] | None:
-    """The row of a detection at ``event_at`` and its start offset (seconds), or None.
+) -> _Timed | None:
+    """The row of a detection at ``event_at``, or None.
 
     A row named by ``video_path`` wins; else the row whose start lies within
     ``early``..``late`` seconds of the event (both included), the closest start first,
@@ -58,21 +78,16 @@ def _detection_match(
     holds the event (began before the window and has not ended before the event, or
     has no end yet), the latest start first.
     """
-    timed = [
-        (row, (row.started_at - event_at).total_seconds())
-        for row in rows
-        if row.started_at is not None
-    ]
     if video_path is not None:
-        named = [c for c in timed if c[0].video_path == video_path]
+        named = [c for c in timed if c.row.video_path == video_path]
         if named:
             return named[0]
-    near = [c for c in timed if early <= c[1] <= late]
+    near = [c for c in timed if early <= c.offset <= late]
     if near:
-        return min(near, key=lambda c: (abs(c[1]), c[1], c[0].record_id))
-    holding = [c for c in timed if c[1] < early and _holds(c[0], event_at)]
+        return min(near, key=lambda c: (abs(c.offset), c.offset, c.row.record_id))
+    holding = [c for c in timed if c.offset < early and (c.ended is None or c.ended >= event_at)]
     if holding:
-        return max(holding, key=lambda c: (c[1], -c[0].record_id))
+        return max(holding, key=lambda c: (c.offset, -c.row.record_id))
     return None
 
 
@@ -86,27 +101,35 @@ class _MatchClock:
     give_up: float
     quiet: float
 
-    def not_listed(self) -> DetectionRecording:
-        """No row of the detection: ask again after the retry, within the bound."""
+    def not_listed(self, nearest: float | None = None) -> DetectionRecording:
+        """No row of the detection (``nearest``: the start offset of the camera's nearest
+        recording): ask again after the retry, within the bound."""
         return DetectionRecording(
             state=DetectionRecordingState.NOT_LISTED,
             retry_at=self._bounded(self.now + timedelta(seconds=self.retry), self.event_at),
+            offset_s=nearest,
         )
 
-    def of_row(self, row: HistoryRecord, offset: float | None) -> DetectionRecording:
-        """The detection's row, settled or still recording."""
-        if StationHistory.recording_settled(row, now=self.now, quiet=self.quiet):
+    def of_row(
+        self,
+        row: HistoryRecord,
+        offset: float | None,
+        started: datetime | None,
+        ended: datetime | None,
+    ) -> DetectionRecording:
+        """The detection's row, settled or still recording, with its start and end read
+        in the station's zone."""
+        if ended is not None and (self.now - ended).total_seconds() >= self.quiet:
             return DetectionRecording(
                 state=DetectionRecordingState.SETTLED, record=row, offset_s=offset
             )
-        ended = row.ended_at
         wanted = self.now + timedelta(seconds=self.retry)
         if ended is not None:
             wanted = ended + timedelta(seconds=self.quiet)
         return DetectionRecording(
             state=DetectionRecordingState.RECORDING,
             record=row,
-            retry_at=self._bounded(wanted, self.event_at or row.started_at),
+            retry_at=self._bounded(wanted, self.event_at or started),
             offset_s=offset,
         )
 
@@ -364,11 +387,13 @@ class StationHistory:
         give_up: float,
         fresh: float,
         quiet: float,
+        zone: tzinfo | None,
         timeout: float | None,
     ) -> DetectionRecording:
         """See :meth:`Station.async_recording_for_detection`; ``device_sn`` is the
         event's camera, paired here; a listing of the camera finished less than ``fresh``
-        seconds ago answers the look."""
+        seconds ago answers the look; ``zone`` is the station's (None: the host's), for
+        row times written without an offset and for the days asked."""
         if self._station.is_standalone:
             raise UnsupportedError("a standalone device lists no history")
         event_at = (
@@ -386,12 +411,15 @@ class StationHistory:
                 )
             if row is None or row.video_path is None:
                 return clock.not_listed()
-            return clock.of_row(row, None)
+            return clock.of_row(row, None, *row.times_near(event_at or clock.now, zone))
         if event_at is None:
             raise UnsupportedError("the event carries no time to match a recording to")
         early, late = window
         first = event_at - timedelta(seconds=give_up)  # the earliest start of a holding clip
-        last_day = min(_host_today(), (event_at + timedelta(seconds=late)).astimezone().date())
+        last_day = min(
+            clock.now.astimezone(zone).date(),
+            (event_at + timedelta(seconds=late)).astimezone(zone).date(),
+        )
         searches = self._searches.setdefault(device_sn, _Searches())
         floor = searches.floor(first, event_at + timedelta(seconds=give_up), clock.now)
         rows, _listed_at = await self._shared_look(
@@ -399,12 +427,15 @@ class StationHistory:
             _Look(floor, last_day, asyncio.get_running_loop().create_future()),
             first,
             fresh,
-            lambda: self._camera_recordings(device_sn, floor, last_day, timeout),
+            lambda: self._camera_recordings(device_sn, floor, last_day, zone, timeout),
         )
-        found = _detection_match(rows, event_at, event.video_path, early, late)
+        timed = _timed_rows(rows, event_at, zone, give_up)
+        found = _detection_match(timed, event_at, event.video_path, early, late)
         if found is None:
-            return clock.not_listed()
-        return clock.of_row(*found)
+            nearest = min(timed, key=lambda c: abs(c.offset), default=None)
+            return clock.not_listed(None if nearest is None else nearest.offset)
+        started = event_at + timedelta(seconds=found.offset)
+        return clock.of_row(found.row, found.offset, started, found.ended)
 
     @staticmethod
     async def _shared_look(
@@ -437,22 +468,27 @@ class StationHistory:
         return look.rows.result()
 
     async def _camera_recordings(
-        self, device_sn: str, since: datetime, last_day: date, timeout: float | None
+        self,
+        device_sn: str,
+        since: datetime,
+        last_day: date,
+        zone: tzinfo | None,
+        timeout: float | None,
     ) -> list[HistoryRecord]:
-        """The recordings of ``device_sn`` from ``last_day`` back to the page holding a
-        row that started before ``since``."""
+        """The recordings of ``device_sn`` from the station day ``last_day`` back to the
+        page holding a row that started before ``since`` (rows read in ``zone``)."""
 
         def older(row: HistoryRecord) -> bool:
-            started = row.started_at
+            started, _ended = row.times_near(since, zone)
             return started is not None and started < since
 
-        first_day = since.astimezone().date()
+        first_day = since.astimezone(zone).date()
         if first_day > last_day:
             return []
         return await self._station.session.async_list_history(
             first_day.strftime("%Y%m%d"),
             last_day.strftime("%Y%m%d"),
-            keep=self._recording_filter(device_sn, since),
+            keep=self._recording_filter(device_sn, None),
             stop=older,
             device_sn=device_sn,
             timeout=timeout,

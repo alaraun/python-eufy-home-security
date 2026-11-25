@@ -94,7 +94,7 @@ from ..devices.settings import (
 from ..devices.station_config_support import StationFeature, restart_command, station_config_models
 from ..devices.station_config_support import config_support as station_config_support
 from ..devices.support import Evidence, Support
-from ..devices.timezones import TIMEZONE_DOMAIN
+from ..devices.timezones import TIMEZONE_DOMAIN, decode_zone
 from ..devices.types import DeviceKind, DeviceModel, model_for_serial
 from ..devices.variants import setting_in_use
 from ..devices.webrtc import app_uses_webrtc, route_device
@@ -3316,15 +3316,18 @@ class Station:
         return await self.async_fetch_still(path, timeout=timeout)
 
     async def _device_zone(self) -> tzinfo | None:
-        """The zone the device's clock (and its still names) follow: its ``timezone_set``,
-        else the host's (None)."""
+        """The zone the device's clock follows (a standalone device's still names, the
+        history rows written without an offset): its ``timezone_set`` (a standalone
+        device's own block, a hub's station block), else its cloud entry's
+        ``time_zone``, else the host's (None)."""
         state = self.state
-        own = own_channel(self.device)
         zone_id: object = None
-        if state is not None and own is not None:
+        if state is not None:
             with contextlib.suppress(UnsupportedError):
-                zone_id = state.setting("timezone_set", channel=own)
+                zone_id = state.setting("timezone_set", channel=own_channel(self.device))
         if not isinstance(zone_id, str):
+            zone_id = decode_zone(self.device.time_zone)
+        if zone_id is None:
             return None
         try:
             return await asyncio.to_thread(ZoneInfo, zone_id)  # reads the zone file
@@ -4134,13 +4137,17 @@ class Station:
         the camera whose search is still within that bound (rows come newest first: a busy
         day costs one page, not the whole day). Looks at one camera share a listing: one
         in flight, or one finished less than :data:`RECORDING_MATCH_FRESH` ago, answers
-        every look it reaches back far enough for.
+        every look it reaches back far enough for. Row times written without an offset
+        are read in the station's zone (its ``timezone_set``, else its cloud entry's
+        ``time_zone``, else the host's), in an hour that zone repeats as the reading
+        nearer the event, and the days asked are the station's.
 
-        The answer is ``SETTLED`` (:meth:`recording_settled` with ``quiet``),
-        ``RECORDING`` (``retry_at``: the row's end plus ``quiet``, or
-        :data:`RECORDING_MATCH_RETRY` from now while it has no end) or ``NOT_LISTED``
-        (``retry_at``: :data:`RECORDING_MATCH_RETRY` from now). ``retry_at`` is never
-        later than :data:`RECORDING_MATCH_GIVE_UP` after the event, and None past it.
+        The answer is ``SETTLED`` (the row's end lies ``quiet`` or more in the past, as
+        :meth:`recording_settled` says), ``RECORDING`` (``retry_at``: the row's end plus
+        ``quiet``, or :data:`RECORDING_MATCH_RETRY` from now while it has no end) or
+        ``NOT_LISTED`` (``retry_at``: :data:`RECORDING_MATCH_RETRY` from now; ``offset_s``:
+        the camera's nearest listed recording). ``retry_at`` is never later than
+        :data:`RECORDING_MATCH_GIVE_UP` after the event, and None past it.
 
         ``timeout`` bounds each history query (None:
         :data:`~..p2p.session.HISTORY_QUERY_TIMEOUT`). Raises
@@ -4160,6 +4167,7 @@ class Station:
             give_up=RECORDING_MATCH_GIVE_UP,
             fresh=min(RECORDING_MATCH_FRESH, RECORDING_MATCH_RETRY / 2, quiet / 2),
             quiet=quiet,
+            zone=await self._device_zone(),
             timeout=timeout,
         )
         _LOGGER.debug(
