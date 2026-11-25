@@ -14,6 +14,7 @@ how-to and reference docs.
 | [session-crypto.md](session-crypto.md) | the static serial key, the CONN_INIT and ECIES handshake, AES-GCM command and broadcast frames, how each frame picks its cipher, legacy ECB scalar frames |
 | [commands.md](commands.md) | the DeviceMsgBean envelope, arming and how to confirm it, writing settings, the parameter dump, the event database, image fetch, result codes |
 | [events.md](events.md) | local P2P pushes, parameter-change pushes, guard-mode announcements and ordering, liveness, cloud FCM push, P2P vs cloud |
+| [mqtt.md](mqtt.md) | the eufy security MQTT broker the app uses for its Wi-Fi locks: which devices, the client certificate and its reuse, connecting, topics, the message envelope, the client |
 | [media.md](media.md) | still images, live stream open, video/audio frame headers, keyframe decryption, recording download, what is proven |
 | [locks.md](locks.md) | lock and unlock command forms per lock family (1940 cm2 frame with a time or HKDF key, 1961 JSON with an ECIES-wrapped key or plain, 1930 cm frame with an ECIES or ECDH key), which form a lock takes, how its answer is read; declared, not tested on hardware |
 
@@ -81,7 +82,8 @@ the cloud plus UDP to those servers. The data path then punches back over the LA
 without a relay, so operation is local but each wake-hour costs a cloud call. A station
 on another subnet or at another site connects the same way (mains powered or not); a
 relay, for two NATs a punch cannot cross, is not implemented. MQTT is
-not a channel: the broker grants no camera topic **[verified]**.
+not a channel for a camera: the broker grants no camera topic **[verified]**. The eufy
+app reaches its Wi-Fi locks through that broker instead ([mqtt.md](mqtt.md), **[app]**).
 
 **The station's own cloud traffic** (parameter uploads, pushes, relay registration,
 time, firmware) is outside the client's control. With the station offline the app, the
@@ -127,5 +129,6 @@ Untagged statements in a section inherit that section's tag.
 | command builders and decoders | `src/eufy_home_security/p2p/messages.py`, `p2p/params.py`, `p2p/notify.py`, `p2p/alarm.py`, `p2p/mode_actions.py`, `p2p/storage_info.py` |
 | media | `src/eufy_home_security/p2p/media.py` |
 | session orchestration | `src/eufy_home_security/p2p/session/` |
+| the MQTT transport (selection, envelope, TLS, client) | `src/eufy_home_security/mqtt/selection.py`, `mqtt/envelope.py`, `mqtt/tls.py`, `mqtt/client.py`; the certificate in `cloud/api.py` |
 | cloud push registration and decoding | `src/eufy_home_security/push/fcm.py`, `push/decode.py`, `push/const.py` |
 | command names and the per-model settings | `src/eufy_home_security/devices/` (see `docs/reference/devices.md`, `docs/reference/models-schema.md`) |

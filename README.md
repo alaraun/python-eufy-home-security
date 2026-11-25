@@ -45,8 +45,14 @@ automatically, so do not add this repository to HACS.
   hardware), *declared* (from the eufy app, not proven) or *unknown*, with its source,
   so a consumer can tell what is proven.
 
+- **MQTT transport (optional, `mqtt` extra)**: the client certificate, device selection,
+  topics, envelope and an asyncio client for the eufy broker the app uses for its Wi-Fi
+  locks. Declared from the eufy app, not yet tested against the broker; lock commands are
+  not part of it yet.
+
 Pure `asyncio` on `aiohttp`, `cryptography`, `firebase-messaging` and `protobuf`: no
-Node.js bridge, no add-on, no threads.
+Node.js bridge, no add-on, no threads (the optional MQTT extra's `aiomqtt` opens its
+broker connection in the event loop's executor).
 
 ## Status
 
@@ -84,6 +90,7 @@ page names the ones written and read back.
 
 ```
 uv add eufy-home-security                       # the library, in a uv project (or: pip install eufy-home-security)
+uv add "eufy-home-security[mqtt]"               # with the MQTT transport (aiomqtt), for Wi-Fi locks
 uv tool install eufy-home-security              # the eufy-security CLI on PATH
 uvx --from eufy-home-security eufy-security --help   # run once
 ```
@@ -170,7 +177,7 @@ More in [getting started](https://github.com/alaraun/python-eufy-home-security/b
 | [Debug logging](https://github.com/alaraun/python-eufy-home-security/blob/main/docs/how-to/debug-logging.md) | loggers, wire dumps, redaction |
 | [Testing](https://github.com/alaraun/python-eufy-home-security/blob/main/docs/how-to/testing.md) | end-to-end tests with `eufy_home_security.testing` |
 | [Thing models](https://github.com/alaraun/python-eufy-home-security/blob/main/docs/reference/thing-models.md) | the app's per-model descriptions and handler recipes |
-| [Protocol reference](https://github.com/alaraun/python-eufy-home-security/blob/main/docs/protocol/README.md) | cloud, P2P transport, session crypto, commands, events, media, lock commands |
+| [Protocol reference](https://github.com/alaraun/python-eufy-home-security/blob/main/docs/protocol/README.md) | cloud, P2P transport, session crypto, commands, events, media, lock commands, MQTT |
 
 ## Contributing
 

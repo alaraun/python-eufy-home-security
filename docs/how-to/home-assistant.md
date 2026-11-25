@@ -3591,3 +3591,22 @@ stack logs under `firebase_messaging`, outside the library's own tree:
 
 Wire-level hexdumps stay off even at DEBUG; enable them explicitly with
 `set_wire_logging(True)` only when chasing a protocol issue.
+
+Wi-Fi locks reach the eufy app through its MQTT broker, not a station; the library's
+client for it needs the `mqtt` extra (`aiomqtt`). An integration that serves such
+locks requires the extra:
+
+```json
+"requirements": ["eufy-home-security[mqtt]==<version>"]
+```
+
+Without it the library imports and serves stations as before; constructing
+`eufy_home_security.mqtt.client.EufyMqttClient` raises `MissingDependencyError` (its
+`extra` is `"mqtt"`). The transport is declared from the eufy app and not yet tested
+against the broker, and lock commands are not part of it yet; see
+[protocol/mqtt.md](../protocol/mqtt.md). Its loggers are under `eufy_home_security.mqtt`;
+`aiomqtt` logs each MQTT packet under `mqtt`, outside the library's tree and unredacted
+(the client id carries the account's user id), so leave `mqtt` out of `loggers`. Start one client per account with the cloud
+device list and call `async_update_devices()` after each device-list refresh: the
+library decides which devices are MQTT devices, reuses the account's certificate and
+reconnects by itself.

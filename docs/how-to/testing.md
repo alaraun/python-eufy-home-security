@@ -17,6 +17,7 @@ session serves a poll, a snapshot and an arm, and a push reaches an entity.
 | `FakeCloud` | The eufy cloud answered below the HTTP envelope. The real client's session cache, hold-offs, login budget and owner-id rules still run. |
 | `warm_store(email=, cloud=, country=, region=, scan_regions=)` | A `MemoryStore` holding the cache document as after one login, written by the library's own cache writers. |
 | `build_eufy_security(email=, store=, cloud=, stations=)` | A real `EufySecurity` wired to the fakes at the cloud-HTTP and discovery-port seams. |
+| `testing.mqtt.make_mqtt_pki()`, `testing.mqtt.FakeMqttBroker(pki)` | A throwaway CA and client certificate, and a loopback MQTT 3.1.1 broker over TLS that requires that certificate. `FakeCloud(mqtt_answer=pki.register_answer())` issues it as the account's MQTT certificate; give `EufyMqttClient` the broker's `port` and `server_ca_pem=pki.ca_pem`. The broker records `connects`, `subscriptions` and `published`, refuses `refused_topics`, refuses every CONNECT while `connack_code` is not 0, delivers with `send(topic, payload)` and drops every client with `drop_connections()`. Needs the `mqtt` extra on the client side. |
 | `mode_list_params(titles, icons=)`, `schedule_params(slots, default=)` | A station's mode list (1256) and weekly schedule (1254, with the 1257 default) as `{param: value}`, encoded by the library's own codecs. |
 
 ## A test

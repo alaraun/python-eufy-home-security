@@ -30,6 +30,7 @@
 
 ```
 uv add eufy-home-security                            # or: pip install eufy-home-security
+uv add "eufy-home-security[mqtt]"                    # with the MQTT transport (Wi-Fi locks)
 ```
 
 ## Log in and read a station
