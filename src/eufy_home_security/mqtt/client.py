@@ -71,6 +71,7 @@ within it: the socket connect (5 s per address the endpoint resolves to), the TL
 running after it is closed when it ends."""
 _QOS: Final = 1
 _SUBACK_FAILURE: Final = 0x80
+_DROP_THROTTLE = LogThrottle()  # one warning per interval when the socket cannot be closed
 
 type Match = Callable[[MqttMessage], bool]
 type Listener = Callable[[MqttMessage], None]
@@ -580,10 +581,17 @@ async def _close(client: aiomqtt.Client, connect: asyncio.Future[Any]) -> None:
 def _drop(client: aiomqtt.Client) -> None:
     """Close the socket of a connect that failed. ``aiomqtt`` keeps it after a CONNACK
     timeout, with its reader and keepalive task, and a late CONNACK would make it a live
-    session; paho's own close also ends those."""
-    paho = client._client
-    if paho.socket() is not None:
-        paho._sock_close()
+    session; paho's own close also ends those. It reaches paho's private API: when that
+    fails, the socket is left open and a warning logged, never an error raised."""
+    try:
+        paho = client._client
+        if paho.socket() is not None:
+            paho._sock_close()
+    except Exception:
+        if _DROP_THROTTLE.should_log("drop"):
+            _LOGGER.warning("MQTT socket of a failed connect not closed", exc_info=True)
+        else:
+            _LOGGER.debug("MQTT socket of a failed connect not closed", exc_info=True)
 
 
 def _drop_when_done(client: aiomqtt.Client, connect: asyncio.Future[Any]) -> None:

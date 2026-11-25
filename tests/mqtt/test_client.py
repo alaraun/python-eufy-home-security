@@ -21,6 +21,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
+from eufy_home_security._logging import LogThrottle
 from eufy_home_security.cloud import const
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.exceptions import (
@@ -805,6 +806,77 @@ async def test_a_connect_step_left_past_the_bound_is_closed_when_it_fails(
     assert rig.broker.open_sockets == 0
     assert _left_tasks(before) == []
     assert loop_errors == []
+
+
+async def test_the_paho_calls_the_close_relies_on_exist() -> None:
+    aiomqtt = pytest.importorskip("aiomqtt")
+    paho = pytest.importorskip("paho.mqtt.client")
+    inner = aiomqtt.Client("127.0.0.1", 1)._client
+    assert isinstance(inner, paho.Client)
+    assert callable(inner.socket)
+    assert callable(inner._sock_close)
+    assert inner.socket() is None
+
+
+@pytest.fixture
+async def failing_close(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[list[Any]]:
+    """paho's socket close raising on an open socket, as a renamed private API would.
+    Yields the paho clients it left open; closes them and their keepalive tasks after."""
+    paho = pytest.importorskip("paho.mqtt.client")
+    monkeypatch.setattr(client_module, "_DROP_THROTTLE", LogThrottle())
+    real_close = paho.Client._sock_close
+    left: list[Any] = []
+
+    def renamed(self: Any) -> None:
+        if self.socket() is not None:
+            left.append(self)
+            raise AttributeError("_sock_close")
+        real_close(self)
+
+    monkeypatch.setattr(paho.Client, "_sock_close", renamed)
+    yield left
+    for inner in left:
+        real_close(inner)
+    for task in asyncio.all_tasks():
+        if "_misc_loop" in getattr(task.get_coro(), "__qualname__", ""):
+            task.cancel()
+
+
+async def test_a_socket_close_that_fails_ends_the_stop_with_one_warning(
+    rig: Rig,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    failing_close: list[Any],
+) -> None:
+    monkeypatch.setattr(client_module, "PUBLISH_TIMEOUT_SECONDS", 0.6)
+    monkeypatch.setattr(client_module, "RECONNECT_MIN_SECONDS", 5.0)
+    rig.broker.connack_delay = None
+    await rig.client.async_start([lock()])
+    await until(lambda: len(rig.broker.connects) == 1)
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    async with asyncio.timeout(10):
+        await rig.client.async_stop()  # waits for the CONNACK wait to end
+    assert loop.time() - started < 3.0  # no reconnect back-off
+    assert len(failing_close) == 1
+    assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []
+    assert len(_warnings(caplog, "socket")) == 1
+
+
+async def test_repeated_socket_close_failures_warn_once(
+    rig: Rig,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    failing_close: list[Any],
+) -> None:
+    monkeypatch.setattr(client_module, "PUBLISH_TIMEOUT_SECONDS", 0.2)
+    rig.broker.connack_delay = None
+    await rig.client.async_start([lock()])
+    await until(lambda: len(failing_close) >= 2)
+    await rig.client.async_stop()
+    assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []
+    assert len(_warnings(caplog, "socket")) == 1
+    assert len(_warnings(caplog, "connection %s")) == 1  # the connect's own error kept
 
 
 # ── the optional dependency ──────────────────────────────────────────────────
