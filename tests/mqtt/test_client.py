@@ -633,6 +633,20 @@ async def test_a_restart_during_the_connect_step_keeps_one_connection(rig: Rig) 
         await rig.client.async_stop()
 
 
+async def test_a_stop_right_after_a_restart_during_the_connect_step_leaves_no_connection(
+    rig: Rig,
+) -> None:
+    async with _SlowProxy(rig.broker.port, 0.5) as proxy:
+        rig.client._port = proxy.port
+        await rig.client.async_start([lock()])
+        await asyncio.sleep(0.2)  # the connect step waits on the proxy
+        await rig.client.async_update_devices([lock(), lock(LOCK2_SN, "T85L0")])
+        await asyncio.sleep(0.05)  # the restart waits for that step; the stop cancels again
+        await rig.client.async_stop()
+        await asyncio.sleep(0.6)
+        assert rig.broker.connected_clients == []
+
+
 # ── the optional dependency ──────────────────────────────────────────────────
 
 
