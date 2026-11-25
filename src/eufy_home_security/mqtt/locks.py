@@ -252,35 +252,43 @@ class MqttLocks:
             return True
 
         budget = LOCK_ANSWER_TIMEOUT if deadline is None else deadline - loop.time()
-        try:
-            await self._account.async_request(
+        asking = loop.create_task(
+            self._account.async_request(
                 serial,
                 encode_trans(cm2.P2P_COMMAND, payload),
                 match=match,
                 timeout=max(0.0, budget),
             )
-        except DeviceTimeoutError:
-            if not state.done():
+        )
+        ends: set[asyncio.Future[Any]] = {asking, state}
+        try:
+            await asyncio.wait(ends, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            if not asking.done():  # the state came first: the answer no longer counts
+                asking.cancel()
+                await asyncio.wait({asking})
+            if asking.done() and not asking.cancelled():
+                asking.exception()  # retrieved: the state may decide instead
+        if not state.done():  # the state decides when it is in
+            if isinstance(asking.exception(), DeviceTimeoutError):
                 raise DeviceTimeoutError(
                     f"{redact_serial(serial)}: no answer within {budget:.0f} s", device_sn=serial
-                ) from None
-        if replies and replies[-1].result is not LockResult.ACCEPTED:
-            raise CommandRejectedError(
-                cm2.P2P_COMMAND,
-                replies[-1].code,
-                f"{redact_serial(serial)}: {replies[-1].result.value}",
-                device_sn=serial,
-            )
-        if not state.done():
+                )
+            asking.result()
+            if replies[-1].result is not LockResult.ACCEPTED:
+                raise CommandRejectedError(
+                    cm2.P2P_COMMAND,
+                    replies[-1].code,
+                    f"{redact_serial(serial)}: {replies[-1].result.value}",
+                    device_sn=serial,
+                )
             budget = LOCK_CONFIRM_TIMEOUT if deadline is None else deadline - loop.time()
-            try:
-                async with asyncio.timeout(max(0.0, budget)):
-                    await asyncio.shield(state)
-            except TimeoutError:
+            await asyncio.wait({state}, timeout=max(0.0, budget))
+            if not state.done():
                 raise DeviceTimeoutError(
                     f"{redact_serial(serial)}: no {target.value} state within {budget:.0f} s",
                     device_sn=serial,
-                ) from None
+                )
         result = state.result()
         if result in FAULT_STATES:
             raise LockNotMovedError(

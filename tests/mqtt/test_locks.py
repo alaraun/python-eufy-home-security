@@ -115,13 +115,13 @@ async def test_a_status_report_with_an_error_code_fails_the_mqtt_command(
 async def test_a_status_report_before_the_answer_confirms_the_mqtt_command(
     rig: Rig, wifi_lock: FakeMqttLock
 ) -> None:
-    """The asked state reported before any answer ends the command once the answer wait
-    is over: the state counts, the missing answer does not."""
+    """The asked state reported before any answer ends the command at once: the state
+    counts, the missing answer does not."""
     wifi_lock.report_first, wifi_lock.answer = True, False
     account = await _served(rig)
     try:
-        async with asyncio.timeout(5):
-            assert await rig.eufy.async_lock(LOCK_SN, timeout=0.5) is LockState.LOCKED
+        async with asyncio.timeout(3):  # not after the 20 s answer wait
+            assert await rig.eufy.async_lock(LOCK_SN) is LockState.LOCKED
     finally:
         await account.async_stop()
 
