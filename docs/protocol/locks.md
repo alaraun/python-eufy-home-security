@@ -52,8 +52,10 @@ or parameter picks between them, and the library ports both.
 
 - **Serial IV**: the lock serial's UTF-8 bytes zero-padded to 16.
 - **AES**: AES-128-CBC with PKCS#7 padding, under the serial IV.
-- **Sequence number**: the codec takes the `seq_num` to send. For 1940 and 1930 it is the
-  lock's last sequence number plus one (the station reports it); for 1961 it comes from one
+- **Sequence number**: the codec takes the `seq_num` to send. For 1940 and 1930 a reported
+  sequence number `R` is stored as `R + 1` and each send uses the stored value plus one
+  (the first send after a report carries `R + 2`; the current Unix time plus one when
+  nothing is stored); for 1961 it comes from one
   counter shared by every lock, set to the last reported sequence number plus one and
   incremented after each command.
 - **User fields**: the lock member record's `admin_user_id` and `short_user_id` (hex text)
@@ -61,7 +63,8 @@ or parameter picks between them, and the library ports both.
   as an empty `A5` entry, 1961 by leaving the field out; 1930 needs its 2 bytes.
 - **Result**: an answer code 0 is accepted (the state change follows), anything else is
   refused; the 1940 answer also names "already unlocked" (48) and "already locked" (49).
-  A well-formed answer for another lock, another command or another time value raises
+  A well-formed answer for another lock, another command or another time value (both
+  times positive as signed 32-bit hex, as the app reads them, and different) raises
   `LockReplyMismatchError` (the caller keeps waiting); anything that does not decode raises
   `ProtocolError`.
 

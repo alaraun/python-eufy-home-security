@@ -61,7 +61,8 @@ _TIME_FIELD_IV: Final = b"OCK_WORLD'S_NO.1"
 _TIME_FIELD_USER_LEN: Final = 40
 _MEMBER_TYPE_OWN_KEY: Final = 2
 _MAX_NOISE: Final = 99
-_HEX: Final = re.compile(r"[0-9a-fA-F]+")
+_SIGNED_HEX: Final = re.compile(r"[+-]?[0-9a-fA-F]+")
+_INT32: Final = range(-(2**31), 2**31)
 
 _RESULTS: Final = {
     0: LockResult.ACCEPTED,
@@ -193,7 +194,10 @@ def build_on_off_request(
 ) -> Cm2Request:
     """The 1940 lock/unlock request for the lock ``serial``.
 
-    ``seq_num`` is the value to send (the lock's last sequence number plus one),
+    ``seq_num`` is the value to send: as the eufy app keeps it, a reported sequence
+    number ``R`` is stored as ``R + 1`` and each send uses the stored value plus one
+    (so the first send after a report carries ``R + 2``), the current Unix time plus one
+    when nothing is stored.
     ``time_value`` a :func:`lock_time`, ``timestamp`` the current Unix time; ``hkdf``
     picks the HKDF variant (:func:`eufy_home_security.devices.lock_routes.lock_route`).
     """
@@ -231,26 +235,28 @@ def _text(answer: Mapping[str, object], name: str) -> str:
     return value
 
 
-def _answer_time(value: object) -> int | None:
-    """The answer's ``time`` as a number; None when it is absent or not hex."""
-    if isinstance(value, str) and _HEX.fullmatch(value):
-        return int(value, 16)
-    return None
+def _answer_time(value: object) -> int:
+    """The answer's ``time`` read as the eufy app reads it: a signed 32-bit hex number,
+    -1 when it is absent, not hex or out of that range."""
+    if isinstance(value, str) and _SIGNED_HEX.fullmatch(value):
+        number = int(value, 16)
+        if number in _INT32:
+            return number
+    return -1
 
 
 def _answer_key(request: Cm2Request, time_text: str) -> bytes:
+    """The key an encrypted answer opens with, from the answer's own ``time``."""
     if request.hkdf:
         user, salt = open_hkdf_time_field(time_text)
         return hkdf_key(user, salt)
-    if len(time_text) != _TIME_HEX_DIGITS:
-        raise ProtocolError(f"lock answer time {time_text!r} is not 8 hex digits")
     try:
-        answer_time = int(time_text, 16)
+        time_bytes = bytes.fromhex(time_text)
     except ValueError as exc:
         raise ProtocolError(f"lock answer time {time_text!r} is not hex") from exc
-    if answer_time != request.time_value:
-        raise LockReplyMismatchError("lock answer carries another time value than the request")
-    return time_key(request.user_id, answer_time)
+    if len(time_text) != _TIME_HEX_DIGITS:
+        raise ProtocolError(f"lock answer time {time_text!r} is not 8 hex digits")
+    return request.user_id[-_KEY_USER_CHARS:].encode() + time_bytes
 
 
 def parse_on_off_reply(answer: Mapping[str, object], request: Cm2Request) -> LockReply:
@@ -265,10 +271,10 @@ def parse_on_off_reply(answer: Mapping[str, object], request: Cm2Request) -> Loc
     if (frame.function_type, frame.command) != (FUNCTION_TYPE, COMMAND_ON_OFF):
         raise LockReplyMismatchError(f"lock answer is for command {frame.command:#x}")
     if not request.hkdf:
-        # A positive time other than the request's marks an answer to another request,
-        # whether or not the answer is encrypted; an absent or unreadable one is no mark.
+        # As the eufy app: an answer whose time and the request's are both positive and
+        # differ answers another request, whether or not it is encrypted.
         answer_time = _answer_time(answer.get("time"))
-        if answer_time and answer_time != request.time_value:
+        if answer_time > 0 and request.time_value > 0 and answer_time != request.time_value:
             raise LockReplyMismatchError("lock answer carries another time value than the request")
     body = frame.body
     if frame.encrypted:
