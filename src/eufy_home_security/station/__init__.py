@@ -4127,8 +4127,9 @@ class Station:
         query). Otherwise the event's camera's recordings are listed around the event's
         time and matched: the row named by the event's ``video_path``; else the row
         whose start lies within :data:`RECORDING_MATCH_WINDOW` of the event's time
-        (bounds included), the closest start first, on a tie the one that began first,
-        then the lower ``record_id``; else the row that holds that time (it began
+        (bounds included), a row that ended before the event's time after every other,
+        then the closest start, on a tie the one that began first, then the lower
+        ``record_id``; else the row that holds that time (it began
         earlier and had not ended by then, or runs still), the latest start first. So a
         second detection of the same camera inside one clip gets that clip's row. The
         window is inferred, not measured on a HomeBase 2. The listing goes back from the
@@ -4144,7 +4145,11 @@ class Station:
 
         The answer is ``SETTLED`` (the row's end lies ``quiet`` or more in the past, as
         :meth:`recording_settled` says), ``RECORDING`` (``retry_at``: the row's end plus
-        ``quiet``, or :data:`RECORDING_MATCH_RETRY` from now while it has no end) or
+        ``quiet``, or :data:`RECORDING_MATCH_RETRY` from now while it has no end; a row
+        that ended before the event, which only matches when no other row in the window
+        does, stays ``RECORDING``, asked again every :data:`RECORDING_MATCH_RETRY`, until
+        :data:`RECORDING_MATCH_GIVE_UP` after the event, since the event's own row may
+        still be listed; then it is ``SETTLED``) or
         ``NOT_LISTED`` (``retry_at``: :data:`RECORDING_MATCH_RETRY` from now; ``offset_s``:
         the camera's nearest listed recording). ``retry_at`` is never later than
         :data:`RECORDING_MATCH_GIVE_UP` after the event, and None past it.
@@ -4195,7 +4200,8 @@ class Station:
         ``timeout``) and, until it answers ``SETTLED``, sleeps to its ``retry_at`` and
         asks again. The wait is the clip's length plus ``quiet`` plus at most one
         :data:`RECORDING_MATCH_RETRY`, never past :data:`RECORDING_MATCH_GIVE_UP` after
-        the event (180 s); each ask lists the camera's recordings of those minutes, and
+        the event (180 s), which is also when a row that ended before the event is taken
+        when no other came; each ask lists the camera's recordings of those minutes, and
         the waits of one camera's detections share their listings. A
         second detection of the same camera inside one clip gets the same row. For the
         trigger frame and thumbnail pass :meth:`event_with_recording` to

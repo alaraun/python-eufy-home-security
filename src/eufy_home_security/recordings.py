@@ -73,7 +73,8 @@ class DetectionRecordingState(StrEnum):
     SETTLED = "settled"
     """The row is listed and its clip is finished: download it, take its trigger frame."""
     RECORDING = "recording"
-    """The row is listed but its clip may still grow: ask again at ``retry_at``."""
+    """The row is listed but its clip may still grow, or it ended before the detection and
+    the detection's own row may still be listed: ask again at ``retry_at``."""
     NOT_LISTED = "not_listed"
     """No row of the detection is listed: ask again at ``retry_at``, or none comes."""
 

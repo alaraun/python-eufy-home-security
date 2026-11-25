@@ -1470,8 +1470,9 @@ async def test_a_look_lists_back_to_the_oldest_detection_of_the_camera_still_sea
 async def test_a_burst_of_detections_of_one_camera_shares_the_listings_of_their_waits(
     hb2: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    started = datetime.now(UTC).replace(microsecond=0) + timedelta(seconds=1)
-    record_id = fake.add_detection_recording(SYNTHETIC.camera_sn, started, 1.0, listed_after=0.5)
+    monkeypatch.setattr(station_module, "RECORDING_MATCH_GIVE_UP", 10.0)
+    started = datetime.now(UTC).replace(microsecond=0) - timedelta(seconds=3)
+    record_id = fake.add_detection_recording(SYNTHETIC.camera_sn, started, 5.0)
     events = [_detection(started + timedelta(seconds=s), station_sn=HB2_SN) for s in (3, 0, 2, 1)]
     states = _states(hb2, monkeypatch)
     async with asyncio.timeout(6.0):
@@ -1761,3 +1762,75 @@ async def test_a_row_before_a_detections_own_bound_never_holds_it(
     assert older.record is not None  # it holds the older detection
     newer = await station.async_recording_for_detection(_detection(newer_event))
     assert newer.state is DetectionRecordingState.NOT_LISTED
+
+
+# ── a clip that ended before the detection ───────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("looked_after", "settled"), [(60, False), (RECORDING_MATCH_GIVE_UP, True)]
+)
+async def test_a_clip_that_ended_before_the_detection_is_its_recording_only_at_the_bound(
+    station: Station,
+    fake: FakeStation,
+    monkeypatch: pytest.MonkeyPatch,
+    looked_after: int,
+    settled: bool,
+) -> None:
+    """The camera's previous short clip lies in the window but ended before the
+    detection: the detection's own row may still come, so the clip is the answer only
+    once the search's bound has passed."""
+    event = NOW.replace(microsecond=0) - timedelta(seconds=looked_after)
+    now = _freeze(monkeypatch, NOW)
+    previous = event - timedelta(seconds=8)
+    end = (event - timedelta(seconds=3)).astimezone()
+    fake.rows = [
+        _at(previous, SYNTHETIC.camera_sn, _dayed(previous, 1), end_time=end.strftime(FORMAT))
+    ]
+    found = await station.async_recording_for_detection(_detection(event))
+    assert found.record is not None
+    assert (found.record.record_id, found.offset_s) == (_dayed(previous, 1), -8.0)
+    if settled:
+        assert (found.state, found.retry_at) == (DetectionRecordingState.SETTLED, None)
+    else:
+        assert found.state is DetectionRecordingState.RECORDING
+        assert found.retry_at == now + timedelta(seconds=RECORDING_MATCH_RETRY)
+
+
+@pytest.mark.usefixtures("no_reuse")
+async def test_in_the_window_a_row_that_ended_before_the_detection_ranks_last(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    event = _whole(today, 120)
+    previous = event - timedelta(seconds=4)  # nearer, but over a second before
+    own = event + timedelta(seconds=6)
+    end = (event - timedelta(seconds=1)).astimezone()
+    fake.rows = [
+        _at(own, SYNTHETIC.camera_sn, _dayed(own, 2)),
+        _at(previous, SYNTHETIC.camera_sn, _dayed(previous, 1), end_time=end.strftime(FORMAT)),
+    ]
+    found = await station.async_recording_for_detection(_detection(event))
+    assert found.record is not None
+    assert (found.state, found.record.record_id) == (
+        DetectionRecordingState.SETTLED,
+        _dayed(own, 2),
+    )
+    fake.rows[1]["end_time"] = (end + timedelta(seconds=1)).strftime(FORMAT)  # ends at the event
+    found = await station.async_recording_for_detection(_detection(event))
+    assert found.record is not None
+    assert found.record.record_id == _dayed(previous, 1)  # the closer start wins again
+
+
+@pytest.mark.usefixtures("short_match")
+async def test_a_wait_takes_the_detections_own_row_over_the_clip_before_it(
+    hb2: Station, fake: FakeStation
+) -> None:
+    started = datetime.now(UTC).replace(microsecond=0)
+    fake.add_detection_recording(SYNTHETIC.camera_sn, started - timedelta(seconds=4), 1.0)
+    own = fake.add_detection_recording(SYNTHETIC.camera_sn, started, 1.0, listed_after=1.0)
+    async with asyncio.timeout(6.0):
+        row = await hb2.async_wait_recording_for_detection(
+            _detection(started, station_sn=HB2_SN), quiet=1.1
+        )
+    assert row is not None
+    assert row.record_id == own

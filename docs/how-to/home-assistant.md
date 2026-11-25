@@ -2437,30 +2437,33 @@ its trigger frame. The library finds it:
 - `await station.async_wait_recording_for_detection(event, *, quiet=RECORDING_QUIET,
   timeout=None)` returns the detection's `HistoryRecord` once it has settled
   (`recording_settled`), or None when none was listed by `RECORDING_MATCH_GIVE_UP`
-  (180 s) after the event. It lists the camera's recordings around the event's time,
-  every `RECORDING_MATCH_RETRY` (15 s) while none is listed, and again when a running
-  row's end plus `quiet` has passed. A listing goes back only to the page that reaches
-  180 s before the event (or before the camera's oldest detection still searched), so a
-  busy day costs one page per look, and the waits of one camera's detections share their
-  listings (one in flight, or one finished less than `RECORDING_MATCH_FRESH`, 5 s, ago). The wait is the clip's length plus `quiet` (30 s)
-  plus at most one re-list, never more than 180 s after the event (the longest clip
-  length the eufy app offers is 120 s). Run it as a background task per detection and
+  (180 s) after the event. It lists the camera's recordings around the event's time, every
+  `RECORDING_MATCH_RETRY` (15 s) while none is listed, and again when a running row's end
+  plus `quiet` has passed. A listing goes back only to the page that reaches 180 s before
+  the event (or before the camera's oldest detection still searched), so a busy day costs
+  one page per look, and the waits of one camera's detections share their listings (one
+  in flight, or one finished less than `RECORDING_MATCH_FRESH`, 5 s, ago). The wait is
+  the clip's length plus `quiet` (30 s) plus at most one re-list, never more than 180 s
+  after the event (the longest clip length the eufy app offers is 120 s). A row that
+  ended before the event (the camera's previous short clip) is taken only when no other
+  row matched by then: until 180 s after the event it answers `RECORDING`, since the
+  event's own row may still be listed. Run it as a background task per detection and
   cancel it at unload; `timeout` bounds each history query.
 - The match: the row named by the event's `video_path` when it names one; else the
   camera's row that started within `RECORDING_MATCH_WINDOW` (10 s before to 10 s after
-  the event's time, both included), the closest start first, on a tie the one that began
-  first, then the lower `record_id`; else the camera's row that holds the event's time (it
-  began earlier and had not ended by then, or still runs), the latest start first. A row of
-  another camera never matches. So a second detection of the same camera inside one clip
-  gets that clip's row: key the copy and the frame by its `ref` and do it once. A row
-  time written without an offset (a HomeBase 2's) is read in the station's zone (its cloud
-  entry's `time_zone`), not the host's; in the hour a clock set back repeats, as the
-  reading nearer the event. An event
-  that names a `record_id` with a day is looked up by it instead. The window is inferred,
-  not measured on a HomeBase 2: on a HomeBase 3 a recording started in the second of its
-  detection's time (one sample), and a cloud push without the station's own time carries
-  one about 3 s later. The eufy app itself opens a push's clip only from the push's own
-  recording fields.
+  the event's time, both included), a row that ended before the event's time after every
+  other, then the closest start, on a tie the one that began first, then the lower
+  `record_id`; else the camera's row that holds the event's time (it began earlier and
+  had not ended by then, or still runs), the latest start first. A row of another camera
+  never matches. So a second detection of the same camera inside one clip gets that
+  clip's row: key the copy and the frame by its `ref` and do it once. A row time written
+  without an offset (a HomeBase 2's) is read in the station's zone (its cloud entry's
+  `time_zone`), not the host's; in the hour a clock set back repeats, as the reading
+  nearer the event. An event that names a `record_id` with a day is looked up by it
+  instead. The window is inferred, not measured on a HomeBase 2: on a HomeBase 3 a
+  recording started in the second of its detection's time (one sample), and a cloud push
+  without the station's own time carries one about 3 s later. The eufy app itself opens a
+  push's clip only from the push's own recording fields.
 - `station.event_with_recording(event, record)` is the event naming that row (its
   `video_path`, its `record_id`, its `thumb_path` when that is a valid still path): pass
   it to `async_event_image(..., ImageSource.TRIGGER_FRAME)` for the trigger frame, and to

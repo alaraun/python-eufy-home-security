@@ -63,6 +63,11 @@ def _timed_rows(
     return timed
 
 
+def _ended_before(timed: _Timed, moment: datetime) -> bool:
+    """Whether the row ended before ``moment``."""
+    return timed.ended is not None and timed.ended < moment
+
+
 def _detection_match(
     timed: list[_Timed],
     event_at: datetime,
@@ -73,10 +78,11 @@ def _detection_match(
     """The row of a detection at ``event_at``, or None.
 
     A row named by ``video_path`` wins; else the row whose start lies within
-    ``early``..``late`` seconds of the event (both included), the closest start first,
-    on a tie the one that began first, then the lower ``record_id``; else the row that
-    holds the event (began before the window and has not ended before the event, or
-    has no end yet), the latest start first.
+    ``early``..``late`` seconds of the event (both included): a row that ended before the
+    event after every other, then the closest start first, on a tie the one that began
+    first, then the lower ``record_id``; else the row that holds
+    the event (began before the window and has not ended before the event, or has no end
+    yet), the latest start first.
     """
     if video_path is not None:
         named = [c for c in timed if c.row.video_path == video_path]
@@ -84,7 +90,10 @@ def _detection_match(
             return named[0]
     near = [c for c in timed if early <= c.offset <= late]
     if near:
-        return min(near, key=lambda c: (abs(c.offset), c.offset, c.row.record_id))
+        return min(
+            near,
+            key=lambda c: (_ended_before(c, event_at), abs(c.offset), c.offset, c.row.record_id),
+        )
     holding = [c for c in timed if c.offset < early and (c.ended is None or c.ended >= event_at)]
     if holding:
         return max(holding, key=lambda c: (c.offset, -c.row.record_id))
@@ -116,9 +125,22 @@ class _MatchClock:
         offset: float | None,
         started: datetime | None,
         ended: datetime | None,
+        *,
+        provisional: bool = False,
     ) -> DetectionRecording:
         """The detection's row, settled or still recording, with its start and end read
-        in the station's zone."""
+        in the station's zone. A ``provisional`` row (one that ended before the event: a
+        better one may still be listed) stays ``RECORDING``, asked again after the retry,
+        until the bound."""
+        if provisional:
+            retry_at = self._bounded(self.now + timedelta(seconds=self.retry), self.event_at)
+            if retry_at is not None:
+                return DetectionRecording(
+                    state=DetectionRecordingState.RECORDING,
+                    record=row,
+                    retry_at=retry_at,
+                    offset_s=offset,
+                )
         if ended is not None and (self.now - ended).total_seconds() >= self.quiet:
             return DetectionRecording(
                 state=DetectionRecordingState.SETTLED, record=row, offset_s=offset
@@ -435,7 +457,13 @@ class StationHistory:
             nearest = min(timed, key=lambda c: abs(c.offset), default=None)
             return clock.not_listed(None if nearest is None else nearest.offset)
         started = event_at + timedelta(seconds=found.offset)
-        return clock.of_row(found.row, found.offset, started, found.ended)
+        return clock.of_row(
+            found.row,
+            found.offset,
+            started,
+            found.ended,
+            provisional=_ended_before(found, event_at),
+        )
 
     @staticmethod
     async def _shared_look(
