@@ -80,12 +80,7 @@ def key_user_id(
     (``member_user_id``), holds an admin id and its ``member_type`` is not 2; the
     account's own user id otherwise.
     """
-    if (
-        admin_user_id
-        and member_type is not None
-        and member_type != _MEMBER_TYPE_OWN_KEY
-        and member_user_id == account_user_id
-    ):
+    if admin_user_id and member_type != _MEMBER_TYPE_OWN_KEY and member_user_id == account_user_id:
         return admin_user_id
     return account_user_id
 
@@ -158,9 +153,7 @@ def open_hkdf_time_field(text: str) -> tuple[str, int]:
     if len(plain) < _TIME_FIELD_USER_LEN + 4:
         raise ProtocolError(f"lock answer time holds {len(plain)} bytes, not a user id and salt")
     user = plain[:_TIME_FIELD_USER_LEN].decode(errors="replace")
-    salt = int.from_bytes(
-        plain[_TIME_FIELD_USER_LEN : _TIME_FIELD_USER_LEN + 4], "big", signed=True
-    )
+    salt = int.from_bytes(plain[_TIME_FIELD_USER_LEN : _TIME_FIELD_USER_LEN + 4], "big")
     return user, salt
 
 

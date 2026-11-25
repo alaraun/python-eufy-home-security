@@ -52,9 +52,16 @@ def test_lock_public_key_reads_64_bytes_x_then_y() -> None:
     assert key.public_numbers() == LOCK_PRIV.public_key().public_numbers()
 
 
-@pytest.mark.parametrize("raw", [LOCK_PUB64[:63], b"\x04" + LOCK_PUB64, bytes(64)])
-def test_lock_public_key_refuses_anything_else(raw: bytes) -> None:
-    with pytest.raises(ValueError, match="lock public key"):
+@pytest.mark.parametrize(
+    ("raw", "match"),
+    [
+        (LOCK_PUB64[:63], "64 bytes"),
+        (b"\x04" + LOCK_PUB64, "64 bytes"),
+        (bytes(64), "not a P-256 point"),
+    ],
+)
+def test_lock_public_key_refuses_anything_else(raw: bytes, match: str) -> None:
+    with pytest.raises(ValueError, match=match):
         anker.parse_lock_public_key(raw)
 
 
@@ -278,6 +285,11 @@ def test_1930_answer_for_another_command_or_lock_is_not_ours() -> None:
         anker.parse_1930_reply(_answer_1930(0, command=9), _request_1930())
     with pytest.raises(LockReplyMismatchError, match="serial"):
         anker.parse_1930_reply(_answer_1930(0, serial="T8501P2000099999"), _request_1930())
+
+
+def test_1930_answer_with_an_empty_payload_names_it() -> None:
+    with pytest.raises(ProtocolError, match="no lock_payload"):
+        anker.parse_1930_reply({"dev_sn": SERIAL_1930, "lock_payload": ""}, _request_1930())
 
 
 @pytest.mark.parametrize(

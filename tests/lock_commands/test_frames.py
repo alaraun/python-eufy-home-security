@@ -42,6 +42,21 @@ def test_cm2_frame_refuses_a_command_code_over_11_bits() -> None:
     frames.cm2_frame(b"", command=0x7FF, function_type=2, version=3, encrypted=True)
 
 
+def test_frames_refuse_a_total_length_over_16_bits() -> None:
+    fits = bytes(0xFFFF - 10)  # head 9 + body + check byte == 0xFFFF
+    assert (
+        len(frames.cm2_frame(fits, command=1, function_type=2, version=3, encrypted=False))
+        == 0xFFFF
+    )
+    with pytest.raises(ValueError, match="65535"):
+        frames.cm2_frame(fits + b"\0", command=1, function_type=2, version=3, encrypted=False)
+
+
+def test_parse_cm2_frame_reads_an_11_bit_command() -> None:
+    frame = frames.cm2_frame(b"\1", command=0x523, function_type=2, version=3, encrypted=False)
+    assert frames.parse_cm2_frame(frame).command == 0x523
+
+
 def test_cm2_frame_round_trip() -> None:
     frame = frames.cm2_frame(b"abc", command=35, function_type=2, version=3, encrypted=True)
     parsed = frames.parse_cm2_frame(frame)

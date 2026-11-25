@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from eufy_home_security.exceptions import LockReplyMismatchError, ProtocolError
 from eufy_home_security.lock_commands import LockAction, LockReply, LockResult, cm2, frames
+from eufy_home_security.lock_commands.actions import cbc_encrypt
 from eufy_home_security.testing import SYNTHETIC
 
 SERIAL = "T8502" + SYNTHETIC.station_sn[5:]
@@ -65,6 +66,7 @@ def _hkdf(ikm: bytes, salt: bytes, info: bytes, length: int) -> bytes:
         (1, "someone-else", "owner-admin-id", "me"),  # a record for another account
         (1, "me", "", "me"),  # no admin id recorded
         (None, None, None, "me"),  # no member record
+        (None, "me", "owner-admin-id", "owner-admin-id"),  # no type recorded: not type 2
     ],
 )
 def test_key_user_id_follows_the_apps_member_rule(
@@ -114,6 +116,7 @@ def test_lock_time_ors_the_noise_into_the_seconds() -> None:
     with pytest.raises(ValueError, match="noise"):
         cm2.lock_time(NOW, -1)
     assert cm2.lock_time(NOW, 99) == NOW | 99
+    assert cm2.lock_time(NOW + 37, 5) == (NOW + 37) | 5  # OR, not a sum
 
 
 def test_time_key_is_the_user_ids_last_12_chars_and_the_time() -> None:
@@ -263,6 +266,31 @@ def test_answer_for_another_command_is_not_ours() -> None:
         cm2.parse_on_off_reply(_answer(0, command=0x4A), _request())
 
 
+def test_answer_of_another_function_type_is_not_ours() -> None:
+    body = cm2.seal_body(bytes([0]), cm2.time_key(USER_ID, TIME), _iv())
+    frame = frames.cm2_frame(body, command=0x23, function_type=3, version=3, encrypted=True)
+    answer = {"dev_sn": SERIAL, "lock_payload": frame.hex(), "time": f"{TIME:08x}"}
+    with pytest.raises(LockReplyMismatchError, match="command"):
+        cm2.parse_on_off_reply(answer, _request())
+
+
+@pytest.mark.parametrize(
+    ("answer", "match"),
+    [
+        ({"dev_sn": "", "lock_payload": "ff", "time": "0"}, "no dev_sn"),
+        ({"dev_sn": SERIAL, "lock_payload": "", "time": "0"}, "no lock_payload"),
+        (
+            {"dev_sn": SERIAL, "lock_payload": _answer(0)["lock_payload"], "time": f"00{TIME:08x}"},
+            "8 hex",
+        ),
+    ],
+)
+def test_answer_field_errors_name_the_field(answer: dict[str, object], match: str) -> None:
+    with pytest.raises(ProtocolError, match=match) as exc:
+        cm2.parse_on_off_reply(answer, _request())
+    assert type(exc.value) is ProtocolError
+
+
 def test_answer_from_another_lock_is_not_ours() -> None:
     with pytest.raises(LockReplyMismatchError, match="serial"):
         cm2.parse_on_off_reply(_answer(0, serial="T8502P2000099999"), _request())
@@ -306,6 +334,12 @@ def test_answer_with_an_empty_body_raises_protocol_error() -> None:
     answer = {"dev_sn": SERIAL, "lock_payload": frame.hex(), "time": f"{TIME:08x}"}
     with pytest.raises(ProtocolError, match="empty"):
         cm2.parse_on_off_reply(answer, _request())
+
+
+def test_hkdf_answer_time_must_hold_a_user_id_and_salt() -> None:
+    short = cbc_encrypt(b"x" * 43, b"ANKER_SMARTLOCK_", b"OCK_WORLD'S_NO.1").hex()
+    with pytest.raises(ProtocolError, match="not a user id and salt"):
+        cm2.parse_on_off_reply(_answer(0, time_field=short), _request(hkdf=True))
 
 
 @pytest.mark.parametrize(
