@@ -39,7 +39,7 @@ from eufy_home_security.mqtt.locks import MqttLocks, mqtt_lock_control
 from eufy_home_security.p2p.did import static_key
 from eufy_home_security.p2p.session import P2PCredentials, StationSession
 from eufy_home_security.station import Station
-from eufy_home_security.station.locks import ListedLocks
+from eufy_home_security.station.locks import LOCK_REPORT_SLACK_SECONDS, ListedLocks
 from eufy_home_security.testing import (
     SYNTHETIC,
     FakeCloud,
@@ -78,12 +78,16 @@ async def _served(rig: Rig, device: CloudDevice | None = None) -> EufyMqttAccoun
 
 
 def _listed_lock_commands(
-    account: object, device: CloudDevice | None = None, bus: EventBus | None = None
+    account: object,
+    device: CloudDevice | None = None,
+    bus: EventBus | None = None,
+    states: ListedLocks | None = None,
 ) -> MqttLocks:
     """Lock commands over a stand-in ``account`` for ``device`` (default :func:`lock`),
-    a lock no station serves, its state kept by a :class:`ListedLocks` on ``bus``."""
+    a lock no station serves, its state kept by ``states`` (default a
+    :class:`ListedLocks` on ``bus``)."""
     device = device or lock()
-    states = ListedLocks(bus or EventBus(), lambda: [device])
+    states = states or ListedLocks(bus or EventBus(), lambda: [device])
     return MqttLocks(
         account,  # type: ignore[arg-type]
         user=AccountUser(),
@@ -715,17 +719,38 @@ async def test_a_lock_command_is_sent_when_a_newer_push_says_otherwise_than_mqtt
 async def test_a_push_older_than_the_mqtt_report_keeps_the_mqtt_reading(
     rig: Rig, wifi_lock: FakeMqttLock
 ) -> None:
-    """The newest report wins: a push dated before the lock's MQTT report is dropped and
-    the next lock command is answered from the reading, sending nothing."""
+    """The newest report wins: a push dated before the lock's MQTT report by more than the
+    slack is dropped and the next lock command is answered from the reading, sending
+    nothing."""
     account = await _served(rig)
     try:
-        before = int(time.time() * 1000) - 1
+        before = int(time.time() * 1000) - LOCK_REPORT_SLACK_SECONDS * 1000 - 1
         assert await rig.eufy.async_lock(LOCK_SN, timeout=5) is LockState.LOCKED
         rig.eufy._deliver(_push(258, before))
         assert await rig.eufy.async_lock(LOCK_SN, timeout=5) is LockState.LOCKED
     finally:
         await account.async_stop()
     assert [a for a, _ in wifi_lock.received] == [LockAction.LOCK]
+
+
+async def test_a_push_inside_the_slack_before_an_mqtt_report_is_taken_and_commands_go_out() -> None:
+    """The lock's MQTT report is dated by its arrival, a push by its event time on the
+    lock's or the cloud's clock. Unlocked 1.5 s after a locked report, on a clock 2 s
+    behind, the push is dated before the report: it is taken, and as the order of the two
+    is unknown, neither command is answered from the reading."""
+    now = 1_700_000_000_000
+    device = lock()
+    states = ListedLocks(EventBus(), lambda: [device], now_ms=lambda: now)
+    account = _Recording()
+    locks = _listed_lock_commands(account, device, states=states)
+    control = mqtt_lock_control(device)
+    states.on_report(LOCK_SN, 4)
+    assert states.on_push(_push(258, now + 1_500 - 2_000)) is True
+    assert states.reading(LOCK_SN).state is LockState.UNLOCKED  # type: ignore[union-attr]
+    for action in (LockAction.LOCK, LockAction.UNLOCK):
+        with pytest.raises(DeviceTimeoutError):
+            await locks.async_command(device, action, control=control, timeout=5)
+    assert len(account.waits) == 2
 
 
 async def test_each_report_taken_emits_one_event_and_sets_the_public_reading(

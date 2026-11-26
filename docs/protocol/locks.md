@@ -183,10 +183,12 @@ acknowledgement alone never counts. In order:
    `MqttAccountRequiredError`; a command still waiting for the same lock raises
    `DeviceBusyError`. A lock whose reading already is the asked state returns it at once
    and sends nothing (the app's lock card offers lock only for a lock it shows open,
-   unlock otherwise). The reading is the lock's one merged reading of every source (its
-   station's reports, pushes, its status reports over the station or MQTT; the newest
-   report wins, [events.md](events.md#lock-pushes-declared-app)) on both paths, never the
-   MQTT reports alone. An unknown or offline reading refuses nothing.
+   unlock otherwise), unless that reading is a push that may be older than the report it
+   replaced (another state, dated no later, on another clock): then the command is sent.
+   The reading is the lock's one merged reading of every source (its station's reports,
+   pushes, its status reports over the station or MQTT; the newest report wins,
+   [events.md](events.md#lock-pushes-declared-app)) on both paths, never the MQTT reports
+   alone. An unknown or offline reading refuses nothing.
 2. **The station's result** (P2P): a non-zero code raises `CommandRejectedError(code)`,
    except -151 (sequence number refused) on the 1940 and 1930 forms, where the wait for the
    lock's answer goes on, as in the app. On the 1961 form the station's result is the

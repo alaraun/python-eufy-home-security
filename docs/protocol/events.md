@@ -651,9 +651,12 @@ device list's copy, its pushes and its MQTT status reports. Every source feeds o
 per lock, and the newest report wins, with the guard mode's bounds:
 
 - a push (dated by its event time, by its arrival without one) is dropped when it is more
-  than 300 s old, older than the last push or status report taken for that lock, or more
-  than 30 s older than the lock's last dated parameter report (its arrival over P2P, the
-  cloud's upload time of its copy);
+  than 300 s old, older than the last push taken for that lock, or more than 30 s older
+  than the lock's last status report or dated parameter report (its arrival over P2P or
+  MQTT, the cloud's upload time of its copy). A push of another state dated no later than
+  the report it replaces is taken, but the two clocks leave their order unknown: until the
+  next report taken, a lock command is sent whatever the reading says
+  ([locks.md](locks.md#commands));
 - the lock's own status report (dated by its arrival) is always taken, and its code
   becomes the lock's last value;
 - a parameter report is taken when its value differs from the lock's last value, and also

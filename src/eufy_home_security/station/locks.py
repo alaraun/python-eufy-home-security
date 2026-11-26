@@ -40,8 +40,8 @@ LOCK_PUSH_MAX_AGE_SECONDS: Final = GUARD_PUSH_MAX_AGE_SECONDS
 """A lock push whose event time is older than this is a redelivery, not news."""
 LOCK_REPORT_SLACK_SECONDS: Final = GUARD_REPORT_SLACK_SECONDS
 """A lock push (or a cloud copy of the lock-state parameter) older than the lock's last
-report by more than this is about an earlier change and is dropped; one inside it (the
-push announcing the change the report carries, on another clock) is taken."""
+report by more than this is about an earlier change and is dropped; one inside it is
+taken, as it may be the newer change on another clock."""
 
 _SOURCES: Final[Mapping[ValueSource, LockStateSource]] = {
     ValueSource.P2P: LockStateSource.P2P,
@@ -98,8 +98,11 @@ class LockStates:
       is dropped when it dates from before the lock's reading by more than
       :data:`LOCK_REPORT_SLACK_SECONDS`; an undated copy never replaces a dated reading;
     * a push is dropped when more than :data:`LOCK_PUSH_MAX_AGE_SECONDS` old, older than
-      the last push or status report taken, or older than the lock's last dated parameter
-      report by more than :data:`LOCK_REPORT_SLACK_SECONDS`;
+      the last push taken, or older than the lock's last own status report or dated
+      parameter report by more than :data:`LOCK_REPORT_SLACK_SECONDS` (those are dated by
+      their arrival or the cloud, a push by the lock's or the cloud's clock). A push of
+      another state dated no later than the report it replaces may be older or newer than
+      it: the reading is unsettled (:meth:`settled`) until the next report taken;
     * the lock's own status report is always taken.
 
     A command of this client the lock took makes it read locking or unlocking
@@ -119,8 +122,13 @@ class LockStates:
         lock's own report)."""
         self._push_ms: dict[str, int] = {}
         """Per lock, the time of the last push or own status report taken (epoch ms)."""
+        self._pushed_ms: dict[str, int] = {}
+        """Per lock, the event time of the last push taken (epoch ms)."""
         self._report_ms: dict[str, int] = {}
-        """Per lock, the latest time a dated parameter report dates from (epoch ms)."""
+        """Per lock, the latest time a dated parameter report or an own status report dates
+        from (epoch ms)."""
+        self._unsettled: set[str] = set()
+        """Locks whose reading is a push that may be older than the report it replaced."""
         self._watchers: dict[str, list[Callable[[LockReading], None]]] = {}
         self._moving: dict[str, _Move] = {}
         """Per lock, locking or unlocking: a command of this client the lock took, while it
@@ -154,6 +162,14 @@ class LockStates:
         (:meth:`begin_move`), else its last report taken."""
         move = self._moving.get(device_sn)
         return move.reading if move is not None else self._readings.get(device_sn)
+
+    def settled(self, device_sn: str, state: LockState) -> bool:
+        """Whether the lock's reading is ``state`` and no report taken may be newer than it:
+        a lock command for ``state`` then has nothing to do. False while the reading is a
+        push of another state dated no later than the report it replaced (the order of the
+        two is unknown), so the command is sent."""
+        reading = self.reading(device_sn)
+        return reading is not None and reading.state is state and device_sn not in self._unsettled
 
     def serves(self, device_sn: str) -> bool:
         """Whether ``device_sn`` is one of the devices these states are kept for (its own
@@ -242,22 +258,33 @@ class LockStates:
         at = now if event.event_time_ms is None else event.event_time_ms
         if (
             now - at > LOCK_PUSH_MAX_AGE_SECONDS * 1000
-            or at < self._push_ms.get(device_sn, at)
+            or at < self._pushed_ms.get(device_sn, at)
             or at < self._report_ms.get(device_sn, at) - LOCK_REPORT_SLACK_SECONDS * 1000
         ):
             _LOGGER.debug("%s: dropping a lock push older than its state", redact_serial(device_sn))
             return False
-        self._push_ms[device_sn] = at
+        state = PUSH_STATES[event_type]
+        unsettled = self._order_unknown(device_sn, at, state)
+        self._push_ms[device_sn] = self._pushed_ms[device_sn] = at
         self._set(
             device_sn,
             LockReading(
-                state=PUSH_STATES[event_type],
+                state=state,
                 source=LockStateSource.PUSH,
                 event_type=event_type,
                 observed_at=at / 1000,
             ),
+            unsettled=unsettled,
         )
         return True
+
+    def _order_unknown(self, device_sn: str, at: int, state: LockState) -> bool:
+        """Whether a push of ``state`` dated ``at`` may be older than the report it replaces:
+        another state, dated no later than that report (on another clock)."""
+        replaced = self._readings.get(device_sn)
+        if replaced is None or (held := _ms(replaced.observed_at)) is None:
+            return False
+        return at <= held and state is not replaced.state
 
     def on_report(self, device_sn: str, state_code: int) -> None:
         """Take the lock's own status report (a lock-state code), news from now; its code
@@ -265,6 +292,7 @@ class LockStates:
         news."""
         now = self._now_ms()
         self._push_ms[device_sn] = now
+        self._report_ms[device_sn] = max(now, self._report_ms.get(device_sn, now))
         self._raw[device_sn] = str(state_code)
         self._set(
             device_sn,
@@ -276,9 +304,13 @@ class LockStates:
             ),
         )
 
-    def _set(self, device_sn: str, reading: LockReading) -> None:
+    def _set(self, device_sn: str, reading: LockReading, *, unsettled: bool = False) -> None:
         old = self.reading(device_sn)
         self._readings[device_sn] = reading
+        if unsettled:
+            self._unsettled.add(device_sn)
+        else:
+            self._unsettled.discard(device_sn)
         move = self._moving.get(device_sn)
         # A command's own wait goes on past a report that does not end it (a stale dump);
         # a failed or cancelled command's hold ends at the lock's next report.

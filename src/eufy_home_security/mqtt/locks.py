@@ -209,8 +209,7 @@ class MqttLocks:
                 device_sn=serial,
             )
         target = TARGET_STATES[action]
-        reading = states.reading(serial)  # every source's, merged: never MQTT's alone
-        if reading is not None and reading.state is target:
+        if states.settled(serial, target):  # every source's reading, never MQTT's alone
             return target
         self._busy.add(serial)
         try:

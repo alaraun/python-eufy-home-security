@@ -380,8 +380,7 @@ class StationLockControl:
                 device_sn=device_sn,
             )
         target = TARGET_STATES[action]
-        reading = self._locks.reading(device_sn)
-        if reading is not None and reading.state is target:
+        if self._locks.settled(device_sn, target):
             return target
         if not has_member_record(device):  # as the app: no member record, no command
             raise UnsupportedError(

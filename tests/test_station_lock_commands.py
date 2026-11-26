@@ -187,6 +187,51 @@ async def test_a_lock_already_in_the_asked_state_sends_nothing(
     assert lock_1940.received == []
 
 
+def _push_ms(station: Station, offset_ms: int) -> SecurityEvent:
+    """An unlock push about the 1940 lock, dated ``offset_ms`` from its reading's report."""
+    reading = station.lock_state(LOCK_1940)
+    assert reading is not None
+    assert reading.observed_at is not None
+    return SecurityEvent(
+        source=EventSource.CLOUD,
+        device_sn=LOCK_1940,
+        event_type=259,
+        event_time_ms=int(reading.observed_at * 1000) + offset_ms,
+    )
+
+
+@pytest.mark.parametrize("offset_ms", [-500, 0], ids=["before", "same-time"])
+async def test_a_push_of_another_state_dated_before_the_report_sends_either_command(
+    fake: FakeStation, lock_1940: FakeLock, offset_ms: int
+) -> None:
+    """A push of another state dated before the report the reading holds (on another
+    clock) is taken, but the order of the two is unknown: an unlock is sent although the
+    reading says unlocked. The lock's next report settles the reading again."""
+    lock_1940.state_code = 4
+    station = await _hub(fake, _lock(LOCK_1940), lock_1940)
+    try:
+        assert station.note_lock_push(_push_ms(station, offset_ms)) is True
+        assert _state(station) is LockState.UNLOCKED
+        assert await station.async_unlock(LOCK_1940) is LockState.UNLOCKED
+        assert await station.async_unlock(LOCK_1940) is LockState.UNLOCKED  # settled
+    finally:
+        await station.async_close()
+    assert [a for _, a, _ in lock_1940.received] == [LockAction.UNLOCK]
+
+
+async def test_a_push_of_the_same_state_dated_before_the_report_keeps_the_shortcut(
+    fake: FakeStation, lock_1940: FakeLock
+) -> None:
+    lock_1940.state_code = 3
+    station = await _hub(fake, _lock(LOCK_1940), lock_1940)
+    try:
+        assert station.note_lock_push(_push_ms(station, -500)) is True
+        assert await station.async_unlock(LOCK_1940) is LockState.UNLOCKED
+    finally:
+        await station.async_close()
+    assert lock_1940.received == []
+
+
 @pytest.mark.parametrize("code", [1, 48, 49])
 async def test_a_refusing_answer_raises_with_the_locks_code(
     fake: FakeStation, lock_1940: FakeLock, code: int

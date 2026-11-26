@@ -195,6 +195,23 @@ async def test_a_lock_push_older_than_the_last_report_is_dropped(
     assert hub.lock_state(LOCK_SN).state is LockState.LOCKED  # type: ignore[union-attr]
 
 
+async def test_a_lock_push_up_to_the_slack_before_the_locks_own_report_is_taken(
+    hub: Station,
+) -> None:
+    """The lock's own report is dated by its arrival, a push by the lock's or the cloud's
+    clock: a push up to the slack before the report may be the newer change and is taken;
+    one dated earlier is about an earlier change and is dropped."""
+    now = _now_ms()
+    hub._locks._now_ms = lambda: now
+    hub._locks.on_report(LOCK_SN, 4)
+    slack = LOCK_REPORT_SLACK_SECONDS * 1000
+    assert hub.note_lock_push(_push(259, now - slack - 1)) is False
+    assert hub.lock_state(LOCK_SN).source is LockStateSource.LOCK  # type: ignore[union-attr]
+    assert hub.note_lock_push(_push(259, now - slack)) is True
+    assert hub.lock_state(LOCK_SN).state is LockState.UNLOCKED  # type: ignore[union-attr]
+    assert hub.note_lock_push(_push(262, now - slack - 1)) is False  # older than that push
+
+
 async def test_a_lock_push_older_than_the_bound_is_dropped(hub: Station) -> None:
     now = _now_ms()
     hub._locks._now_ms = lambda: now

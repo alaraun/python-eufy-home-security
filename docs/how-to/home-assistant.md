@@ -1791,7 +1791,8 @@ cloud user id before the first login), `MqttAccountRequiredError` (an MQTT lock:
 or stopped between positions) or `DeviceTimeoutError`. Every one of them imports from
 `eufy_home_security` itself, as every library error does. A lock whose reading (below: one
 merged reading of every source, never the MQTT reports alone) already is the asked state
-returns at once, sending nothing. Each wait is the app's: on the station path the connect,
+returns at once, sending nothing (not while that reading is a push that may be older than
+the report it replaced, below). Each wait is the app's: on the station path the connect,
 the lock's public key (a cloud call, on the 1961 and 1930 forms) and the station's result
 come first, with no bound of their own beyond the session's, then 20 s for the lock's
 answer; over MQTT up to 15 s for the broker to take the command (a connection that is not
@@ -1843,11 +1844,15 @@ The state is the lock-state code as the eufy app's lock controls read the lock's
 Every source feeds one reading per lock, the station's reports, pushes and the lock's own
 status reports over its station or the MQTT broker alike, and the newest report wins, as
 for the guard mode: a push is ignored when it is more than 300 s old, older than the last
-push or status report taken, or more than 30 s older than the lock's last parameter report;
-the lock's own status report is always taken; a parameter value is taken when it differs
-from the lock's last value (the last status report's code included), and also when it
-repeats but dates from after the push the state came from. So the next dump after a push
-replaces it, and `jammed`, which only a push reports, lasts until the lock's next report
+push taken, or more than 30 s older than the lock's last status report or parameter report
+(a push is dated by the lock's or the cloud's clock, a report by its arrival). A push of
+another state dated no later than the report it replaces is shown, but the two may have
+come in either order: until the reading takes its next report, a lock or unlock command is
+sent even when the reading already is the asked state. The lock's own status report is
+always taken; a parameter value is taken when it differs from the lock's last value (the
+last status report's code included), and also when it repeats but dates from after the
+push the state came from. So the next dump after a push replaces it, and `jammed`, which
+only a push reports, lasts until the lock's next report
 ([events.md](../protocol/events.md#lock-pushes-declared-app)). The device list's copy
 counts only when it is not older than the reading. Keep `state` (and `raw`) as attributes
 when the entity maps passage and privacy mode to unlocked and locked.
