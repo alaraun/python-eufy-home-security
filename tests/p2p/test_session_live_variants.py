@@ -785,3 +785,52 @@ async def test_the_media_queue_bounds_records_again_after_the_replay(
     finally:
         await stream.aclose()
         await session.async_close()
+
+
+def _counter(frame: MediaFrame) -> int:
+    return (frame.timestamp_ms - 1000) // 40
+
+
+async def test_after_the_hold_overflows_nothing_more_is_held(
+    e2e_hb2: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Records keep arriving during the fetch after one did not fit: none of them is held,
+    smaller ones included, and video resumes at the first keyframe after the key."""
+    held = [_e2e_video(0), _e2e_audio(0)]
+    for n in range(1, MEDIA_GOP):
+        held += [_e2e_video(n), _e2e_audio(n)]
+    big = 4000  # the keyframe at MEDIA_GOP does not fit; two P-frames and audio after it would
+    cap = sum(map(len, held)) + 2 * (len(_e2e_video(1)) + len(_e2e_audio(1)))
+    assert len(_e2e_video(MEDIA_GOP, size=big)) > cap - sum(map(len, held))
+    monkeypatch.setattr(media_stream_module, "MEDIA_KEY_WAIT_BYTES", cap)
+    gate = asyncio.Event()
+
+    class Keys(_Keys):
+        async def __call__(self, key_id: int) -> str | None:
+            await gate.wait()
+            return await super().__call__(key_id)
+
+    session = _session(e2e_hb2, Keys(delay=0))
+    stream = _e2e_stream(session)
+    try:
+        for n in range(2 * MEDIA_GOP):  # the hold overflows at MEDIA_GOP
+            record = _e2e_video(n, size=big if n == MEDIA_GOP else 0)
+            stream._feed(FrameType.VIDEO_FRAME, record, subheader=_e2e_sub())
+            stream._feed(FrameType.AUDIO_FRAME, _e2e_audio(n), subheader=_e2e_sub())
+        gate.set()
+        await _key_settled(stream)
+        for n in range(2 * MEDIA_GOP, 2 * MEDIA_GOP + 2):  # after the key
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+            stream._feed(FrameType.AUDIO_FRAME, _e2e_audio(n), subheader=_e2e_sub())
+        stream._end()
+        async with asyncio.timeout(5):
+            frames = [frame async for frame in stream]
+    finally:
+        await stream.aclose()
+        await session.async_close()
+    after_key = [2 * MEDIA_GOP, 2 * MEDIA_GOP + 1]
+    video = [_counter(f) for f in frames if f.kind is MediaKind.VIDEO]
+    audio = [_counter(f) for f in frames if f.kind is MediaKind.AUDIO]
+    # The last held P-frame goes too: the record lost after it may be its rest.
+    assert video == [*range(MEDIA_GOP - 1), *after_key]
+    assert audio == [*range(MEDIA_GOP), *after_key]

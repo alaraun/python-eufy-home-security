@@ -850,11 +850,12 @@ the **key id**, and the record names one of two key types (`E2EKeyType`):
   (`E2EKeyProvider`; `EufySecurity` supplies it) and keeps it for its later recordings.
   A recording opened by path alone holds the records of a cloud cipher it has no key for
   while it fetches the key, then decodes them in order and queues every one, past the
-  media queue's 250 frames too (nothing read them meanwhile). It holds up to 32 MiB; records
-  past that are dropped and video resumes at the next keyframe. A
-  cipher without an RSA key, a key that does not parse or a failed fetch ends the stream
-  with `EndToEndEncryptedError` (an `UnsupportedError`) naming the cipher; a cloud
-  failure is also reported as a `CloudProblem`. A record of the PIN key ends it with
+  media queue's 250 frames too (nothing read them meanwhile). It holds up to 32 MiB: from
+  the first record that does not fit, nothing more is held until the key arrives, and
+  video resumes at the first keyframe after it. A cipher without an RSA key, a key that
+  does not parse or a failed fetch ends the stream with `EndToEndEncryptedError` (an
+  `UnsupportedError`) naming the cipher; a cloud failure is also reported as a
+  `CloudProblem`. A record of the PIN key ends it with
   `PinProtectedKeyError`: the key needs the user's PIN, which the library neither asks
   for nor stores. A live stream decodes no end-to-end record, as the app plays them only
   from recordings.

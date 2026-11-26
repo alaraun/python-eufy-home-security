@@ -753,10 +753,11 @@ class MediaStream:
         self, frame_type: int, payload: bytes, camera: int | None, subheader: bytes | None
     ) -> None:
         """Keep a record until the end-to-end key arrives; past
-        :data:`MEDIA_KEY_WAIT_BYTES`, drop it and resume video at a keyframe."""
+        :data:`MEDIA_KEY_WAIT_BYTES`, drop it and every later one until the key arrives,
+        then resume video at a keyframe."""
         if self._key_wait is None:
             return
-        if self._key_wait_bytes + len(payload) > MEDIA_KEY_WAIT_BYTES:
+        if self._key_wait_overflow or self._key_wait_bytes + len(payload) > MEDIA_KEY_WAIT_BYTES:
             self._key_wait_overflow = True
             return
         self._key_wait_bytes += len(payload)
