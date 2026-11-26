@@ -12,7 +12,7 @@ Only the subset the data channel needs is exposed, with the method names of the
 
 MIT License
 
-Copyright (c) 2017 Lin Wei
+Copyright (c) 2017 Lin Wei (skywind3000 at gmail.com)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
