@@ -533,6 +533,29 @@ class UnsupportedError(EufySecurityError):
     """The device or firmware does not support the requested operation."""
 
 
+class EndToEndEncryptedError(UnsupportedError):
+    """A recording is end-to-end encrypted under a key the library does not hold.
+
+    ``key_type`` is the :class:`~.models.E2EKeyType` value (4: the user's PIN-protected
+    key, 5: the owner's cloud cipher), ``key_id`` the key id the recording names. Raised
+    for a cloud cipher the cloud served no usable RSA key for; the cause is chained.
+    """
+
+    def __init__(self, message: str, *, key_type: int, key_id: int) -> None:
+        super().__init__(message)
+        self.key_type = key_type
+        self.key_id = key_id
+
+
+class PinProtectedKeyError(EndToEndEncryptedError):
+    """A recording is end-to-end encrypted with the account's PIN-protected key.
+
+    The eufy app's video encryption keeps that private key on the phone and in the cloud
+    only encrypted under the user's PIN; the library neither asks for nor stores a PIN,
+    so it cannot play such a recording. Raised before any frame is delivered.
+    """
+
+
 class DoorStateUnknownError(UnsupportedError):
     """A garage door's state is unknown, so an open or close cannot be told apart from
     the other; raised before anything is sent.

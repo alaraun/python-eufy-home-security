@@ -13,7 +13,8 @@ no sockets, no ffmpeg:
 * :class:`MediaDecoder` turns one stream's records into playable
   :class:`MediaFrame` objects: it undoes the small encrypted header prefix of a
   record that carries the RSA-wrapped stream key (other RSA-stream records are clear),
-  or the AES-256-GCM of an ECC stream's records, unwrapping each stream key once.
+  the AES-256-GCM of an ECC stream's records, or that of an end-to-end encrypted
+  recording's records under the owner's cloud cipher, unwrapping each key once.
 * the ``*_payload`` builders shape the ``payload`` object of the open / download
   commands.
 """
@@ -33,7 +34,14 @@ from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from ..devices.recipes import station_live_payload
-from ..exceptions import ProtocolError, UnsupportedError, VideoEncryptedPictureError
+from ..exceptions import (
+    EndToEndEncryptedError,
+    PinProtectedKeyError,
+    ProtocolError,
+    UnsupportedError,
+    VideoEncryptedPictureError,
+)
+from ..models import E2EKey, E2EKeyType
 from .crypto import GCM_AAD, ecb_decrypt, ecies_decrypt, gcm_decrypt_broadcast
 from .xzyh import Frame, FrameCipher, FrameType
 
@@ -83,6 +91,17 @@ _ECC_AUDIO_TAG = slice(AUDIO_HEADER_LEN, AUDIO_HEADER_LEN + _GCM_TAG_LEN)
 _ECC_AUDIO_IV = slice(_ECC_AUDIO_TAG.stop, _ECC_AUDIO_TAG.stop + _GCM_IV_LEN)
 ECC_AUDIO_HEADER_LEN = _ECC_AUDIO_IV.stop  # 44
 _GCM_MEDIA_KEY_LEN = 32
+#: End-to-end encrypted video record (recordings only): the 22-byte video header, the
+#: wrapped key (129 bytes; a cloud cipher's RSA-1024 wrap is its first 128), then the
+#: GCM tag and the AES-256-GCM ciphertext. The header's ``datalen`` counts tag and
+#: ciphertext. Declared (eufy app); see docs/protocol/media.md.
+E2E_VIDEO_HEADER_LEN = VIDEO_HEADER_LEN + ECC_WRAPPED_KEY_LEN  # 151
+_E2E_RSA_WRAPPED = slice(VIDEO_HEADER_LEN, VIDEO_HEADER_LEN + KEYFRAME_RSA_LEN)
+#: An end-to-end key unwraps to a 47-character string: the AES-256 key is its first 32
+#: bytes, the 16-byte GCM IV its last 16 (byte 31 belongs to both).
+_E2E_SECRET_LEN = 47
+_E2E_KEY = slice(0, _GCM_MEDIA_KEY_LEN)
+_E2E_IV = slice(_GCM_MEDIA_KEY_LEN - 1, _E2E_SECRET_LEN)
 #: Param 1103 (``CAMERA_INFO``) from which the app offers an ECC media key.
 ECC_MEDIA_ABILITY = 128
 
@@ -90,6 +109,12 @@ ECC_MEDIA_ABILITY = 128
 _SUB_MEDIA_VERSION = 0
 _SUB_ENCRYPTED = 3
 _SUB_AUDIO_KIND = 5
+#: Media versions of end-to-end encrypted records; byte 3 is then the key id (2 or more).
+_E2E_VERSIONS = (4, 5)
+_E2E_KEY_ID_MIN = 2
+#: A version-4 record whose key id is this or more is wrapped for the user's PIN key.
+_E2E_PIN_VERSION = 4
+_E2E_PIN_KEY_ID_MIN = 10
 _FLOODLIGHT_AUDIO = 3
 #: Audio header byte 5: the stream type; 0 is AAC-LC.
 _AUDIO_STREAM_TYPE_OFFSET = 5
@@ -118,13 +143,39 @@ class VideoVariant(StrEnum):
     """``v`` 8 or 9: the ECIES-wrapped stream key, then an AES-256-GCM body, for a client
     that offered an ECC key (:attr:`MediaKeyType.ECC`)."""
     E2E = "e2e"
-    """``v`` 4 or 5 with ``e`` 2 or more: end-to-end encrypted (the app plays it only from
-    recordings). Not decoded."""
+    """``v`` 4 or 5 with ``e`` 2 or more: end-to-end encrypted, ``e`` naming the key
+    (:func:`e2e_key`). The app plays it only from recordings; the library decodes it
+    there when the key is a cloud cipher."""
 
 
-UNDECODABLE_VIDEO = frozenset({VideoVariant.E2E})
-"""The variants :class:`MediaDecoder` never decodes (ECC needs a stream opened with an
-ECC key, :meth:`MediaDecoder.decodes`)."""
+def _is_e2e(version: int, encrypted: int) -> bool:
+    return version in _E2E_VERSIONS and encrypted >= _E2E_KEY_ID_MIN
+
+
+def e2e_key(subheader: bytes) -> E2EKey | None:
+    """The key an end-to-end encrypted record names in its subheader, by the app's rule;
+    None for a record that is not end-to-end encrypted.
+
+    Byte 3 is the key id. Version 4 with a key id of 10 or more is the user's PIN key,
+    any other an owner's cloud cipher (declared, eufy app).
+    """
+    if len(subheader) <= _SUB_ENCRYPTED:
+        return None
+    version, key_id = subheader[_SUB_MEDIA_VERSION], subheader[_SUB_ENCRYPTED]
+    if not _is_e2e(version, key_id):
+        return None
+    pin = version == _E2E_PIN_VERSION and key_id >= _E2E_PIN_KEY_ID_MIN
+    return E2EKey(E2EKeyType.PIN if pin else E2EKeyType.CIPHER, key_id)
+
+
+def pin_key_refusal(key_id: int) -> PinProtectedKeyError:
+    """The error for a recording end-to-end encrypted with the user's PIN key ``key_id``."""
+    return PinProtectedKeyError(
+        "the recording is end-to-end encrypted with the account's PIN-protected key "
+        f"(key id {key_id}), which the library cannot use",
+        key_type=E2EKeyType.PIN,
+        key_id=key_id,
+    )
 
 
 def video_variant(subheader: bytes) -> VideoVariant:
@@ -132,7 +183,7 @@ def video_variant(subheader: bytes) -> VideoVariant:
     if len(subheader) <= _SUB_ENCRYPTED:
         return VideoVariant.PLAIN
     version, encrypted = subheader[_SUB_MEDIA_VERSION], subheader[_SUB_ENCRYPTED]
-    if version in (4, 5) and encrypted >= 2:
+    if _is_e2e(version, encrypted):
         return VideoVariant.E2E
     if version in (8, 9):
         return VideoVariant.ECC
@@ -155,7 +206,8 @@ class AudioVariant(StrEnum):
     ECC = "ecc"
     """Media version 8 or 9: AES-256-GCM under the key of the stream's video records."""
     E2E = "e2e"
-    """Media version 4 or 5 with the encrypted flag 2 or more. Not decoded."""
+    """Media version 4 or 5 with the encrypted flag 2 or more: AES-256-GCM under the key
+    of the recording's end-to-end encrypted video records."""
     OTHER = "other"
     """A clear frame whose header names a stream type other than AAC-LC. Not decoded."""
 
@@ -173,7 +225,7 @@ def audio_variant(subheader: bytes, payload: bytes) -> AudioVariant:
         return {1: AudioVariant.G711, 2: AudioVariant.AAC}.get(version, AudioVariant.IGNORED)
     if version in (8, 9):
         return AudioVariant.ECC
-    if version in (4, 5) and encrypted >= 2:
+    if _is_e2e(version, encrypted):
         return AudioVariant.E2E
     if version == 0:
         return AudioVariant.IGNORED
@@ -233,8 +285,9 @@ class MediaRecordShape:
     ``"not_annex_b"``, ``"foreign_key"``, ``"waiting_keyframe"``, ``"queue_full"``,
     ``"undecodable"``, ``"error"``, ``"other_camera"``, ``"no_nal"`` (no NAL unit left
     once the empty ones are removed), ``"continuation"`` (no start code: the rest of the
-    frame before it, joined to it) or ``"part_dropped"`` (no start code and no frame to
-    join)."""
+    frame before it, joined to it), ``"part_dropped"`` (no start code and no frame to
+    join) or ``"key_pending"`` (held while the key of an end-to-end encrypted recording is
+    fetched)."""
     probe: str = ""
     """For a keyframe that did not decrypt to Annex-B: the body layouts that do start
     with a start code (:func:`keyframe_layout_probe`)."""
@@ -562,6 +615,18 @@ def video_record_is_key(payload: bytes, variant: VideoVariant | None = None) -> 
     return starts_picture_group(payload[VIDEO_HEADER_LEN : VIDEO_HEADER_LEN + 8])
 
 
+def _sealed_video_header_len(payload: bytes, variant: VideoVariant) -> int:
+    """The header length of an ECC or E2E record (an E2E body opens with its GCM tag);
+    a record too short for it raises :class:`ProtocolError`."""
+    if variant is VideoVariant.ECC:
+        header_len, least = ECC_VIDEO_HEADER_LEN, ECC_VIDEO_HEADER_LEN
+    else:
+        header_len, least = E2E_VIDEO_HEADER_LEN, E2E_VIDEO_HEADER_LEN + _GCM_TAG_LEN
+    if len(payload) < least:
+        raise ProtocolError(f"{variant.value.upper()} video frame shorter than {least} bytes")
+    return header_len
+
+
 def parse_video_frame(payload: bytes, *, variant: VideoVariant | None = None) -> VideoFrame:
     """Split a VIDEO_FRAME payload into its header fields and body bytes.
 
@@ -572,9 +637,10 @@ def parse_video_frame(payload: bytes, *, variant: VideoVariant | None = None) ->
 
     ``variant`` comes from the record's subheader (:func:`video_variant`); without
     one, a flagged keyframe is taken as :attr:`VideoVariant.RSA_PREFIX` and any other
-    record as clear. :data:`UNDECODABLE_VIDEO` variants raise :class:`UnsupportedError`.
-    An :attr:`VideoVariant.ECC` record's body is its ciphertext after the 179-byte
-    header, whole (the app decrypts all of it), and only its header flag marks a keyframe.
+    record as clear. An :attr:`VideoVariant.ECC` record's body is its ciphertext after the
+    179-byte header, whole (the app decrypts all of it), an :attr:`VideoVariant.E2E`
+    record's its tag and ciphertext after the 151-byte header; only their header flag
+    marks a keyframe.
 
     ``datalen`` counts the frame as it **decodes**, not the bytes on the wire. A
     wrapped-key body also carries the 129-byte prefix that
@@ -597,16 +663,11 @@ def parse_video_frame(payload: bytes, *, variant: VideoVariant | None = None) ->
         )
     counter, width, height, timestamp_ms = struct.unpack_from("<IHHI", payload, 6)
     variant = _resolve_variant(payload, variant)
-    if variant in UNDECODABLE_VIDEO:
-        raise UnsupportedError(f"{variant.value} video is not decoded by this library")
-    if variant is VideoVariant.ECC:
-        if len(payload) < ECC_VIDEO_HEADER_LEN:
-            raise ProtocolError(
-                f"ECC video frame shorter than its {ECC_VIDEO_HEADER_LEN}-byte header"
-            )
+    if variant in (VideoVariant.ECC, VideoVariant.E2E):
+        header_len = _sealed_video_header_len(payload, variant)
         return VideoFrame(
             is_keyframe=is_keyframe_record(payload),
-            data=payload[ECC_VIDEO_HEADER_LEN:],
+            data=payload[header_len:],
             timestamp_ms=timestamp_ms,
             codec=VideoCodec.from_code(payload[_VIDEO_CODEC_OFFSET]),
             width=width,
@@ -702,15 +763,20 @@ class MediaDecoder:
 
     The wrapped AES key is the same in every keyframe of a stream, so the unwrap runs
     once and is reused while the wrapped bytes stay the same.
+
+    ``e2e_keys`` makes the stream a recording's, which may carry end-to-end encrypted
+    records (the app plays those only from recordings): the owner's cloud cipher RSA keys
+    by cipher id, extended with :meth:`add_e2e_key`. None (a live stream) decodes none.
     """
 
-    __slots__ = ("_aes_key", "_ecc_key_hex", "_rsa_key", "_wrapped")
+    __slots__ = ("_aes_key", "_e2e_keys", "_e2e_secret", "_ecc_key_hex", "_rsa_key", "_wrapped")
 
     def __init__(
         self,
         rsa_private_key: rsa.RSAPrivateKey | None = None,
         *,
         ecc_private_key: ec.EllipticCurvePrivateKey | None = None,
+        e2e_keys: Mapping[int, rsa.RSAPrivateKey] | None = None,
     ) -> None:
         if (rsa_private_key is None) == (ecc_private_key is None):
             raise ValueError("pass exactly one of rsa_private_key or ecc_private_key")
@@ -722,6 +788,9 @@ class MediaDecoder:
         )
         self._wrapped: bytes | None = None
         self._aes_key = b""
+        self._e2e_keys = None if e2e_keys is None else dict(e2e_keys)
+        self._e2e_secret = b""
+        """The 47-byte key string of the latest end-to-end record (its audio uses it)."""
 
     @property
     def key_type(self) -> MediaKeyType:
@@ -736,14 +805,40 @@ class MediaDecoder:
 
     def decodes(self, variant: VideoVariant) -> bool:
         """Whether this stream's key decodes video of ``variant``: RSA-wrapped keyframes
-        need the RSA key, ECC records the ECC key; E2E is never decoded."""
-        if variant in UNDECODABLE_VIDEO:
-            return False
+        need the RSA key, ECC records the ECC key, E2E records a recording's stream
+        (whose records still need their key, :meth:`e2e_refusal`)."""
+        if variant is VideoVariant.E2E:
+            return self._e2e_keys is not None
         if variant is VideoVariant.ECC:
             return self._ecc_key_hex is not None
         if variant is VideoVariant.RSA_PREFIX:
             return self._rsa_key is not None
         return True
+
+    def add_e2e_key(self, key_id: int, key: rsa.RSAPrivateKey) -> None:
+        """Hold the cloud cipher ``key_id``'s RSA key for end-to-end encrypted records.
+        A live stream's decoder (no ``e2e_keys``) raises :class:`ValueError`."""
+        if self._e2e_keys is None:
+            raise ValueError("a live stream decodes no end-to-end encrypted media")
+        self._e2e_keys[key_id] = key
+
+    def e2e_refusal(self, subheader: bytes) -> EndToEndEncryptedError | None:
+        """Why an end-to-end encrypted record does not decode on this recording stream:
+        :class:`PinProtectedKeyError` for the user's PIN key, an
+        :class:`EndToEndEncryptedError` for a cloud cipher whose key is not held (fetch
+        it, :meth:`add_e2e_key`); None when it decodes or is not end-to-end encrypted."""
+        key = e2e_key(subheader)
+        if key is None:
+            return None
+        if key.key_type is E2EKeyType.PIN:
+            return pin_key_refusal(key.key_id)
+        if self._e2e_keys is not None and key.key_id in self._e2e_keys:
+            return None
+        return EndToEndEncryptedError(
+            f"no key held for the recording's end-to-end encryption (cipher {key.key_id})",
+            key_type=key.key_type,
+            key_id=key.key_id,
+        )
 
     def decode(
         self, frame_type: int, payload: bytes, subheader: bytes | None = None
@@ -754,7 +849,8 @@ class MediaDecoder:
         (:func:`video_variant`, :func:`audio_variant`), as the app's receiver does.
         Without it (None or empty), a flagged keyframe is taken to carry the wrapped key
         and audio to be AAC. None for other frame types and for audio that is not AAC-LC; video the
-        library does not decode raises :class:`UnsupportedError`.
+        library does not decode raises :class:`UnsupportedError` (an end-to-end encrypted
+        record without its key: :meth:`e2e_refusal`'s error).
         """
         if frame_type == VIDEO_FRAME_TYPE:
             variant = video_variant(subheader) if subheader else None
@@ -766,6 +862,9 @@ class MediaDecoder:
             is_keyframe = video.is_keyframe
             if video.variant is VideoVariant.ECC:
                 data = self.decrypt_ecc_video(payload)
+                is_keyframe = is_keyframe or starts_picture_group(data[:8])
+            elif video.variant is VideoVariant.E2E:
+                data = self.decrypt_e2e_video(payload, bytes(subheader or b""))
                 is_keyframe = is_keyframe or starts_picture_group(data[:8])
             elif video.variant is VideoVariant.RSA_PREFIX:
                 data = self.decrypt_keyframe(video.data)
@@ -782,8 +881,12 @@ class MediaDecoder:
             )
         if frame_type == AUDIO_FRAME_TYPE:
             kind = audio_variant(subheader, payload) if subheader else AudioVariant.AAC
-            if kind is AudioVariant.ECC:
-                clear = self.decrypt_ecc_audio(payload)
+            if kind in (AudioVariant.ECC, AudioVariant.E2E):
+                clear = (
+                    self.decrypt_ecc_audio(payload)
+                    if kind is AudioVariant.ECC
+                    else self.decrypt_e2e_audio(payload)
+                )
                 if clear is None:
                     return None
                 payload = clear
@@ -856,6 +959,75 @@ class MediaDecoder:
         )
         return bytes(payload[:AUDIO_HEADER_LEN]) + body
 
+    def _e2e_aes(self, wrapped: bytes, key: rsa.RSAPrivateKey) -> bytes:
+        """The 47-byte key string a cloud cipher's RSA-wrapped bytes carry, unwrapped once
+        per distinct wrap. The key string ends at its first NUL byte, as the app reads it."""
+        if wrapped == self._wrapped and self._e2e_secret:
+            return self._e2e_secret
+        try:
+            plain = key.decrypt(wrapped, padding.PKCS1v15())
+        except ValueError as exc:
+            raise _ForeignKeyframeError(
+                f"end-to-end record not wrapped for its cipher's key ({exc})"
+            ) from exc
+        end = plain.find(b"\x00")
+        secret = plain if end < 0 else plain[:end]
+        if len(secret) != _E2E_SECRET_LEN:
+            raise _ForeignKeyframeError(
+                f"end-to-end record unwrapped to {len(secret)} bytes, not {_E2E_SECRET_LEN}"
+            )
+        self._e2e_secret, self._wrapped = secret, wrapped
+        self._aes_key = secret[_E2E_KEY]
+        return secret
+
+    def decrypt_e2e_video(self, payload: bytes, subheader: bytes) -> bytes:
+        """An end-to-end encrypted VIDEO_FRAME record's Annex-B body, under the cloud
+        cipher its subheader names (:func:`e2e_key`): ``payload[22:150]`` is the
+        RSA-wrapped key string, ``[151:167]`` the GCM tag, the rest the AES-256-GCM
+        ciphertext (AAD ``b"eufy security"``), the key the string's first 32 bytes, the
+        IV its last 16.
+
+        A key that is not held raises :meth:`e2e_refusal`'s error, a wrap for another key
+        :class:`_ForeignKeyframeError`, a body that fails its tag :class:`ProtocolError`.
+        """
+        refusal = self.e2e_refusal(subheader)
+        if refusal is not None:
+            raise refusal
+        key = e2e_key(subheader)
+        if key is None or self._e2e_keys is None:
+            raise UnsupportedError("not an end-to-end encrypted record of a recording")
+        header_len = _sealed_video_header_len(payload, VideoVariant.E2E)
+        secret = self._e2e_aes(bytes(payload[_E2E_RSA_WRAPPED]), self._e2e_keys[key.key_id])
+        body = payload[header_len:]
+        return _gcm_open(
+            secret[_E2E_KEY], secret[_E2E_IV], body[_GCM_TAG_LEN:], body[:_GCM_TAG_LEN]
+        )
+
+    def decrypt_e2e_audio(self, payload: bytes) -> bytes | None:
+        """An end-to-end encrypted AUDIO_FRAME record as a clear audio record (its 16-byte
+        header with ``datalen`` set to the clear length, then the body): the header's
+        ``datalen`` bytes are the GCM tag and the ciphertext, under the key string of the
+        recording's latest video record.
+
+        None before a video record brought the key, or when header byte 5 names a stream
+        type other than AAC-LC.
+        """
+        if len(payload) < AUDIO_HEADER_LEN + _GCM_TAG_LEN:
+            raise ProtocolError(
+                f"E2E audio frame shorter than {AUDIO_HEADER_LEN + _GCM_TAG_LEN} bytes"
+            )
+        if not self._e2e_secret:
+            return None
+        if payload[_AUDIO_STREAM_TYPE_OFFSET] != _AUDIO_STREAM_AAC:
+            return None
+        data_len = struct.unpack_from("<I", payload, 0)[0]
+        body = payload[AUDIO_HEADER_LEN : AUDIO_HEADER_LEN + data_len]
+        secret = self._e2e_secret
+        clear = _gcm_open(
+            secret[_E2E_KEY], secret[_E2E_IV], body[_GCM_TAG_LEN:], body[:_GCM_TAG_LEN]
+        )
+        return struct.pack("<I", len(clear)) + bytes(payload[4:AUDIO_HEADER_LEN]) + clear
+
     def decrypt_keyframe(self, video_body: bytes) -> bytes:
         """Decrypt a keyframe body to Annex-B (HEVC or H.264).
 
@@ -904,7 +1076,7 @@ def _gcm_open(key: bytes, iv: bytes, ciphertext: bytes, tag: bytes) -> bytes:
     try:
         return AESGCM(key).decrypt(bytes(iv), bytes(ciphertext) + bytes(tag), GCM_AAD)
     except InvalidTag as exc:
-        raise ProtocolError("ECC media record failed its GCM tag") from exc
+        raise ProtocolError("media record failed its GCM tag") from exc
 
 
 def start_realtime_media_payload(

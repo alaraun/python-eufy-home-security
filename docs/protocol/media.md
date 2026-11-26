@@ -775,7 +775,7 @@ reads the record's XZYH subheader, byte 0 the **media version** `v` and byte 3 t
 | condition | variant (`VideoVariant`) | header | body | library |
 |---|---|---|---|---|
 | `v` 8 or 9 | `ecc` | 179 B | AES-256-GCM ([media key](#media-key-rsa-or-ecc-verified)) | decoded on an ECC stream |
-| `v` 4 or 5, `e` ≥ 2 | `e2e` | 151 B | end-to-end; the app plays it from recordings only | `UnsupportedError` |
+| `v` 4 or 5, `e` ≥ 2 | `e2e` | 151 B | AES-256-GCM, [end-to-end](#end-to-end-encrypted-recordings-app); the app plays it from recordings only | decoded from a recording under a cloud cipher; refused live and under the PIN key |
 | `v` ≥ 3, `e` = 1 | `rsa_v3` | 22 B | clear | decoded |
 | `v` ≠ 0, `e` ≠ 0 | `rsa_prefix` | 22 B + 129 B prefix | [keyframe decryption](#keyframe-decryption-verified) | decoded |
 | otherwise | `plain` | 22 B | clear | decoded |
@@ -791,8 +791,8 @@ reads the record's XZYH subheader, byte 0 the **media version** `v` and byte 3 t
   otherwise version 1 is AAC-LC and a later version names its stream type in header
   byte 5 (0 = AAC-LC). The library delivers AAC-LC only (`AudioVariant`).
 - A stream whose video arrives in a variant its key does not decode (`ecc` on an RSA
-  stream, `rsa_prefix` on an ECC one, `e2e` always) before its first keyframe fails with
-  `UnsupportedError` naming the variant. `SessionStats.media_frames_by_variant` counts
+  stream, `rsa_prefix` on an ECC one, `e2e` on a live stream) before its first keyframe
+  fails with `UnsupportedError` naming the variant. `SessionStats.media_frames_by_variant` counts
   every media record received by `"video:<variant>"` / `"audio:<variant>"`.
 - **Diagnostics of a stream that plays no picture.** `SessionStats` also carries
   `media_video_codecs` (video records by the codec header byte 5 names; `"code:<n>"`
@@ -814,6 +814,46 @@ reads the record's XZYH subheader, byte 0 the **media version** `v` and byte 3 t
   later parts of a frame sent in several records, joined to it or dropped; an empty
   record counts too; see [frames in parts](#frames-in-parts-app)). No key material is kept. An extra
   live session's media counts into its station session's figures.
+
+### End-to-end encrypted recordings **[app]**
+
+A station can store a camera's recordings end-to-end encrypted: subheader version `v` 4
+or 5 with byte 3 `e` ≥ 2 ([above](#media-protection-by-subheader-app)). Byte 3 is then
+the **key id**, and the record names one of two key types (`E2EKeyType`):
+
+| `v` | `e` | key type | key | library |
+|---|---|---|---|---|
+| 4 | ≥ 10 | `PIN` (4) | the user's end-to-end key pair, protected by the PIN of the app's video encryption | `PinProtectedKeyError` |
+| 4 | 2–9 | `CIPHER` (5) | the station owner's cloud cipher `e` | decoded |
+| 5 | ≥ 2 | `CIPHER` (5) | the station owner's cloud cipher `e` | decoded |
+
+- **Video record:** the 22-byte video header, the wrapped key (129 bytes), the 16-byte
+  GCM tag, then the AES-256-GCM ciphertext of the whole frame (AAD `b"eufy security"`).
+  The header's `datalen` counts tag and ciphertext. For a cloud cipher the first 128
+  bytes of the wrapped key are RSA-1024 (PKCS#1 v1.5) under the cipher's `private_key`
+  (`app/cipher/get_ciphers` with the cipher id, the station owner's account and the
+  station); for the PIN key all 129 are an ECIES wrap as the ECC media key's.
+- The wrapped key decrypts to a **47-character key string**, ending at its first NUL
+  byte: the AES-256 key is its first 32 bytes, the 16-byte IV its last 16 (byte 31
+  belongs to both). A string of another length does not decode.
+- **Audio record:** the 16-byte audio header, then `datalen` bytes: GCM tag and
+  ciphertext under the key string of the recording's latest video record. Before the
+  first video record, audio is dropped.
+- **History rows:** the row's `cipher_id` names the same key: above `0xFFFFFF`, its top
+  byte is the key type and its low byte the key id (`HistoryRecord.cipher_id`,
+  `HistoryRecord.e2e_key`, `E2EKey.from_cipher_id`). A recording whose row names the PIN
+  key is refused before anything is sent (`PinProtectedKeyError`).
+- **What the library does.** A recording's stream (play or download) holds the records
+  of a cloud cipher it has no key for while it fetches the key once per stream
+  (`E2EKeyProvider`; `EufySecurity` supplies it), then decodes them in order. It holds up
+  to 32 MiB; records past that are dropped and video resumes at the next keyframe. A
+  cipher without an RSA key, a key that does not parse or a failed fetch ends the stream
+  with `EndToEndEncryptedError` (an `UnsupportedError`) naming the cipher; a cloud
+  failure is also reported as a `CloudProblem`. A record of the PIN key ends it with
+  `PinProtectedKeyError`: the key needs the user's PIN, which the library neither asks
+  for nor stores. A live stream decodes no end-to-end record, as the app plays them only
+  from recordings.
+- Not tested on hardware: the key-type rule and the layouts come from the eufy app.
 
 ## Streaming quality **[verified]**
 

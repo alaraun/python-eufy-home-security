@@ -49,7 +49,7 @@ from datetime import UTC, date, datetime
 from enum import StrEnum
 from ipaddress import IPv4Network
 from types import MappingProxyType
-from typing import Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from ..._logging import (
     Address,
@@ -96,6 +96,7 @@ from ...exceptions import (
     CommandRejectedError,
     CommunicationError,
     DeviceTimeoutError,
+    EndToEndEncryptedError,
     EufySecurityError,
     HandshakeError,
     KeyRejectedError,
@@ -105,7 +106,7 @@ from ...exceptions import (
     StationUnreachableError,
     UnsupportedError,
 )
-from ...models import STATION_CHANNEL, GuardMode
+from ...models import STATION_CHANNEL, E2EKeyType, GuardMode
 from ...recordings import RecordingRef
 from .._json import json_int
 from ..alarm import ALARM_FRAME_VALUES, AlarmFrame, decode_alarm_frame
@@ -123,6 +124,7 @@ from ..crypto import (
     frame_encryption,
     gcm_decrypt_broadcast,
     gcm_encrypt_command,
+    load_rsa_private_key,
     parse_conn_init,
     session_key_from_conn_init,
 )
@@ -205,6 +207,9 @@ from .media_stream import MediaStream
 from .param_state import ParamOrigin, ParamState
 from .stats import HealthCounters, MediaCounters, SessionStats, count_capped
 from .wake import WakeBackoff
+
+if TYPE_CHECKING:
+    from cryptography.hazmat.primitives.asymmetric import rsa
 
 _LOGGER = logging.getLogger(__name__)
 _WIRE = wire_logger("p2p")
@@ -419,6 +424,15 @@ class CredentialProvider(Protocol):
     async def __call__(self, *, refresh: bool, cipher_id: int | None) -> P2PCredentials: ...
 
 
+class E2EKeyProvider(Protocol):
+    """Supplies the RSA ``private_key`` (the cloud's text) of the station owner's cloud
+    cipher ``key_id``, for a recording end-to-end encrypted under it; None when the cloud
+    serves no RSA key for it. A failed fetch raises (a :class:`~...exceptions.CloudError`).
+    """
+
+    async def __call__(self, key_id: int) -> str | None: ...
+
+
 class KeyRefreshLatch(Protocol):
     """The per-station stale-key latch: set after a key refresh, cleared by a handshake."""
 
@@ -510,6 +524,7 @@ class StationSession:
         connect_path: ConnectPath | None = None,
         lan_reply_blocked: bool = False,
         local_networks: Sequence[IPv4Network] | None = None,
+        e2e_keys: E2EKeyProvider | None = None,
     ) -> None:
         # max_sessions: see the max_sessions property.
         # expect_channels: the paired sub-devices' channels, used by every parameter
@@ -527,7 +542,10 @@ class StationSession:
         # key_refresh: where the stale-key latch lives (in memory when None).
         # cloud_problems_reported: the owner delivers cloud errors as CloudProblem, so
         # ConnectionChanged carries only their cause.
+        # e2e_keys: the cloud cipher keys of end-to-end encrypted recordings (none: such
+        # a recording fails naming its cipher).
         self.serial = serial.strip()
+        self._e2e_keys = e2e_keys
         max_sessions = _session_budget(max_sessions)
         self.on_demand = on_demand
         self._idle_close = idle_close
@@ -2496,7 +2514,33 @@ class StationSession:
             connect_path=self._connect_path,
             lan_reply_blocked=self._lan_reply_blocked,
             local_networks=self._local_networks,
+            e2e_keys=self._e2e_keys,
         )
+
+    async def _e2e_cipher_key(self, key_id: int) -> rsa.RSAPrivateKey:
+        """The RSA key of the owner's cloud cipher ``key_id``, for a recording end-to-end
+        encrypted under it; raises :class:`EndToEndEncryptedError` (cause chained) when
+        it cannot be had."""
+
+        def refused(reason: str) -> EndToEndEncryptedError:
+            return EndToEndEncryptedError(
+                f"the recording is end-to-end encrypted under cipher {key_id}, {reason}",
+                key_type=E2EKeyType.CIPHER,
+                key_id=key_id,
+            )
+
+        if self._e2e_keys is None:
+            raise refused("and this session cannot fetch cipher keys")
+        try:
+            text = await self._e2e_keys(key_id)
+        except EufySecurityError as err:
+            raise refused(f"whose key could not be fetched: {err}") from err
+        if not text:
+            raise refused("for which the cloud serves no RSA key")
+        try:
+            return load_rsa_private_key(text)
+        except CipherUnusableError as err:
+            raise refused("whose RSA key does not parse") from err
 
     def _media_waits(self) -> MediaWaits:
         """The media waits as ``p2p.session`` holds them now, where tests and consumers
@@ -2737,7 +2781,7 @@ class StationSession:
             value != PLAYBACK_ENDED
             or stream is None
             or stream.command not in _RECORDING_COMMANDS
-            or not stream._started
+            or not stream._has_media
         ):
             return
         stream._end()
@@ -2748,7 +2792,7 @@ class StationSession:
         flight go into it first. Only a download that has started takes it; the frame
         carries no stream id.
         """
-        if stream is None or stream.command != CMD_DOWNLOAD_VIDEO or not stream._started:
+        if stream is None or stream.command != CMD_DOWNLOAD_VIDEO or not stream._has_media:
             return
         stream._download_finished(MEDIA_DRAIN_GAP)
 

@@ -15,10 +15,13 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from eufy_home_security.exceptions import (
+    EndToEndEncryptedError,
+    PinProtectedKeyError,
     ProtocolError,
     UnsupportedError,
     VideoEncryptedPictureError,
 )
+from eufy_home_security.models import E2EKey, E2EKeyType
 from eufy_home_security.p2p import crypto, media
 from eufy_home_security.p2p.xzyh import Frame, FrameCipher, FrameType
 from eufy_home_security.testing import SYNTHETIC
@@ -266,6 +269,238 @@ def test_a_decoder_decodes_the_variants_of_its_key() -> None:
     assert [ecc_decoder.decodes(x) for x in v] == [x not in (v.RSA_PREFIX, v.E2E) for x in v]
     with pytest.raises(ValueError, match="exactly one"):
         media.MediaDecoder()
+
+
+# ── end-to-end encrypted recordings ─────────────────────────────────────────
+
+_E2E_SECRET = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijk"  # 47 characters
+_E2E_CIPHER = rsa.generate_private_key(65537, 1024)  # noqa: S505 (protocol)
+_E2E_SUB = bytes([5, 0, 1, 7, 10, 0])  # version 5, key id 7: the owner's cloud cipher 7
+
+
+def _e2e_sealed(clear: bytes, secret: bytes = _E2E_SECRET) -> bytes:
+    """``tag ‖ ciphertext``: AES-256-GCM, key = secret[0:32], IV = secret[31:47]."""
+    sealed = AESGCM(secret[0:32]).encrypt(secret[31:47], clear, b"eufy security")
+    return sealed[-16:] + sealed[:-16]
+
+
+def _e2e_video(
+    clear: bytes,
+    *,
+    keyframe: bool = True,
+    wrapped_plain: bytes = _E2E_SECRET,
+    cipher: rsa.RSAPrivateKey = _E2E_CIPHER,
+    secret: bytes = _E2E_SECRET,
+) -> bytes:
+    """An end-to-end encrypted video record built from the layout: header, 128-byte RSA
+    wrap, one byte, tag, ciphertext; ``datalen`` counts tag and ciphertext."""
+    body = _e2e_sealed(clear, secret)
+    wrap = cipher.public_key().encrypt(wrapped_plain, padding.PKCS1v15())
+    header = struct.pack("<I", len(body)) + bytes([int(keyframe), media.VIDEO_CODEC_H264])
+    header += struct.pack("<IHHI", 3, 1600, 1200, 2000) + bytes(4)
+    return header + wrap + b"\x5a" + body
+
+
+def _e2e_audio(clear: bytes, *, stream_type: int = 0) -> bytes:
+    body = _e2e_sealed(clear)
+    header = struct.pack("<I", len(body)) + bytes([0, stream_type]) + struct.pack("<HI", 4, 2040)
+    return header + bytes(4) + body
+
+
+def _e2e_decoder(**keys: rsa.RSAPrivateKey) -> media.MediaDecoder:
+    held = {int(k.removeprefix("c")): v for k, v in keys.items()}
+    return media.MediaDecoder(media.generate_media_rsa_key()[1], e2e_keys=held)
+
+
+_PICTURE = b"\x00\x00\x00\x01\x67" + bytes(200)
+
+
+@pytest.mark.parametrize(
+    ("version", "key_id", "expected"),
+    [
+        (5, 2, E2EKey(E2EKeyType.CIPHER, 2)),
+        (5, 10, E2EKey(E2EKeyType.CIPHER, 10)),
+        (4, 2, E2EKey(E2EKeyType.CIPHER, 2)),
+        (4, 9, E2EKey(E2EKeyType.CIPHER, 9)),
+        (4, 10, E2EKey(E2EKeyType.PIN, 10)),
+        (4, 1, None),
+        (5, 1, None),
+        (3, 10, None),
+        (6, 10, None),
+        (8, 10, None),
+    ],
+)
+def test_the_e2e_key_of_a_record_follows_the_apps_subheader_rule(
+    version: int, key_id: int, expected: E2EKey | None
+) -> None:
+    assert media.e2e_key(bytes([version, 0, 0, key_id, 10, 0])) == expected
+
+
+def test_a_short_subheader_names_no_e2e_key() -> None:
+    assert media.e2e_key(bytes([4, 0, 0])) is None
+
+
+def test_an_e2e_video_record_decrypts_under_its_cloud_cipher() -> None:
+    decoder = _e2e_decoder(c7=_E2E_CIPHER)
+    frame = decoder.decode(FrameType.VIDEO_FRAME, _e2e_video(_PICTURE), _E2E_SUB)
+    assert frame is not None
+    assert (frame.data, frame.is_keyframe, frame.timestamp_ms) == (_PICTURE, True, 2000)
+    assert (frame.codec, frame.width, frame.height) == (media.VideoCodec.H264, 1600, 1200)
+    assert decoder.aes_key == _E2E_SECRET[:32]
+
+
+def test_an_unflagged_e2e_picture_group_start_is_a_keyframe() -> None:
+    decoder = _e2e_decoder(c7=_E2E_CIPHER)
+    frame = decoder.decode(FrameType.VIDEO_FRAME, _e2e_video(_PICTURE, keyframe=False), _E2E_SUB)
+    assert frame is not None
+    assert frame.is_keyframe
+
+
+def test_the_e2e_key_string_ends_at_its_first_nul() -> None:
+    decoder = _e2e_decoder(c7=_E2E_CIPHER)
+    record = _e2e_video(_PICTURE, wrapped_plain=_E2E_SECRET + b"\x00junk")
+    frame = decoder.decode(FrameType.VIDEO_FRAME, record, _E2E_SUB)
+    assert frame is not None
+    assert frame.data == _PICTURE
+
+
+@pytest.mark.parametrize("plain", [_E2E_SECRET[:46], _E2E_SECRET + b"x", b"\x00" + _E2E_SECRET])
+def test_an_e2e_key_string_that_is_not_47_bytes_is_foreign(plain: bytes) -> None:
+    decoder = _e2e_decoder(c7=_E2E_CIPHER)
+    with pytest.raises(media._ForeignKeyframeError, match="not 47"):
+        decoder.decode(FrameType.VIDEO_FRAME, _e2e_video(_PICTURE, wrapped_plain=plain), _E2E_SUB)
+
+
+def test_an_e2e_record_wrapped_for_another_cipher_is_foreign() -> None:
+    other = rsa.generate_private_key(65537, 1024)  # noqa: S505 (protocol)
+    decoder = _e2e_decoder(c7=_E2E_CIPHER)
+    with pytest.raises(media._ForeignKeyframeError):
+        decoder.decode(FrameType.VIDEO_FRAME, _e2e_video(_PICTURE, cipher=other), _E2E_SUB)
+    assert decoder.aes_key == b""
+
+
+def test_an_e2e_record_with_a_broken_tag_raises_protocol_error() -> None:
+    decoder = _e2e_decoder(c7=_E2E_CIPHER)
+    record = bytearray(_e2e_video(_PICTURE))
+    record[media.E2E_VIDEO_HEADER_LEN] ^= 1  # the tag's first byte
+    with pytest.raises(ProtocolError, match="GCM tag"):
+        decoder.decode(FrameType.VIDEO_FRAME, bytes(record), _E2E_SUB)
+
+
+def test_an_e2e_record_too_short_for_its_tag_raises_protocol_error() -> None:
+    decoder = _e2e_decoder(c7=_E2E_CIPHER)
+    cut = _e2e_video(_PICTURE)[: media.E2E_VIDEO_HEADER_LEN + 15]
+    record = struct.pack("<I", 15) + cut[4:]
+    with pytest.raises(ProtocolError, match="shorter than 167"):
+        decoder.decode(FrameType.VIDEO_FRAME, record, _E2E_SUB)
+
+
+def test_the_e2e_key_unwraps_once_per_wrap() -> None:
+    decoder = _e2e_decoder(c7=_E2E_CIPHER)
+    record = _e2e_video(_PICTURE)
+    decoder.decode(FrameType.VIDEO_FRAME, record, _E2E_SUB)
+    decoder._e2e_keys = {7: rsa.generate_private_key(65537, 1024)}  # noqa: S505
+    frame = decoder.decode(FrameType.VIDEO_FRAME, record, _E2E_SUB)  # same wrap: no unwrap
+    assert frame is not None
+    assert frame.data == _PICTURE
+
+
+def test_a_new_wrap_unwraps_again() -> None:
+    other = b"Z" * 47
+    decoder = _e2e_decoder(c7=_E2E_CIPHER)
+    decoder.decode(FrameType.VIDEO_FRAME, _e2e_video(_PICTURE), _E2E_SUB)
+    record = _e2e_video(_PICTURE, wrapped_plain=other, secret=other)
+    frame = decoder.decode(FrameType.VIDEO_FRAME, record, _E2E_SUB)
+    assert frame is not None
+    assert frame.data == _PICTURE
+    assert decoder.aes_key == other[:32]
+
+
+def test_an_e2e_record_decrypts_under_the_cipher_its_subheader_names() -> None:
+    other = rsa.generate_private_key(65537, 1024)  # noqa: S505 (protocol)
+    decoder = _e2e_decoder(c3=other, c7=_E2E_CIPHER)
+    frame = decoder.decode(FrameType.VIDEO_FRAME, _e2e_video(_PICTURE), _E2E_SUB)
+    assert frame is not None
+    assert frame.data == _PICTURE
+
+
+def test_an_e2e_record_of_a_cipher_not_held_names_the_cipher() -> None:
+    decoder = _e2e_decoder(c3=_E2E_CIPHER)
+    with pytest.raises(EndToEndEncryptedError, match="cipher 7") as err:
+        decoder.decode(FrameType.VIDEO_FRAME, _e2e_video(_PICTURE), _E2E_SUB)
+    assert not isinstance(err.value, PinProtectedKeyError)
+    assert (err.value.key_type, err.value.key_id) == (E2EKeyType.CIPHER, 7)
+    refusal = decoder.e2e_refusal(_E2E_SUB)
+    assert refusal is not None
+    assert refusal.key_id == 7
+    decoder.add_e2e_key(7, _E2E_CIPHER)
+    assert decoder.e2e_refusal(_E2E_SUB) is None
+    assert decoder.decode(FrameType.VIDEO_FRAME, _e2e_video(_PICTURE), _E2E_SUB) is not None
+
+
+def test_an_e2e_record_of_the_users_pin_key_is_refused_naming_it() -> None:
+    decoder = _e2e_decoder(c10=_E2E_CIPHER)  # a cloud cipher 10 does not stand in for it
+    sub = bytes([4, 0, 0, 10, 1, 0x5B])
+    with pytest.raises(PinProtectedKeyError, match="PIN-protected key") as err:
+        decoder.decode(FrameType.VIDEO_FRAME, _e2e_video(_PICTURE), sub)
+    assert (err.value.key_type, err.value.key_id) == (E2EKeyType.PIN, 10)
+    assert isinstance(decoder.e2e_refusal(sub), PinProtectedKeyError)
+
+
+def test_a_record_that_is_not_e2e_needs_no_e2e_key() -> None:
+    assert _e2e_decoder().e2e_refusal(bytes([1, 0, 0, 1, 10, 0])) is None
+
+
+def test_a_live_decoder_decodes_no_e2e_record() -> None:
+    decoder = media.MediaDecoder(media.generate_media_rsa_key()[1])
+    assert not decoder.decodes(media.VideoVariant.E2E)
+    assert _e2e_decoder().decodes(media.VideoVariant.E2E)
+    with pytest.raises(UnsupportedError, match="e2e video does not decode"):
+        decoder.decode(FrameType.VIDEO_FRAME, _e2e_video(_PICTURE), _E2E_SUB)
+    with pytest.raises(ValueError, match="live stream"):
+        decoder.add_e2e_key(7, _E2E_CIPHER)
+
+
+def test_e2e_audio_decrypts_under_the_key_of_the_latest_video_record() -> None:
+    decoder = _e2e_decoder(c7=_E2E_CIPHER)
+    audio = _e2e_audio(b"\xff\xf1AAC")
+    assert decoder.decode(FrameType.AUDIO_FRAME, audio, _E2E_SUB) is None  # no key yet
+    decoder.decode(FrameType.VIDEO_FRAME, _e2e_video(_PICTURE), _E2E_SUB)
+    frame = decoder.decode(FrameType.AUDIO_FRAME, audio, _E2E_SUB)
+    assert frame is not None
+    assert (frame.kind, frame.data, frame.timestamp_ms) == (
+        media.MediaKind.AUDIO,
+        b"\xff\xf1AAC",
+        2040,
+    )
+
+
+def test_e2e_audio_of_another_stream_type_is_not_delivered() -> None:
+    decoder = _e2e_decoder(c7=_E2E_CIPHER)
+    decoder.decode(FrameType.VIDEO_FRAME, _e2e_video(_PICTURE), _E2E_SUB)
+    assert (
+        decoder.decode(FrameType.AUDIO_FRAME, _e2e_audio(b"G711", stream_type=2), _E2E_SUB) is None
+    )
+
+
+def test_e2e_audio_shorter_than_its_tag_raises_protocol_error() -> None:
+    decoder = _e2e_decoder(c7=_E2E_CIPHER)
+    with pytest.raises(ProtocolError, match="shorter than 32"):
+        decoder.decode(FrameType.AUDIO_FRAME, bytes(31), _E2E_SUB)
+
+
+def test_the_testing_e2e_records_decode() -> None:
+    key = testing_station.E2EMediaKey.for_cipher(_E2E_CIPHER.public_key())
+    record = testing_station.video_record(_PICTURE, keyframe=True)
+    decoder = _e2e_decoder(c7=_E2E_CIPHER)
+    sealed = testing_station.e2e_video_record(record, key)
+    frame = decoder.decode(FrameType.VIDEO_FRAME, sealed, _E2E_SUB)
+    assert frame is not None
+    assert frame.data == _PICTURE
+    audio = testing_station.e2e_audio_record(testing_station.audio_record(b"\xff\xf1A"), key)
+    audio_frame = decoder.decode(FrameType.AUDIO_FRAME, audio, _E2E_SUB)
+    assert audio_frame is not None
+    assert audio_frame.data == b"\xff\xf1A"
 
 
 def test_the_homebase2_open_payload_has_no_t8030_fields() -> None:

@@ -2304,6 +2304,32 @@ async def test_keys_optional_credentials_without_a_served_key_carry_the_owner_on
             await provider(refresh=False, cipher_id=1)
 
 
+@pytest.mark.parametrize(
+    ("records", "served"),
+    [
+        ({7: {"private_key": "PEM-7"}}, "PEM-7"),
+        ({7: {"ecc_private_key": "ab" * 32}}, None),  # the cipher holds no RSA key
+        ({}, None),  # the cloud serves no such cipher
+    ],
+    ids=["served", "no_rsa_key", "no_cipher"],
+)
+async def test_an_e2e_recording_key_is_the_owners_cipher_rsa_key(
+    records: dict[int, dict[str, str]], served: str | None
+) -> None:
+    """The key of an end-to-end encrypted recording: the station owner's cloud cipher
+    the record names, its RSA ``private_key``; a missing one is the recording's
+    problem, not a CloudProblem."""
+    cloud = FakeCloud(owner_ids={SYNTHETIC.station_sn: OWNER_ID}, cipher_records=records)
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        events: list[Event] = []
+        eufy.subscribe(events.append)
+        await eufy.async_login()
+        assert await eufy._e2e_key_provider(SYNTHETIC.station_sn)(7) == served
+        assert cloud.cipher_ids_requested == [7]
+        assert not [e for e in events if isinstance(e, CloudProblem)]
+
+
 async def test_keys_optional_credentials_for_a_keyless_record_carry_the_owner_only() -> None:
     """A ``get_ciphers`` record for the cipher that carries no key: with ``keys_optional``
     the owner's credentials without keys, asked once per back-off; without it a

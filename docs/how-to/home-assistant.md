@@ -2343,6 +2343,14 @@ video and AAC untouched, starting at a keyframe) written through the integration
 | a stored recording, for a viewer | `station.async_play_recording(record, write)` | stays asleep (off the station's disk) | the recording's own length, from its first keyframe |
 | the live stream now | `broadcast.async_capture(seconds, write)` | **wakes a battery camera**, shared with live viewers | `seconds` plus the camera's start, about 2.5 s cold |
 
+**End-to-end encrypted recordings** (the owner turned on the app's video encryption)
+play and download like the others when the station seals them for the owner's cloud
+cipher: the library fetches that key itself. Under the user's PIN-protected key they
+raise `PinProtectedKeyError` (an `EndToEndEncryptedError`, an `UnsupportedError`):
+before anything is sent when the row's `HistoryRecord.e2e_key` names it, else at the
+first record; the library neither asks for nor stores a PIN, so offer no retry. See
+[media.md](../protocol/media.md#end-to-end-encrypted-recordings-app).
+
 `MediaClip`: `video_frames`, `audio_frames`, `keyframes`, `bytes_written`,
 `duration_s` (by the camera's clock), `width`/`height` (the last frame's), `resizes`,
 `codec` (`VideoCodec` the clip carries, None without video; picks the MP4 tag below),
@@ -2405,7 +2413,10 @@ others again later; `ended_early` comes back the same on every try.
 - `HistoryRecord` carries what a media browser needs: `video_path` (the validated
   recording path: a `/zx/…/….zxvideo` path, or a HomeBase 2 camera's `.dat` file; else
   None), `started_at`/`ended_at` (aware, in the row's own UTC
-  offset), `duration_s`, `frame_count`, `size_bytes`, `thumb_path`, `record_id`, `ref`.
+  offset), `duration_s`, `frame_count`, `size_bytes`, `thumb_path`, `record_id`, `ref`,
+  and `e2e_key` (`E2EKey(key_type, key_id)` when the recording is end-to-end encrypted:
+  `E2EKeyType.PIN` does not play, see *End-to-end encrypted recordings* below; from the
+  row's `cipher_id`).
 - **Finding a listed row again:** every row a listing or lookup returns carries `ref`,
   opaque text that names that row of that camera on that station (URL-path-safe, so it
   can be one segment of a thumbnail URL as it is, and JSON-safe; the same row always

@@ -13,7 +13,9 @@ from typing import Any, Protocol
 from ..cloud.models import CloudDevice
 from ..events import HistoryRecord, SecurityEvent
 from ..exceptions import EufySecurityError, RecordNotFoundError, UnsupportedError
+from ..models import E2EKeyType
 from ..p2p.clip import ClipWriter, MediaClip
+from ..p2p.media import pin_key_refusal
 from ..p2p.messages import DB_QUERY_HISTORY, history_query_verb, record_id_day
 from ..p2p.session import StationSession
 from ..recordings import (
@@ -557,12 +559,17 @@ class StationHistory:
 
     def _recording_of(self, record: HistoryRecord) -> tuple[str, int]:
         """The record's recording path and its camera's channel; raises
-        :class:`UnsupportedError` for a record without either."""
+        :class:`UnsupportedError` for a record without either, and
+        :class:`~..exceptions.PinProtectedKeyError` for one its row names end-to-end encrypted with the
+        user's PIN key, as the app refuses it before playing."""
         path = record.video_path
         if path is None:
             raise UnsupportedError("the record carries no recording")
         if record.device_sn is None:
             raise UnsupportedError("the record names no camera")
+        key = record.e2e_key
+        if key is not None and key.key_type is E2EKeyType.PIN:
+            raise pin_key_refusal(key.key_id)
         return path, self._station.channel_for(record.device_sn)
 
     async def _clip_of(self, record: HistoryRecord, clip: MediaClip) -> MediaClip:

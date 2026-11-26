@@ -62,6 +62,8 @@ from .keys import SessionKeys
 from .media_stream import MediaStream, StreamOwner
 
 if TYPE_CHECKING:
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
     from . import P2PCredentials
     from .budget import SessionBudget
 
@@ -299,19 +301,25 @@ class MediaSlot:
     ) -> MediaStream:
         await self._session.async_connect()
         creds = self._session._require_creds()
+        # A recording may be end-to-end encrypted; the app plays that only from recordings.
+        e2e_keys: dict[int, rsa.RSAPrivateKey] | None = (
+            {} if command in _RECORDING_COMMANDS else None
+        )
         if native_recording_path is not None:
             # HomeBase 2's recording key is the station owner account's ECC key;
             # the newer JSON media path creates a fresh per-open key instead.
-            decoder = MediaDecoder(ecc_private_key=ecc_private_key_from_hex(creds.ecc_private_key))
+            decoder = MediaDecoder(
+                ecc_private_key=ecc_private_key_from_hex(creds.ecc_private_key), e2e_keys=e2e_keys
+            )
             frame_type, body = command, b""
         else:
             if media_key is MediaKeyType.ECC:
                 key_hex, ecc_key = generate_media_ecc_key()
-                decoder = MediaDecoder(ecc_private_key=ecc_key)
+                decoder = MediaDecoder(ecc_private_key=ecc_key, e2e_keys=e2e_keys)
             else:
                 # RSA key generation takes tens of milliseconds: keep it off the event loop.
                 key_hex, rsa_key = await asyncio.to_thread(generate_media_rsa_key)
-                decoder = MediaDecoder(rsa_key)
+                decoder = MediaDecoder(rsa_key, e2e_keys=e2e_keys)
             frame_type, body = open_frame(creds.account_id, key_hex)
         slot_deadline = time.monotonic() + first_frame_timeout
         # The slot wait and the drain run without the op lock, so commands are not

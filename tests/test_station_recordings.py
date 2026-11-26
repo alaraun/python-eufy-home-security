@@ -828,6 +828,15 @@ async def test_a_play_passes_wait_and_realtime_to_the_session(
         ({"record_id": 1, "device_sn": SYNTHETIC.camera_sn}, "no recording"),
         ({"record_id": 1, "storage_path": "/zx/a.zxvideo"}, "names no camera"),
         ({"record_id": 1, "device_sn": OTHER_SN, "storage_path": "/zx/a.zxvideo"}, "not paired"),
+        (  # end-to-end encrypted with the user's PIN key 10
+            {
+                "record_id": 1,
+                "device_sn": SYNTHETIC.camera_sn,
+                "storage_path": "/zx/a.zxvideo",
+                "cipher_id": 0x0400000A,
+            },
+            "PIN-protected key \\(key id 10\\)",
+        ),
     ],
 )
 @pytest.mark.parametrize("transfer", ["async_download_recording", "async_play_recording"])

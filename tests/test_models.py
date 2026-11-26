@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from eufy_home_security.models import PARAM_WIFI_RSSI, GuardMode
+from eufy_home_security.models import PARAM_WIFI_RSSI, E2EKey, E2EKeyType, GuardMode
 
 
 @pytest.mark.parametrize(
@@ -44,3 +44,23 @@ def test_parse_rejects_bools_and_unknown_codes_with_the_formatted_error(value: o
 
 def test_rssi_param_alias_names_the_wifi_signal() -> None:
     assert PARAM_WIFI_RSSI == 1142
+
+
+@pytest.mark.parametrize(
+    ("cipher_id", "key"),
+    [
+        (0x0400000A, E2EKey(E2EKeyType.PIN, 10)),
+        (0x05000007, E2EKey(E2EKeyType.CIPHER, 7)),
+        (0x050012FF, E2EKey(E2EKeyType.CIPHER, 0xFF)),
+        (84, None),  # a P2P cipher id: no end-to-end encryption
+        (0x00FFFFFF, None),
+        (0x01000002, None),  # a type the app does not know
+        (0x09000002, None),
+        (-1, None),
+        (None, None),
+    ],
+)
+def test_a_cipher_id_names_its_e2e_key_as_the_app_reads_it(
+    cipher_id: int | None, key: E2EKey | None
+) -> None:
+    assert E2EKey.from_cipher_id(cipher_id) == key

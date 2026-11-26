@@ -60,7 +60,7 @@ from eufy_home_security.exceptions import (
     SessionReplacedError,
     StationUnreachableError,
 )
-from eufy_home_security.models import FrameCipher, GuardMode
+from eufy_home_security.models import E2EKey, E2EKeyType, FrameCipher, GuardMode
 from eufy_home_security.testing import SYNTHETIC
 
 
@@ -204,6 +204,27 @@ def test_a_homebase2_row_exposes_native_dat_recording_path() -> None:
     record = HistoryRecord.from_row(_clip_row(storage_path=path))
     assert record.video_path == path
     assert record.frame_count == 90
+
+
+@pytest.mark.parametrize(
+    ("cipher_id", "expected", "key"),
+    [
+        (0x0400000A, 0x0400000A, E2EKey(E2EKeyType.PIN, 10)),
+        ("83886087", 0x05000007, E2EKey(E2EKeyType.CIPHER, 7)),  # a station's text
+        (84, 84, None),
+        ("", None, None),
+    ],
+)
+def test_a_history_record_names_the_key_its_recording_is_encrypted_under(
+    cipher_id: object, expected: int | None, key: E2EKey | None
+) -> None:
+    record = HistoryRecord.from_row(_clip_row(cipher_id=cipher_id))
+    assert (record.cipher_id, record.e2e_key) == (expected, key)
+
+
+def test_a_row_without_a_cipher_id_names_no_e2e_key() -> None:
+    record = HistoryRecord.from_row(_clip_row())
+    assert (record.cipher_id, record.e2e_key) == (None, None)
 
 
 def test_a_history_record_names_its_recording_times_and_size() -> None:

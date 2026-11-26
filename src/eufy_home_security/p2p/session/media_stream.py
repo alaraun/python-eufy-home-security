@@ -15,10 +15,13 @@ from ..._logging import LogThrottle, Secret
 from ...exceptions import (
     CommandNotAppliedError,
     DeviceTimeoutError,
+    EndToEndEncryptedError,
     EufySecurityError,
+    PinProtectedKeyError,
     ProtocolError,
     UnsupportedError,
 )
+from ...models import E2EKeyType
 from ..media import (
     ANNEX_B_STARTS,
     KEYFRAME_MIN,
@@ -47,6 +50,8 @@ from .stats import MEDIA_SHAPE_RECORDS, MediaCounters, count_capped
 from .wake import WakeBackoff
 
 if TYPE_CHECKING:
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
     from .media_slot import MediaSlot
 
 _LOGGER = logging.getLogger(__name__)
@@ -56,6 +61,11 @@ MEDIA_QUEUE_FRAMES = 250
 
 MEDIA_OTHER_CAMERA_FRAMES = 25
 """A live stream fails when this many frames of another camera arrive before its own."""
+
+MEDIA_KEY_WAIT_BYTES = 32 * 1024 * 1024
+"""Media bytes a recording holds while the cloud cipher key of its end-to-end encrypted
+records is fetched (a station sends a short recording whole meanwhile); past it, records
+are dropped and video resumes at a keyframe."""
 
 
 def wrapped_key(payload: bytes) -> bytes | None:
@@ -176,6 +186,13 @@ class MediaStream:
         """What the stream did with the previous video record (diagnostics)."""
         self._last_key_ms: int | None = None
         """The header time of the latest keyframe that decoded."""
+        self._key_wait: list[tuple[int, bytes, int | None, bytes | None]] | None = None
+        """Records held while an end-to-end key is fetched (None: no fetch running)."""
+        self._key_wait_bytes = 0
+        self._key_wait_overflow = False
+        self._end_after_key = False
+        """The station ended the recording while its key was fetched."""
+        self._key_task: asyncio.Task[rsa.RSAPrivateKey] | None = None
 
     @property
     def closed(self) -> bool:
@@ -285,6 +302,9 @@ class MediaStream:
         self._frames.clear()
         self._held = None
         self._held_audio = []
+        self._key_wait = None
+        if self._key_task is not None:
+            self._key_task.cancel()
         self._wake.set()
         if closing:
             self._session._media_slot.detach(self)
@@ -363,10 +383,22 @@ class MediaStream:
             self._other_camera_frame(camera, is_video)
             return "other_camera"
         self._last_rx = time.monotonic()
+        if self._key_wait is not None:
+            self._hold_for_key(frame_type, payload, camera, subheader)
+            return "key_pending"
         variant = video_variant(subheader) if is_video and subheader else None
         if variant is not None and not self._decoder.decodes(variant):
             self._undecodable_video(variant)
             return "undecodable"
+        if variant is VideoVariant.E2E and subheader:
+            refusal = self._decoder.e2e_refusal(subheader)
+            if isinstance(refusal, PinProtectedKeyError):
+                self._refuse_video(refusal, variant)
+                return "undecodable"
+            if refusal is not None:
+                self._fetch_e2e_key(refusal.key_id)
+                self._hold_for_key(frame_type, payload, camera, subheader)
+                return "key_pending"
         # Decide what to drop before decoding: a keyframe unwrap and its copies are
         # the expensive part, and they are wasted on a frame that is thrown away.
         if len(self._frames) >= MEDIA_QUEUE_FRAMES:
@@ -380,8 +412,9 @@ class MediaStream:
                 self._session._media_counters.dropped_for_reader += 1
             return "queue_full"
         is_key = is_video and video_record_is_key(payload, variant)
-        # An ECC record without the keyframe flag is told only after its decrypt.
-        if is_video and self._need_keyframe and not is_key and variant is not VideoVariant.ECC:
+        # A sealed record without the keyframe flag is told only after its decrypt.
+        sealed = variant in (VideoVariant.ECC, VideoVariant.E2E)
+        if is_video and self._need_keyframe and not is_key and not sealed:
             self._skip_to_keyframe()
             return "waiting_keyframe"
         if not is_video and not self._started:
@@ -573,6 +606,17 @@ class MediaStream:
         self._held_audio = []
         self._wake.set()
 
+    @property
+    def _key_pending(self) -> bool:
+        """Whether records are held while an end-to-end key is fetched."""
+        return self._key_wait is not None
+
+    @property
+    def _has_media(self) -> bool:
+        """Whether the station's media for this stream has begun: a frame delivered, or
+        records held for the key of an end-to-end encrypted recording."""
+        return self._started or self._key_pending
+
     def _end(self) -> None:
         """The station says the recording is over: deliver what is queued, then stop."""
         if self._closed:
@@ -584,6 +628,9 @@ class MediaStream:
             time.monotonic() - self._opened_at,
         )
         self._end_frame = True
+        if self._key_pending:
+            self._end_after_key = True  # the held records go first
+            return
         self._finish()
 
     def _download_finished(self, settle: float) -> None:
@@ -679,22 +726,88 @@ class MediaStream:
     def _undecodable_video(self, variant: VideoVariant) -> None:
         """Fail a stream whose video arrives in a protection its key does not decode;
         after its first keyframe, drop such records."""
-        key = self._decoder.key_type
+        if variant is VideoVariant.E2E:
+            reason = "which the app plays only from a recording"
+        else:
+            reason = (
+                f"which a stream opened with an {self._decoder.key_type.value.upper()} key "
+                "does not decode"
+            )
+        self._refuse_video(
+            UnsupportedError(f"the station sends {variant.value} video, {reason}"), variant
+        )
+
+    def _refuse_video(self, error: UnsupportedError, variant: VideoVariant) -> None:
+        """Fail the stream with ``error`` before its first keyframe; after it, drop the
+        record (logged once per variant)."""
         if self._started:
             if self._throttle.should_log(("undecodable-video", variant)):
-                _LOGGER.warning(
-                    "dropping %s video records a stream opened with an %s key does not decode",
-                    variant,
-                    key,
-                )
+                _LOGGER.warning("dropping %s video records: %s", variant, error)
             return
-        self._fail(
-            UnsupportedError(
-                f"the station sends {variant.value} video, which a stream opened with an "
-                f"{key.value.upper()} key does not decode"
-            )
-        )
+        self._fail(error)
         self._session._media_slot.detach(self)
+
+    def _hold_for_key(
+        self, frame_type: int, payload: bytes, camera: int | None, subheader: bytes | None
+    ) -> None:
+        """Keep a record until the end-to-end key arrives; past
+        :data:`MEDIA_KEY_WAIT_BYTES`, drop it and resume video at a keyframe."""
+        if self._key_wait is None:
+            return
+        if self._key_wait_bytes + len(payload) > MEDIA_KEY_WAIT_BYTES:
+            self._key_wait_overflow = True
+            return
+        self._key_wait_bytes += len(payload)
+        self._key_wait.append((frame_type, payload, camera, subheader))
+
+    def _fetch_e2e_key(self, key_id: int) -> None:
+        """Fetch the cloud cipher ``key_id`` for the recording's end-to-end encrypted
+        records, holding records until it arrives (:meth:`_key_fetched`)."""
+        _LOGGER.debug(
+            "%s: media (cmd %d ch%d) is end-to-end encrypted under cipher %d; fetching its key",
+            self._session._log_name,
+            self.command,
+            self.channel,
+            key_id,
+        )
+        self._key_wait, self._key_wait_bytes, self._key_wait_overflow = [], 0, False
+        self._key_task = asyncio.get_running_loop().create_task(
+            self._session._e2e_cipher_key(key_id)
+        )
+        self._key_task.add_done_callback(lambda task: self._key_fetched(key_id, task))
+
+    def _key_fetched(self, key_id: int, task: asyncio.Task[rsa.RSAPrivateKey]) -> None:
+        """Take the fetched key and replay the held records, or fail the stream."""
+        self._key_task = None
+        held, self._key_wait = self._key_wait, None
+        if task.cancelled():
+            return
+        error = task.exception()  # retrieved even when the stream closed meanwhile
+        if self._closed or held is None:
+            return
+        if error is not None:
+            if not isinstance(error, EndToEndEncryptedError):
+                error = EndToEndEncryptedError(
+                    f"the key of cipher {key_id} for the recording's end-to-end encryption "
+                    f"could not be fetched: {error}",
+                    key_type=E2EKeyType.CIPHER,
+                    key_id=key_id,
+                )
+                error.__cause__ = task.exception()
+            self._refuse_video(error, VideoVariant.E2E)
+            return
+        self._decoder.add_e2e_key(key_id, task.result())
+        for record in held:
+            if self.closed:  # a held record can fail the stream
+                return
+            self._take(*record)
+        if self._key_pending:
+            return  # a held record named another cipher: its fetch runs now
+        if self._key_wait_overflow:
+            self._need_keyframe = True
+            self._drop_held_pframe()
+        if self._end_after_key:
+            self._finish()
 
     def _other_camera_frame(self, camera: int, is_video: bool) -> None:
         """Drop a live frame tagged with another camera; fail when that is all that comes."""
@@ -739,3 +852,5 @@ class StreamOwner(Protocol):
     def _unanswered_error(
         self, command: int, channel: int, indices: Sequence[int]
     ) -> CommandNotAppliedError | DeviceTimeoutError: ...
+
+    async def _e2e_cipher_key(self, key_id: int) -> rsa.RSAPrivateKey: ...
