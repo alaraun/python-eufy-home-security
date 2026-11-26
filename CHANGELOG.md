@@ -4,6 +4,20 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.20](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.19...v0.4.20) (2026-11-26)
+
+
+### Features
+
+* **locks:** lock and unlock for every lock route the eufy app uses (station session or MQTT broker), confirmed by the lock's state ([#234](https://github.com/alaraun/python-eufy-home-security/issues/234)) ([5d3a638](https://github.com/alaraun/python-eufy-home-security/commit/5d3a6381e3a596a590d5a7399342f5298ac6d548))
+* **media:** decode end-to-end encrypted recordings under the owner's cloud cipher and name PIN-protected ones (integration issue 220) ([#239](https://github.com/alaraun/python-eufy-home-security/issues/239)) ([c614e45](https://github.com/alaraun/python-eufy-home-security/commit/c614e453c2f661e8c8ef6378d1a79b9c3dac5c32))
+* **station:** find the recording of a cloud-pushed detection that names none, by camera and time (integration issue 181) ([#235](https://github.com/alaraun/python-eufy-home-security/issues/235)) ([72e26ff](https://github.com/alaraun/python-eufy-home-security/commit/72e26ffc1d2fb9dd345d03f8921154992490c79b))
+
+
+### Bug Fixes
+
+* **devices:** a battery level only where the model's thing description declares one; sirens, keypads, sensors without a level and stations no longer report param 1101 as a battery level ([#237](https://github.com/alaraun/python-eufy-home-security/issues/237)) ([#240](https://github.com/alaraun/python-eufy-home-security/issues/240)) ([3446cec](https://github.com/alaraun/python-eufy-home-security/commit/3446cecbde15c7da37deb748c3dc36695aa852ce))
+
 ## [0.4.19](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.18...v0.4.19) (2026-11-25)
 
 
