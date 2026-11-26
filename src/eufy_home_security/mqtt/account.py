@@ -63,6 +63,8 @@ class EufyMqttAccount:
         self._subscribe: frozenset[str] | None = None
         self._stopped = False
         """Set by :meth:`async_stop`, cleared by :meth:`async_start`: device updates are ignored."""
+        self._stop_generation = 0
+        """Counts :meth:`async_stop` calls: a start called before the latest stop starts nothing."""
         self._ending: set[asyncio.Task[None]] = set()
         """Client stops still running after a cancel of :meth:`async_stop`'s caller."""
         self._lifecycle = asyncio.Lock()
@@ -174,9 +176,14 @@ class EufyMqttAccount:
 
         With none, nothing connects unless ``connect_without_devices`` (a connection check
         on the cloud's :attr:`~..cloud.api.EufyCloudApi.region`). ``subscribe`` is each
-        client's (:meth:`.EufyMqttClient.async_start`).
+        client's (:meth:`.EufyMqttClient.async_start`). A start still waiting for a device
+        update or another start when :meth:`async_stop` is called starts nothing.
         """
+        generation = self._stop_generation
         async with self._lifecycle:
+            if generation != self._stop_generation:
+                _LOGGER.debug("MQTT account stopped while the start waited: nothing started")
+                return
             if self._clients:
                 raise RuntimeError("the MQTT account is already started")
             self._stopped = False
@@ -213,12 +220,14 @@ class EufyMqttAccount:
 
         The account is marked stopped and its clients are taken and told to stop at once,
         before anything is awaited, so a cancel of the caller (a bounded unload) still
-        stops every client. A start or device update in progress starts no client after
-        that and finishes first (each client's stop waits for its own start or update); a
-        later device update is ignored until the next :meth:`async_start`. A cancel of the
+        stops every client. A start or device update in progress, or one still waiting for
+        another, starts no client after that and finishes first (each client's stop waits
+        for its own start or update); a later device update is ignored until the next
+        :meth:`async_start`. A cancel of the
         caller propagates at once. A client stop that fails is logged as a warning, and the
         first such failure is raised to a caller still waiting."""
         self._stopped = True
+        self._stop_generation += 1
         clients, self._clients = list(self._clients.values()), {}
         # Tasks, not awaits in turn: a cancel of the caller still stops every client.
         stops = [asyncio.create_task(c.async_stop()) for c in clients]

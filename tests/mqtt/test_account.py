@@ -156,6 +156,36 @@ async def test_a_device_update_after_a_stop_starts_no_client(
     assert mqtt_tasks() == []
 
 
+async def test_a_start_queued_before_a_stop_starts_no_client(
+    rig: Rig, account: EufyMqttAccount, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A start waiting behind a slow device update when a stop comes starts nothing: once
+    the stop returns no client runs, and the account stays stopped."""
+    await account.async_start([EU_LOCK])
+    await account.async_wait_connected(5)
+    held = hold_selection(monkeypatch, account_module)
+    try:
+        update = asyncio.create_task(account.async_update_devices([EU_LOCK]))
+        await until(held.entered.is_set)
+        start = asyncio.create_task(account.async_start([EU_LOCK, SCOPE_LOCK]))
+        await asyncio.sleep(0.05)  # the start waits for the update
+        stop = asyncio.create_task(account.async_stop())
+        await asyncio.sleep(0.05)
+    finally:
+        held.release.set()
+    async with asyncio.timeout(5):
+        await update
+        await start
+        await stop
+    assert account.clients == {}
+    assert account._stopped
+    await account.async_update_devices([EU_LOCK, SCOPE_LOCK])  # still stopped: ignored
+    assert account.clients == {}
+    await until(lambda: rig.broker.connected_clients == [])
+    assert len(rig.broker.connects) == 1
+    await until(lambda: mqtt_tasks() == [], 3.0)
+
+
 async def test_a_start_after_a_stop_follows_device_updates_again(
     rig: Rig, account: EufyMqttAccount
 ) -> None:

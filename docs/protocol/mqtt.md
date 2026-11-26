@@ -177,7 +177,7 @@ await mqtt.async_stop()
 | `add_listener(fn)` | `fn(MqttMessage)` for every message; returns its remover. An exception from `fn` is logged (once per 5 minutes per listener) and touches neither the connection nor the other listeners |
 | `async_update_devices(devices)` | a changed MQTT device set reconnects with a new certificate; an unchanged one changes nothing. On the account: a scope left without MQTT devices has its client stopped, a new one gets a client. After `async_stop()` it does nothing until the next `async_start()` |
 | `clients`, `client_for(sn)` | the account's client per scope, and the one serving a device |
-| `async_stop()` | stops every client; their pending requests get a `CommunicationError`. On the account it marks itself stopped and tells every client to stop before it awaits anything, so a cancelled (bounded) stop still stops them all, and a start or device update in progress starts no client after it |
+| `async_stop()` | stops every client; their pending requests get a `CommunicationError`. On the account it marks itself stopped and tells every client to stop before it awaits anything, so a cancelled (bounded) stop still stops them all, and a start or device update in progress, or one still waiting for another, starts no client after it |
 
 The calls are the same on both classes. A serial that is not one of the client's (the
 account's) MQTT devices is an `UnsupportedError`; no
