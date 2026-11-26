@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import ast
+import inspect
 from pathlib import Path
 
 import pytest
 
 import eufy_home_security
+from eufy_home_security import exceptions as exceptions_module
 from eufy_home_security.exceptions import (
     AccountRejectedError,
     CipherUnavailableError,
@@ -77,6 +79,23 @@ def test_an_account_refusal_is_a_rejection_with_its_code() -> None:
     assert str(err) == "command 1224 rejected with code -104: INVALID_ACCOUNT"
     assert eufy_home_security.AccountRejectedError is AccountRejectedError
     assert "AccountRejectedError" in eufy_home_security.__all__
+
+
+def test_every_public_error_is_exported_at_the_package_root() -> None:
+    """A consumer catches every library error from ``eufy_home_security`` itself (the lock
+    refusals included), never from the module that defines it."""
+    defined = {
+        name
+        for name, obj in vars(exceptions_module).items()
+        if inspect.isclass(obj)
+        and issubclass(obj, BaseException)
+        and obj.__module__ == exceptions_module.__name__
+        and not name.startswith("_")
+    }
+    assert {"GuestAccessError", "MqttAccountRequiredError", "LockNotMovedError"} <= defined
+    assert defined - set(eufy_home_security.__all__) == set()
+    for name in defined:
+        assert getattr(eufy_home_security, name) is getattr(exceptions_module, name)
 
 
 def test_an_error_lists_every_device_it_names() -> None:

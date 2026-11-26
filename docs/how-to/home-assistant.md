@@ -1788,7 +1788,8 @@ cloud user id before the first login), `MqttAccountRequiredError` (an MQTT lock:
 `eufy.use_mqtt(account)` with the account's `EufyMqttAccount`) or `DeviceBusyError`
 (a command for that lock still waits). After sending they raise `CommandRejectedError`
 (`err.code`; -151 is a refused sequence number), `LockNotMovedError` (`err.state`: jammed
-or stopped between positions) or `DeviceTimeoutError`. A lock whose reading (below: one
+or stopped between positions) or `DeviceTimeoutError`. Every one of them imports from
+`eufy_home_security` itself, as every library error does. A lock whose reading (below: one
 merged reading of every source, never the MQTT reports alone) already is the asked state
 returns at once, sending nothing. Each wait is the app's: on the station path the connect,
 the lock's public key (a cloud call, on the 1961 and 1930 forms) and the station's result
