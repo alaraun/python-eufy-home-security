@@ -1122,6 +1122,17 @@ def test_sensor_low_battery_flag(raw: str, low: bool | None) -> None:
     assert sensor.pir_sensitivity_raw == 8
 
 
+_SIREN_SN = "T8970P0000000005"
+
+
+def test_a_model_declaring_no_battery_value_reports_no_level_but_its_low_battery_flag() -> None:
+    """A siren's thing description declares no battery level, only the low-battery flag:
+    its block's 1101 is no level."""
+    siren = _sub(_SIREN_SN, 0, 5)
+    device = _state_of({5: {1101: "49", 1601: "1"}}, sub_devices=(siren,)).devices[5]
+    assert (device.serial, device.battery, device.low_battery) == (_SIREN_SN, None, True)
+
+
 @pytest.mark.parametrize(("raw", "upgrading"), [("0", False), ("1", True), ("", None)])
 def test_the_upgrade_flag_of_a_device_and_of_its_station(raw: str, upgrading: bool | None) -> None:
     state = _state_of({0: {1400: "0", 1134: raw}, 255: {1133: raw}})
@@ -1391,9 +1402,10 @@ def test_settings_for_lists_the_model_then_the_mode_tables() -> None:
 
 
 def test_has_battery_follows_the_models_thing_description() -> None:
-    """A camera model declaring battery_value has a battery; a bundled mains model
-    (floodlight, wired doorbell) has none although its block may report charging;
-    a sensor, a station and a model without settings answer None."""
+    """A model declaring battery_value has a battery, whatever its kind (a camera, a
+    sensor); a bundled model declaring none (floodlight, wired doorbell, siren, the
+    HomeBase) has none although its block may report a level or charging; a model
+    without settings answers None."""
     floodlight = CloudDevice(
         device_sn="T8425P2000000005",
         device_type=47,
@@ -1406,17 +1418,20 @@ def test_has_battery_follows_the_models_thing_description() -> None:
     )
     sensor = dataclasses.replace(floodlight, device_sn=SENSOR_SN, device_type=10, channel=16)
     unknown = dataclasses.replace(floodlight, device_sn="T9999P0000000002", channel=3)
-    hub = _hub_with(CAMERA, floodlight, doorbell, sensor, unknown)
+    siren = dataclasses.replace(floodlight, device_sn=_SIREN_SN, device_type=0, channel=5)
+    hub = _hub_with(CAMERA, floodlight, doorbell, sensor, unknown, siren)
     assert hub.has_battery(SYNTHETIC.camera_sn) is True
     assert hub.has_battery("T8425P2000000005") is False
     assert hub.has_battery("T8200P2000000006") is False
-    assert hub.has_battery(SENSOR_SN) is None
+    assert hub.has_battery(SENSOR_SN) is True
+    assert hub.has_battery(_SIREN_SN) is False
     assert hub.has_battery("T9999P0000000002") is None
-    assert hub.has_battery() is None
-    assert hub.has_battery(SYNTHETIC.station_sn) is None
-    with pytest.raises(UnsupportedError, match="not paired"):
-        hub.has_battery("T8160P2000099999")
-    assert hub.has_battery("T8910P2000099999") is None  # another kind: None before pairing
+    assert hub.has_battery() is False
+    assert hub.has_battery(SYNTHETIC.station_sn) is False
+    for unpaired in ("T8160P2000099999", "T8910P2000099999"):
+        with pytest.raises(UnsupportedError, match="not paired"):
+            hub.has_battery(unpaired)
+    assert hub.has_battery("T0000P2000099999") is None  # uncatalogued: None before pairing
     standalone = _standalone_t8170()
     assert standalone.has_battery() is True
     assert standalone.has_battery(_T8170_SN) is True

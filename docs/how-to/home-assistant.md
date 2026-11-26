@@ -1309,17 +1309,21 @@ A closed session (`async_close`) never reconnects on its own — build a new
       does not send it.
   - each camera or sensor: `SubDeviceState.battery`, `rssi` (Wi-Fi for cameras, sub-1 GHz
     for the motion sensor; `wifi_rssi` / `sub1g_rssi` if you need both), `firmware`.
+    `battery` is None for a model whose thing description declares no `battery_value`
+    (a siren, a keypad, most stations, a mains-powered camera): the eufy app shows no
+    level for it, at most its low-battery flag.
   - `SubDeviceState.kind` (`DeviceKind`) picks the platforms for a device.
   - `pir_event_ms` is the time of the sensor's last PIR event: fine for a "last motion"
     timestamp sensor, never for availability or "last seen". A quiet, healthy sensor
     keeps an old value, and so does a dead one.
   - **Charging and power manager** (cameras; each None when the block omits it, all
     *declared* from the vendor handlers, values live-read only). Build these and the
-    battery sensor only where `station.has_battery(device_sn)` is not False: a
-    mains-powered camera or a wired doorbell reports a charging field too, and the eufy
-    app shows no battery for a model whose thing description lacks `battery_value`
-    (None for a model without a settings list, and for kinds other than camera and
-    doorbell):
+    battery sensor only where `station.has_battery(device_sn)` is not False: the eufy
+    app shows no battery level for a model whose thing description lacks
+    `battery_value`, of any kind (a mains-powered camera or a wired doorbell reports a
+    charging field too; a siren's or keypad's block can carry a 1101 that is no level).
+    False drops the rows, True keeps them; None for a model without a settings list or
+    a serial of no known model:
     - `charging` / `solar_charging` (bool) from `power_source`, the raw param 2111
       code: 0/2 not charging, 1 USB, 3 AC, 4 built-in solar, 5 USB + built-in solar,
       6/8 external panel, 7/12 external + built-in, 20 a connected panel. A binary
@@ -1337,8 +1341,9 @@ A closed session (`async_close`) never reconnects on its own — build a new
       for their timing and limitations.
     - `siren_actions` (params 1509-1513): the raw per-mode siren action by `GuardMode`,
       no named bits; attributes at most.
-  - Motion sensor: `low_battery` (param 1601) is the sensor's own low-battery flag, a
-    battery binary sensor beside `battery`. `pir_sensitivity_raw` (1609) is raw; the
+  - Sensor or siren: `low_battery` (param 1601) is the device's own low-battery flag, a
+    battery binary sensor beside `battery` (or alone, where `has_battery` is False). It
+    does not follow `has_battery`. `pir_sensitivity_raw` (1609) is raw; the
     handler names only 0-2, so do not expose it as the sensitivity setting.
   - `upgrading` (`SubDeviceState` param 1134; `StationState` 1133, or 1134 on a
     standalone device): True while a firmware update is being installed, the flag the

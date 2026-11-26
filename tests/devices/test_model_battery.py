@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib.resources
 import json
 from collections.abc import Iterator
 from pathlib import Path
@@ -11,10 +12,12 @@ import pytest
 
 from eufy_home_security.devices import model_settings
 from eufy_home_security.devices.model_settings import (
+    BATTERY_PROPERTY,
     DEFAULT_BATTERY_READS,
     BatteryRead,
     battery_level,
     battery_reads,
+    bundled_codes,
 )
 from eufy_home_security.exceptions import ModelDataError
 
@@ -38,8 +41,10 @@ def data_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]
     _clear()
 
 
-def _write(root: Path, battery: object) -> None:
-    doc = {"schema_version": 3, "product_code": "T0001", "settings": {"mode": GOOD_ENTRY}}
+def _write(root: Path, battery: object, *, declared: bool = True) -> None:
+    """``T0001.json`` with ``battery``; its settings list ``battery_value`` when ``declared``."""
+    settings = {"mode": GOOD_ENTRY, **({BATTERY_PROPERTY: GOOD_ENTRY} if declared else {})}
+    doc = {"schema_version": 3, "product_code": "T0001", "settings": settings}
     if battery is not None:
         doc["battery"] = battery
     (root / "T0001.json").write_text(json.dumps(doc), encoding="utf-8")
@@ -84,9 +89,37 @@ def test_a_model_without_a_file_reads_1101_as_reported(code: str | None) -> None
     assert battery_level(code, {1101: "-1"}) is None
 
 
-def test_a_file_without_a_battery_reads_1101_as_reported(data_root: Path) -> None:
+def test_a_file_declaring_a_battery_without_reads_reads_1101_as_reported(
+    data_root: Path,
+) -> None:
     _write(data_root, None)
+    assert battery_reads("T0001") == DEFAULT_BATTERY_READS
     assert battery_level("T0001", {1101: "0", 6001: "40"}) == 0
+
+
+@pytest.mark.parametrize("battery", [None, [{"param": 1101}]])
+def test_a_file_declaring_no_battery_value_has_no_level(data_root: Path, battery: object) -> None:
+    """The eufy app shows a battery level only for a model whose thing description declares
+    ``battery_value``: without it, no parameter is read, whatever the file lists."""
+    _write(data_root, battery, declared=False)
+    assert battery_reads("T0001") == ()
+    assert battery_level("T0001", {1101: "49", 6001: "40"}) is None
+
+
+def _declares_battery_value(code: str) -> bool:
+    """Whether the bundled file of ``code`` lists ``battery_value``, read from the JSON."""
+    root = importlib.resources.files("eufy_home_security.devices.data.models")
+    data = json.loads(root.joinpath(f"{code}.json").read_text(encoding="utf-8"))
+    return "battery_value" in data["settings"]
+
+
+@pytest.mark.parametrize("code", bundled_codes())
+def test_every_bundled_model_has_a_level_only_where_it_declares_battery_value(code: str) -> None:
+    declared = _declares_battery_value(code)
+    reads = battery_reads(code)
+    assert bool(reads) is declared
+    params = {read.param: "49" for read in (*reads, *DEFAULT_BATTERY_READS)}
+    assert (battery_level(code, params) is not None) is declared
 
 
 @pytest.mark.parametrize(
@@ -99,6 +132,9 @@ def test_a_file_without_a_battery_reads_1101_as_reported(data_root: Path) -> Non
         ("T8503", {1101: "30", 6001: "40"}, 30),
         ("T8160", {1101: "255"}, 255),  # 1101 as reported
         ("T8160", {6001: "40"}, None),
+        ("T90C0", {1101: "57"}, 57),  # declares battery_value, names no read: 1101
+        ("T8970", {1101: "49", 1601: "0"}, None),  # declares no battery_value
+        ("T8030", {1101: "49"}, None),
     ],
 )
 def test_bundled_models_read_their_battery_as_their_file_says(

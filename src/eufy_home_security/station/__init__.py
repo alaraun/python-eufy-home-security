@@ -412,7 +412,9 @@ class SubDeviceState:
     battery: int | None
     """Battery level in %, from the parameters the model's settings file names (1101
     when it names none, see :func:`~..devices.model_settings.battery_level`); None
-    when the block reports none of them or a value the model reads as no level."""
+    when the block reports none of them or a value the model reads as no level, and for
+    a model whose bundled file declares no level (:meth:`Station.has_battery` False: a
+    siren, a keypad, a mains-powered camera)."""
     wifi_rssi: int | None = None
     """Wi-Fi signal in dBm (param 1142), reported by cameras."""
     sub1g_rssi: int | None = None
@@ -1426,21 +1428,23 @@ class Station:
         )
 
     def has_battery(self, device_sn: str | None = None) -> bool | None:
-        """Whether the camera or doorbell ``device_sn`` (the station itself for ``None``)
-        runs on a battery, as the eufy app decides whether to show one **[declared]**:
-        True when its settings list (:meth:`settings_for`) declares
+        """Whether the device ``device_sn`` (the station itself for ``None``) has a
+        battery level, as the eufy app decides whether to show one **[declared]**, for
+        every kind: True when its settings list (:meth:`settings_for`) declares
         :data:`~..devices.model_settings.BATTERY_PROPERTY`, False when the list is
-        known and declares none (a mains-powered camera, a wired doorbell), whose
-        block may still report ``battery`` and ``charging`` figures the app hides.
+        known and declares none (a mains-powered camera, a wired doorbell, a siren, a
+        keypad, most stations), whose block may still report ``battery`` and
+        ``charging`` figures the app hides (:attr:`SubDeviceState.battery` is None for
+        such a model with a bundled file). A low-battery flag
+        (:attr:`SubDeviceState.low_battery`) is separate.
 
-        None when the model has no settings list, and for every other kind (a
-        sensor or keypad declares its battery differently; the app's rule is the
-        camera card's). Sync; raises ``UnsupportedError`` as :meth:`settings_for`.
+        None when the model has no settings list or the serial no catalogued model.
+        Sync; raises ``UnsupportedError`` as :meth:`settings_for`.
         """
         serial = self.serial if device_sn in (None, self.serial) else device_sn
 
         def settings() -> Iterator[Setting]:
-            # Lazy: another kind returns None before settings_for can raise.
+            # Lazy: an uncatalogued serial returns None before settings_for can raise.
             yield from self.settings_for(serial)
 
         return declares_battery(serial, settings())
