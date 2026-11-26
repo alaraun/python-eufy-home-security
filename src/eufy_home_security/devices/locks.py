@@ -9,7 +9,7 @@ See docs/how-to/home-assistant.md § Locks and docs/protocol/events.md § Lock p
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Final
@@ -110,14 +110,20 @@ reading; the app sets a code its card shows as its fault state."""
 class LockReading:
     """A lock's state and where it came from.
 
-    ``raw`` is the lock-state parameter's value for a parameter source, None for a push;
-    ``event_type`` is the push's for :attr:`LockStateSource.PUSH`, else None.
+    ``raw`` is the lock-state parameter's value for a parameter source (the state code for
+    the lock's own report), None for a push; ``event_type`` is the push's for
+    :attr:`LockStateSource.PUSH`, else None. ``observed_at`` is the epoch time in seconds
+    the report dates from, by which readings are ordered (see
+    :class:`~..station.locks.LockStates`): its arrival, the cloud's upload time of its
+    copy, or the push's event time; None for a cloud copy without one. It takes no part in
+    equality.
     """
 
     state: LockState
     source: LockStateSource
     raw: str | None = None
     event_type: int | None = None
+    observed_at: float | None = field(default=None, compare=False)
 
 
 _DECLARED: Final = Evidence(

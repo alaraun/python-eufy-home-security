@@ -9,7 +9,8 @@ keyed and named by the key user id (:func:`~..lock_commands.cm2.key_user_id`), a
 docs/protocol/mqtt.md § Lock commands). The publish has 15 s, the answer 20 s from the
 broker's acknowledgement. The lock answers in a device message on its response topic with
 the frame encrypted under the key its own ``time`` names, and reports its state in a status
-report the same way; :class:`~..events.LockStateChanged` carries it.
+report the same way, which goes into the lock's one merged reading
+(:class:`~..station.locks.LockStates`).
 The same refusals and waits as the station path apply (:mod:`~..lock_commands.control`).
 """
 
@@ -24,8 +25,7 @@ from typing import TYPE_CHECKING, Any
 
 from .._logging import redact_serial
 from ..devices.lock_routes import lock_route
-from ..devices.locks import LockReading, LockState, LockStateSource, state_of_code
-from ..events import Event, LockStateChanged
+from ..devices.locks import LockReading, LockState
 from ..exceptions import (
     CommandRejectedError,
     DeviceBusyError,
@@ -58,6 +58,7 @@ from .envelope import CMD_UPLINK_TRANS
 
 if TYPE_CHECKING:
     from ..cloud.models import CloudDevice
+    from ..station.locks import LockStates
     from .account import EufyMqttAccount
     from .envelope import MqttMessage
 
@@ -94,11 +95,15 @@ def _through_data(message: MqttMessage) -> Mapping[str, Any] | None:
 
 
 class MqttLocks:
-    """Lock commands and lock state of the account's MQTT locks over ``account``.
+    """Lock commands of the account's MQTT locks over ``account``, and the locks' status
+    reports from it.
 
     ``user`` gives the logged-in account's cloud user id and its display name (the sender
-    a command names), read at each command; ``emit`` receives each
-    :class:`~..events.LockStateChanged`. Call :meth:`close` to stop listening.
+    a command names), read at each command and report. ``states`` gives the merged state
+    of a lock (:class:`~..station.locks.LockStates`: its station's, or the client's for a
+    lock no station serves; None for none) and ``devices`` its device-list entry: each
+    status report goes into that state, and a command reads and waits on it. Call
+    :meth:`close` to stop listening.
     """
 
     def __init__(
@@ -106,17 +111,16 @@ class MqttLocks:
         account: EufyMqttAccount,
         *,
         user: LockAccount,
-        emit: Callable[[Event], None],
+        states: Callable[[str], LockStates | None],
+        devices: Callable[[str], CloudDevice | None],
         clock: Callable[[], float] = time.time,
     ) -> None:
         self._account = account
         self._user = user
-        self._emit = emit
+        self._states_of = states
+        self._device_of = devices
         self._clock = clock
         self._sequences = LockSequences(clock=clock)
-        self._readings: dict[str, LockReading] = {}
-        self._owners: dict[str, str] = {}
-        self._watchers: dict[str, Callable[[LockReading], None]] = {}
         self._states: dict[str, asyncio.Future[LockState]] = {}
         """Per lock, the state a command waits for (a refusing status report fails it)."""
         self._busy: set[str] = set()
@@ -125,17 +129,29 @@ class MqttLocks:
     def close(self) -> None:
         self._remove()
 
-    def reading(self, device_sn: str) -> LockReading | None:
-        """The lock's state as its last status report over MQTT said."""
-        return self._readings.get(device_sn)
+    def _key_user(self, device: CloudDevice) -> str | None:
+        """The user id ``device``'s frames are keyed and named by; None before a login."""
+        account_user_id = self._user.user_id
+        if not account_user_id:
+            return None
+        return cm2.key_user_id(
+            account_user_id=account_user_id,
+            admin_user_id=device.owner_user_id,
+            member_type=device.member_type,
+            member_user_id=device.member_user_id,
+        )
 
     def _on_message(self, message: MqttMessage) -> None:
         payload = _through_data(message)
         if payload is None:
             return
         serial = payload["dev_sn"]
-        owner = self._owners.get(serial) if isinstance(serial, str) else None
-        if owner is None:
+        if not isinstance(serial, str):
+            return
+        device = self._device_of(serial)
+        states = self._states_of(serial)
+        owner = None if device is None else self._key_user(device)
+        if owner is None or states is None:
             return
         try:
             report = cm2.parse_status_report(payload, serial=serial, user_id=owner)
@@ -156,25 +172,7 @@ class MqttLocks:
                     )
                 )
             return
-        self._take(serial, report.state_code)
-
-    def _take(self, device_sn: str, state_code: int) -> None:
-        reading = LockReading(
-            state=state_of_code(state_code), source=LockStateSource.LOCK, raw=str(state_code)
-        )
-        old = self._readings.get(device_sn)
-        self._readings[device_sn] = reading
-        if (watcher := self._watchers.get(device_sn)) is not None:
-            watcher(reading)
-        if old is None or old.state is not reading.state:
-            self._emit(
-                LockStateChanged(
-                    device_sn=device_sn,
-                    state=reading.state,
-                    source=reading.source,
-                    raw=reading.raw,
-                )
-            )
+        states.on_report(serial, report.state_code)
 
     async def async_command(
         self,
@@ -193,11 +191,16 @@ class MqttLocks:
                 f"{redact_serial(serial)}: the cloud record names no member for the lock",
                 device_sn=serial,
             )
-        account_user_id = self._user.user_id
-        if not account_user_id:
+        user_id = self._key_user(device)
+        if user_id is None:
             raise UnsupportedError(
                 f"{redact_serial(serial)}: a lock command needs the account's cloud user id",
                 device_sn=serial,
+            )
+        states = self._states_of(serial)
+        if states is None:
+            raise UnsupportedError(
+                f"{redact_serial(serial)} is no lock of this client", device_sn=serial
             )
         if serial in self._busy:
             raise DeviceBusyError(
@@ -205,27 +208,28 @@ class MqttLocks:
                 device_sn=serial,
             )
         target = TARGET_STATES[action]
-        reading = self._readings.get(serial)
+        reading = states.reading(serial)  # every source's, merged: never MQTT's alone
         if reading is not None and reading.state is target:
             return target
-        user_id = cm2.key_user_id(
-            account_user_id=account_user_id,
-            admin_user_id=device.owner_user_id,
-            member_type=device.member_type,
-            member_user_id=device.member_user_id,
-        )
-        self._owners[serial] = user_id
         self._busy.add(serial)
         try:
-            return await self._run(device, user_id, action, target, timeout)
+            return await self._run(
+                device,
+                states=states,
+                user_id=user_id,
+                action=action,
+                target=target,
+                timeout=timeout,
+            )
         finally:
             self._busy.discard(serial)
-            self._watchers.pop(serial, None)
             self._states.pop(serial, None)
 
     async def _run(
         self,
         device: CloudDevice,
+        *,
+        states: LockStates,
         user_id: str,
         action: LockAction,
         target: LockState,
@@ -249,75 +253,79 @@ class MqttLocks:
             if not state.done() and ends_wait(taken.state, target):
                 state.set_result(taken.state)
 
-        self._watchers[serial] = on_reading
+        unwatch = states.watch(serial, on_reading)
         self._states[serial] = state
-        replies: list[LockReply] = []
-
-        def match(message: MqttMessage) -> bool:
-            answer = _through_data(message)
-            if answer is None:
-                return False
-            try:
-                replies.append(cm2.parse_on_off_reply(answer, request))
-            except LockReplyMismatchError:
-                return False
-            except ProtocolError as err:
-                _LOGGER.debug("%s: unreadable answer: %s", redact_serial(serial), err)
-                return False
-            return True
-
-        if deadline is None:  # the app's waits: the publish, then the answer from its ack
-            publish_wait: float | None = LOCK_PUBLISH_TIMEOUT
-            budget = LOCK_ANSWER_TIMEOUT
-        else:
-            publish_wait, budget = None, deadline - loop.time()
-        asking = loop.create_task(
-            self._account.async_request(
-                serial,
-                encode_trans(cm2.P2P_COMMAND, request.payload),
-                match=match,
-                timeout=max(0.0, budget),
-                publish_timeout=publish_wait,
-                account_id=user_id,
-                extra_fields=False,
-            )
-        )
-        ends: set[asyncio.Future[Any]] = {asking, state}
         try:
-            await asyncio.wait(ends, return_when=asyncio.FIRST_COMPLETED)
-        finally:
-            if not asking.done():  # the state came first: the answer no longer counts
-                asking.cancel()
-                await asyncio.wait({asking})
-            if asking.done() and not asking.cancelled():
-                asking.exception()  # retrieved: the state may decide instead
-        if not state.done():  # the state decides when it is in
-            if deadline is not None and isinstance(asking.exception(), DeviceTimeoutError):
-                raise DeviceTimeoutError(
-                    f"{redact_serial(serial)}: no answer within {budget:.0f} s", device_sn=serial
+            replies: list[LockReply] = []
+
+            def match(message: MqttMessage) -> bool:
+                answer = _through_data(message)
+                if answer is None:
+                    return False
+                try:
+                    replies.append(cm2.parse_on_off_reply(answer, request))
+                except LockReplyMismatchError:
+                    return False
+                except ProtocolError as err:
+                    _LOGGER.debug("%s: unreadable answer: %s", redact_serial(serial), err)
+                    return False
+                return True
+
+            if deadline is None:  # the app's waits: the publish, then the answer from its ack
+                publish_wait: float | None = LOCK_PUBLISH_TIMEOUT
+                budget = LOCK_ANSWER_TIMEOUT
+            else:
+                publish_wait, budget = None, deadline - loop.time()
+            asking = loop.create_task(
+                self._account.async_request(
+                    serial,
+                    encode_trans(cm2.P2P_COMMAND, request.payload),
+                    match=match,
+                    timeout=max(0.0, budget),
+                    publish_timeout=publish_wait,
+                    account_id=user_id,
+                    extra_fields=False,
                 )
-            asking.result()
-            if replies[-1].result is not LockResult.ACCEPTED:
-                raise CommandRejectedError(
-                    cm2.P2P_COMMAND,
-                    replies[-1].code,
-                    f"{redact_serial(serial)}: {replies[-1].result.value}",
-                    device_sn=serial,
-                )
-            budget = LOCK_CONFIRM_TIMEOUT if deadline is None else deadline - loop.time()
-            await asyncio.wait({state}, timeout=max(0.0, budget))
-            if not state.done():
-                raise DeviceTimeoutError(
-                    f"{redact_serial(serial)}: no {target.value} state within {budget:.0f} s",
-                    device_sn=serial,
-                )
-        result = state.result()
-        if result in FAULT_STATES:
-            raise LockNotMovedError(
-                cm2.P2P_COMMAND,
-                f"{redact_serial(serial)} reported {result.value} after the "
-                f"{action.name.lower()} command",
-                state=result,
-                device_sn=serial,
             )
-        return result
+            ends: set[asyncio.Future[Any]] = {asking, state}
+            try:
+                await asyncio.wait(ends, return_when=asyncio.FIRST_COMPLETED)
+            finally:
+                if not asking.done():  # the state came first: the answer no longer counts
+                    asking.cancel()
+                    await asyncio.wait({asking})
+                if asking.done() and not asking.cancelled():
+                    asking.exception()  # retrieved: the state may decide instead
+            if not state.done():  # the state decides when it is in
+                if deadline is not None and isinstance(asking.exception(), DeviceTimeoutError):
+                    raise DeviceTimeoutError(
+                        f"{redact_serial(serial)}: no answer within {budget:.0f} s",
+                        device_sn=serial,
+                    )
+                asking.result()
+                if replies[-1].result is not LockResult.ACCEPTED:
+                    raise CommandRejectedError(
+                        cm2.P2P_COMMAND,
+                        replies[-1].code,
+                        f"{redact_serial(serial)}: {replies[-1].result.value}",
+                        device_sn=serial,
+                    )
+                budget = LOCK_CONFIRM_TIMEOUT if deadline is None else deadline - loop.time()
+                await asyncio.wait({state}, timeout=max(0.0, budget))
+                if not state.done():
+                    raise DeviceTimeoutError(
+                        f"{redact_serial(serial)}: no {target.value} state within {budget:.0f} s",
+                        device_sn=serial,
+                    )
+            result = state.result()
+            if result in FAULT_STATES:
+                raise LockNotMovedError(
+                    cm2.P2P_COMMAND,
+                    f"{redact_serial(serial)} reported {result.value} after the "
+                    f"{action.name.lower()} command",
+                    state=result,
+                    device_sn=serial,
+                )
+            return result
+        finally:
+            unwatch()

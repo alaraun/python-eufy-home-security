@@ -828,7 +828,7 @@ async def test_lock_control_and_the_command_agree_for_every_lock(
     ``lock_control`` says writable; otherwise it raises ``UnsupportedError`` first."""
     reached: list[str] = []
 
-    async def run(self: object, device: object, *_: object) -> LockState:
+    async def run(self: object, device: object, *_: object, **__: object) -> LockState:
         reached.append(getattr(device, "device_sn", device))  # type: ignore[arg-type]
         return LockState.LOCKED
 
@@ -838,7 +838,8 @@ async def test_lock_control_and_the_command_agree_for_every_lock(
     eufy._mqtt_locks = MqttLocks(
         _NoBroker(),  # type: ignore[arg-type]
         user=_Cloud(),
-        emit=lambda _e: None,
+        states=eufy._lock_states,
+        devices=eufy._listed_device,
     )
     writable = 0
     try:

@@ -241,10 +241,11 @@ device message (`cmd` 8) on its response topic: its through data `{"dev_sn", "lo
 its own `time` names; an answer to another request is skipped. The refusals, waits and
 sequence numbers of [locks.md](locks.md#commands) apply.
 
-The lock's status reports (device messages on its response topic, read as its answers are)
-set its state: each change emits
-`LockStateChanged` with `source` `lock` and `station_sn` None. They are read for a lock that
-took a command from this client (the command's key user id opens them). A status report with
-a non-zero code ends a waiting command with `CommandRejectedError(code)`, as on the station
-path. Declared from the
-eufy app, not tested against the broker.
+The lock's status reports (device messages on its response topic, read as its answers are,
+under the key user id of the lock's cloud record) set its state with `source` `lock`: in
+the lock's one reading, which its station's reports and pushes feed too
+([events.md](events.md#lock-pushes-declared-app)): its station's for a lock that is its own
+station (`station_sn` its serial), the client's for a lock no station of the client serves
+(`station_sn` None). A status report with a non-zero code ends a waiting command with
+`CommandRejectedError(code)`, as on the station path. Declared from the eufy app, not tested
+against the broker.

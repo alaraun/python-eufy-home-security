@@ -1524,12 +1524,14 @@ class LockStateChanged:
     """A lock's state differs from the one the account last knew.
 
     Emitted by :class:`~.client.EufySecurity` for a device graded
-    :attr:`~.devices.capabilities.Capability.LOCK`, the first state included, from its
-    station's parameter dump or notify, the device list's parameters, or a cloud push
-    about it (``source``); the state is already set (``EufySecurity.lock_state``) when a
-    subscriber receives it. ``raw`` is the lock-state parameter's value of a parameter
-    source, ``event_type`` the push's (see :mod:`~.devices.locks`). ``station_sn`` is the
-    station the lock is paired to, or its own serial; None for a push without one.
+    :attr:`~.devices.capabilities.Capability.LOCK`, the first state included, from the
+    lock's one merged reading: its station's parameter dump or notify, the device list's
+    parameters, a cloud push about it, or its own status report over its station or the
+    MQTT broker (``source``); the state is already set when a subscriber receives it.
+    ``raw`` is the lock-state parameter's value of a parameter source (the code of the
+    lock's own report), ``event_type`` the push's (see :mod:`~.devices.locks`).
+    ``station_sn`` is the station the lock is paired to, or its own serial; None for a lock
+    no station of the client serves.
     """
 
     device_sn: str

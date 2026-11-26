@@ -1788,8 +1788,9 @@ cloud user id before the first login), `MqttAccountRequiredError` (an MQTT lock:
 `eufy.use_mqtt(account)` with the account's `EufyMqttAccount`) or `DeviceBusyError`
 (a command for that lock still waits). After sending they raise `CommandRejectedError`
 (`err.code`; -151 is a refused sequence number), `LockNotMovedError` (`err.state`: jammed
-or stopped between positions) or `DeviceTimeoutError`. A lock already in the asked state
-returns at once. The default wait is the app's 20 s for the answer (over MQTT after up to
+or stopped between positions) or `DeviceTimeoutError`. A lock whose reading (below: one
+merged reading of every source, never the MQTT reports alone) already is the asked state
+returns at once, sending nothing. The default wait is the app's 20 s for the answer (over MQTT after up to
 15 s for the broker to take the command) plus 30 s for the
 state, and `timeout` bounds the whole call; run it as a task and let `LockStateChanged`
 drive the entity. A command names the account's nickname as its sender, as the app does
@@ -1817,18 +1818,22 @@ lock's `smart_lock_onoff_status`, or what a push about the lock sets:
 | `jammed` | | 517, 519 (mechanical fault) | jammed |
 | `unknown` | any other code, a value that is no number, nothing reported | 516 (the lock went offline) | unknown |
 
-The parameter and the pushes are ordered by time, as the guard mode is: a push is ignored
-when it is more than 300 s old, older than the last push taken, or more than 30 s older
-than the lock's last parameter report; a parameter value is taken when it moves, and also
-when it repeats but dates from after the push the state came from. So the next dump after
-a push replaces it, and `jammed`, which only a push reports, lasts until the lock's next
-report ([events.md](../protocol/events.md#lock-pushes-declared-app)). Keep `state` (and
-`raw`) as attributes when the entity maps passage and privacy mode to unlocked and
-locked.
-A lock the library reaches through no station (a Wi-Fi lock without a P2P id is skipped,
-`SkippedDevice`) has no `lock_state`. Served through `use_mqtt`, its status reports arrive
-as `LockStateChanged` with `station_sn` None once this client has sent it a command (the
-reports are read with the key the command names, [mqtt.md](../protocol/mqtt.md#lock-commands)).
+Every source feeds one reading per lock, the station's reports, pushes and the lock's own
+status reports over its station or the MQTT broker alike, and the newest report wins, as
+for the guard mode: a push is ignored when it is more than 300 s old, older than the last
+push or status report taken, or more than 30 s older than the lock's last parameter report;
+the lock's own status report is always taken; a parameter value is taken when it differs
+from the lock's last value (the last status report's code included), and also when it
+repeats but dates from after the push the state came from. So the next dump after a push
+replaces it, and `jammed`, which only a push reports, lasts until the lock's next report
+([events.md](../protocol/events.md#lock-pushes-declared-app)). The device list's copy
+counts only when it is not older than the reading. Keep `state` (and `raw`) as attributes
+when the entity maps passage and privacy mode to unlocked and locked.
+A lock that no station of this client serves (a Wi-Fi lock without a P2P id is skipped,
+`SkippedDevice`) has no `station.lock_state`; the client keeps its reading from the device
+list's copy, pushes about it and, served through `use_mqtt`, its MQTT status reports, with
+`LockStateChanged.station_sn` None. A lock that is its own station takes its MQTT status
+reports into its station's reading.
 
 ### Garage doors
 

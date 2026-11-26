@@ -242,6 +242,63 @@ async def test_a_cloud_copy_replaces_a_push_only_when_dated_after_it(fake: FakeS
     assert station.note_lock_push(_push(259, pushed + 60_000 - slack - 1)) is False
 
 
+def _copy(device: CloudDevice, param: int, value: str, updated_ms: int | None) -> CloudDevice:
+    entry: dict[str, object] = {"param_type": param, "param_value": value}
+    if updated_ms is not None:
+        entry["update_time"] = updated_ms // 1000
+    return dataclasses.replace(device, raw={**device.raw, "params": [entry]})
+
+
+async def test_a_changed_cloud_copy_older_than_the_locks_reading_is_dropped(
+    fake: FakeStation,
+) -> None:
+    """The newest report wins: a cloud copy of another value dated before the lock's own
+    report by more than the slack is about an earlier state; one inside the slack, or
+    later, is taken."""
+    station = Station(STATION, _session(fake, SYNTHETIC.station_sn), sub_devices=[LOCK])
+    station._locks.on_report(LOCK_SN, 4)  # the lock reports locked (its arrival: now)
+    reading = station.lock_state(LOCK_SN)
+    assert reading is not None
+    assert reading.observed_at is not None
+    held = -(-int(reading.observed_at * 1000) // 1000) * 1000  # whole seconds, rounded up
+    slack = LOCK_REPORT_SLACK_SECONDS * 1000
+    station.update_sub_devices([_copy(LOCK, 1912, "3", held - slack - 1000)])
+    assert station.lock_state(LOCK_SN) == reading
+    station.update_sub_devices([_copy(LOCK, 1912, "3", held - slack)])
+    assert station.lock_state(LOCK_SN) == LockReading(
+        state=LockState.UNLOCKED, source=LockStateSource.CLOUD, raw="3"
+    )
+
+
+async def test_an_undated_cloud_copy_never_replaces_a_dated_reading(fake: FakeStation) -> None:
+    station = Station(STATION, _session(fake, SYNTHETIC.station_sn))
+    station.update_sub_devices([_copy(LOCK, 1912, "4", None)])
+    undated = station.lock_state(LOCK_SN)
+    assert undated == LockReading(state=LockState.LOCKED, source=LockStateSource.CLOUD, raw="4")
+    assert undated.observed_at is None  # type: ignore[union-attr]
+    station.update_sub_devices([_copy(LOCK, 1912, "3", None)])  # undated over undated
+    assert station.lock_state(LOCK_SN).state is LockState.UNLOCKED  # type: ignore[union-attr]
+    assert station.note_lock_push(_push(264, _now_ms()))  # locked from the app
+    station.update_sub_devices([_copy(LOCK, 1912, "7", None)])
+    assert station.lock_state(LOCK_SN).state is LockState.LOCKED  # type: ignore[union-attr]
+
+
+async def test_the_locks_own_report_makes_the_stations_older_value_news(
+    hub: Station, fake: FakeStation
+) -> None:
+    """The lock's own report (over the station or MQTT) becomes the lock's last value, as
+    one value is kept per lock: a dump that still holds the value from before it is taken
+    again."""
+    fake.params[1][1912] = "3"
+    await hub.async_update()
+    hub._locks.on_report(LOCK_SN, 4)
+    assert hub.lock_state(LOCK_SN).source is LockStateSource.LOCK  # type: ignore[union-attr]
+    await hub.async_update()  # the station still holds "3"
+    assert hub.lock_state(LOCK_SN) == LockReading(
+        state=LockState.UNLOCKED, source=LockStateSource.P2P, raw="3"
+    )
+
+
 async def test_a_lock_without_a_dump_reads_the_cloud_copy(fake: FakeStation) -> None:
     station = Station(STATION, _session(fake, SYNTHETIC.station_sn))
     events = _events(station)

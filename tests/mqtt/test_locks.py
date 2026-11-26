@@ -9,6 +9,7 @@ import dataclasses
 import gc
 import json
 import secrets
+import time
 from collections.abc import Callable, Iterator
 from types import MappingProxyType
 from typing import Any
@@ -17,7 +18,7 @@ import pytest
 
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.devices.locks import LockState, LockStateSource
-from eufy_home_security.events import Event, LockStateChanged
+from eufy_home_security.events import Event, EventBus, EventSource, LockStateChanged, SecurityEvent
 from eufy_home_security.exceptions import (
     CommandRejectedError,
     DeviceBusyError,
@@ -34,10 +35,20 @@ from eufy_home_security.lock_commands.mqtt_trans import encode_trans
 from eufy_home_security.mqtt.account import EufyMqttAccount
 from eufy_home_security.mqtt.envelope import MqttMessage, parse_message
 from eufy_home_security.mqtt.locks import MqttLocks, mqtt_lock_control
-from eufy_home_security.testing import SYNTHETIC, FakeCloud, build_eufy_security, warm_store
+from eufy_home_security.p2p.did import static_key
+from eufy_home_security.p2p.session import P2PCredentials, StationSession
+from eufy_home_security.station import Station
+from eufy_home_security.station.locks import ListedLocks
+from eufy_home_security.testing import (
+    SYNTHETIC,
+    FakeCloud,
+    FakeStation,
+    build_eufy_security,
+    warm_store,
+)
 from eufy_home_security.testing.mqtt import FakeMqttBroker, FakeMqttLock, MqttTestPki
 
-from .conftest import LOCK2_SN, LOCK_SN, OWNER, SHORT_USER, AccountUser, Rig, answer, lock
+from .conftest import LOCK2_SN, LOCK_SN, OWNER, SHORT_USER, AccountUser, Rig, answer, lock, until
 
 pytestmark = pytest.mark.usefixtures("short_waits")
 
@@ -63,6 +74,21 @@ async def _served(rig: Rig, device: CloudDevice | None = None) -> EufyMqttAccoun
     )
     rig.eufy.use_mqtt(account)
     return account
+
+
+def _listed_lock_commands(
+    account: object, device: CloudDevice | None = None, bus: EventBus | None = None
+) -> MqttLocks:
+    """Lock commands over a stand-in ``account`` for ``device`` (default :func:`lock`),
+    a lock no station serves, its state kept by a :class:`ListedLocks` on ``bus``."""
+    device = device or lock()
+    states = ListedLocks(bus or EventBus(), lambda: [device])
+    return MqttLocks(
+        account,  # type: ignore[arg-type]
+        user=AccountUser(),
+        states=lambda serial: states if states.serves(serial) else None,
+        devices=lambda serial: device if serial == device.device_sn else None,
+    )
 
 
 def _events(rig: Rig) -> list[Event]:
@@ -129,7 +155,8 @@ async def test_an_mqtt_lock_command_is_the_apps_message_byte_for_byte(
     locks = MqttLocks(
         account,
         user=AccountUser(),
-        emit=lambda _event: None,
+        states=rig.eufy._lock_states,
+        devices=rig.eufy.listed_devices.get,
         clock=lambda: 1700000000.0,
     )
     try:
@@ -227,7 +254,12 @@ async def test_an_mqtt_lock_command_needs_the_accounts_user_id(
 ) -> None:
     device = lock()
     account = await _served(rig, device)
-    locks = MqttLocks(account, user=AccountUser(user_id), emit=lambda _event: None)
+    locks = MqttLocks(
+        account,
+        user=AccountUser(user_id),
+        states=rig.eufy._lock_states,
+        devices=rig.eufy.listed_devices.get,
+    )
     try:
         with pytest.raises(UnsupportedError, match="cloud user id"):
             await locks.async_command(
@@ -385,11 +417,7 @@ async def test_a_request_error_beside_the_state_is_retrieved() -> None:
     loop.set_exception_handler(lambda _loop, context: seen.append(context))
     try:
         account = _StateThenFailure()
-        locks = MqttLocks(
-            account,  # type: ignore[arg-type]
-            user=AccountUser(),
-            emit=lambda _e: None,
-        )
+        locks = _listed_lock_commands(account)
         account.locks = locks
         device = lock()
         control = mqtt_lock_control(device)
@@ -434,11 +462,7 @@ async def test_an_mqtt_lock_command_waits_as_the_app_unless_bounded(
     acknowledgement, the app's waits, and the request's timeout says which one ran out; a
     bound covers the whole call."""
     account = _Recording()
-    locks = MqttLocks(
-        account,  # type: ignore[arg-type]
-        user=AccountUser(),
-        emit=lambda _e: None,
-    )
+    locks = _listed_lock_commands(account)
     device = lock()
     with pytest.raises(DeviceTimeoutError) as raised:
         await locks.async_command(
@@ -452,15 +476,13 @@ async def test_an_mqtt_lock_command_waits_as_the_app_unless_bounded(
 
 async def test_a_lock_message_naming_no_text_serial_is_skipped() -> None:
     account = _Recording()
-    locks = MqttLocks(
-        account,  # type: ignore[arg-type]
-        user=AccountUser(),
-        emit=lambda _e: None,
-    )
+    locks = _listed_lock_commands(account)
     trans = encode_trans(1940, {"dev_sn": [LOCK_SN], "lock_payload": "ff", "time": "00"})
     assert account.listener is not None
     account.listener(parse_message(f"cmd/eufy_security/T85D0/{LOCK_SN}/res", answer({}, trans)))
-    assert locks.reading(LOCK_SN) is None
+    states = locks._states_of(LOCK_SN)
+    assert states is not None
+    assert states.reading(LOCK_SN) is None
 
 
 @pytest.mark.parametrize(
@@ -594,3 +616,118 @@ async def test_a_guest_of_an_mqtt_lock_is_refused(rig: Rig, wifi_lock: FakeMqttL
 async def test_a_device_not_listed_is_refused(rig: Rig) -> None:
     with pytest.raises(UnsupportedError, match="device list"):
         rig.eufy.lock_control(LOCK_SN)
+
+
+# ── one merged reading per lock ───────────────────────────────────────────────
+
+
+def _push(event_type: int, at_ms: int, serial: str = LOCK_SN) -> SecurityEvent:
+    return SecurityEvent(
+        source=EventSource.CLOUD, device_sn=serial, event_type=event_type, event_time_ms=at_ms
+    )
+
+
+async def test_a_status_report_before_any_command_is_the_locks_reading(
+    rig: Rig, wifi_lock: FakeMqttLock
+) -> None:
+    """A lock's own status report over MQTT is read with no command of this client
+    pending, into the lock's one merged reading."""
+    account = await _served(rig)
+    try:
+        await wifi_lock.async_report(4)
+        states = rig.eufy._lock_states(LOCK_SN)
+        assert states is not None
+        await until(lambda: states.reading(LOCK_SN) is not None)
+    finally:
+        await account.async_stop()
+    reading = states.reading(LOCK_SN)
+    assert reading is not None
+    assert (reading.state, reading.source, reading.raw) == (
+        LockState.LOCKED,
+        LockStateSource.LOCK,
+        "4",
+    )
+
+
+async def test_a_lock_command_is_sent_when_a_newer_push_says_otherwise_than_mqtt(
+    rig: Rig, wifi_lock: FakeMqttLock
+) -> None:
+    """MQTT said locked; a newer push says unlocked (by hand): the merged reading is
+    unlocked and a lock command is sent, not answered from the MQTT report."""
+    account = await _served(rig)
+    try:
+        assert await rig.eufy.async_lock(LOCK_SN, timeout=5) is LockState.LOCKED
+        wifi_lock.state_code = 3  # moved by hand; only the push says so
+        rig.eufy._deliver(_push(258, int(time.time() * 1000) + 1))
+        states = rig.eufy._lock_states(LOCK_SN)
+        assert states is not None
+        assert states.reading(LOCK_SN).state is LockState.UNLOCKED  # type: ignore[union-attr]
+        assert await rig.eufy.async_lock(LOCK_SN, timeout=5) is LockState.LOCKED
+    finally:
+        await account.async_stop()
+    assert [a for a, _ in wifi_lock.received] == [LockAction.LOCK, LockAction.LOCK]
+
+
+async def test_a_push_older_than_the_mqtt_report_keeps_the_mqtt_reading(
+    rig: Rig, wifi_lock: FakeMqttLock
+) -> None:
+    """The newest report wins: a push dated before the lock's MQTT report is dropped and
+    the next lock command is answered from the reading, sending nothing."""
+    account = await _served(rig)
+    try:
+        before = int(time.time() * 1000) - 1
+        assert await rig.eufy.async_lock(LOCK_SN, timeout=5) is LockState.LOCKED
+        rig.eufy._deliver(_push(258, before))
+        assert await rig.eufy.async_lock(LOCK_SN, timeout=5) is LockState.LOCKED
+    finally:
+        await account.async_stop()
+    assert [a for a, _ in wifi_lock.received] == [LockAction.LOCK]
+
+
+VIDEO_LOCK_SN = "T8531P2000054323"
+
+
+async def test_a_lock_that_is_its_own_station_merges_mqtt_and_station_reports(
+    rig: Rig,
+) -> None:
+    """A video lock that is its own station takes commands over MQTT: its MQTT status
+    report and its station's dump feed one reading, so a dump after the MQTT report that
+    says unlocked (the value the station held before) makes a lock command send."""
+    fake_station = FakeStation()
+    fake_station.serial = VIDEO_LOCK_SN
+    fake_station.static_key = static_key(VIDEO_LOCK_SN, fake_station.did)
+    for block in (fake_station.params[0], fake_station.params[255]):
+        block |= {6000: "3"}
+    await fake_station.start()
+    device = dataclasses.replace(
+        lock(VIDEO_LOCK_SN, "T8531"), station_sn=VIDEO_LOCK_SN, p2p_did=SYNTHETIC.did
+    )
+    fake = FakeMqttLock(
+        broker=rig.broker, serial=VIDEO_LOCK_SN, product_code="T8531", owner_user_id=OWNER
+    )
+    fake.attach()
+    station = Station(device, _station_session(fake_station, VIDEO_LOCK_SN))
+    rig.eufy.stations[VIDEO_LOCK_SN] = station
+    account = await _served(rig, device)
+    try:
+        await station.async_update()
+        assert station.lock_state(VIDEO_LOCK_SN).state is LockState.UNLOCKED  # type: ignore[union-attr]
+        assert await rig.eufy.async_lock(VIDEO_LOCK_SN, timeout=5) is LockState.LOCKED
+        assert station.lock_state(VIDEO_LOCK_SN).source is LockStateSource.LOCK  # type: ignore[union-attr]
+        await station.async_update()  # the station still holds "3": unlocked by hand since
+        assert station.lock_state(VIDEO_LOCK_SN).state is LockState.UNLOCKED  # type: ignore[union-attr]
+        assert await rig.eufy.async_lock(VIDEO_LOCK_SN, timeout=5) is LockState.LOCKED
+    finally:
+        await account.async_stop()
+        rig.eufy.stations.pop(VIDEO_LOCK_SN)
+        await station.async_close()
+        fake_station.stop()
+    assert [a for a, _ in fake.received] == [LockAction.LOCK, LockAction.LOCK]
+    assert fake.refused == []
+
+
+def _station_session(fake: FakeStation, serial: str) -> StationSession:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "Nick", fake.ecc_private_key_hex)
+
+    return StationSession(serial, credentials, host="127.0.0.1", port=fake.discovery_port)

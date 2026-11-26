@@ -512,6 +512,8 @@ class FakeMqttLock:
     ``""``: no ``dev_sn``).
     ``received``
     records each command as decrypted: ``(action, seq_num)``. Call :meth:`attach`.
+    :meth:`async_report` sends a status report the lock makes by itself (moved by hand or
+    by key).
     """
 
     broker: FakeMqttBroker
@@ -536,6 +538,50 @@ class FakeMqttLock:
 
     def attach(self) -> None:
         self.broker.publish_hooks.append(self._on_publish)
+
+    async def async_report(self, state_code: int, *, time_value: int = 0x6553F100) -> None:
+        """Move the lock to ``state_code`` and send its status report, keyed by
+        ``time_value`` (no command asked for it)."""
+        self.state_code = state_code
+        key = cm2.time_key(self.owner_user_id, time_value)
+        report = bytes([0, 0xA1, 1, 90, 0xA2, 1, state_code])
+        await self.broker.send(
+            response_topic(self.product_code, self.serial),
+            self._message(
+                {"msg_seq": 0},
+                sealed_key=key,
+                iv=serial_iv(self.serial),
+                command=cm2.STATUS_COMMAND,
+                plain=report,
+                time_text=f"{time_value:08x}",
+            ),
+        )
+
+    def _message(
+        self,
+        head: dict[str, Any],
+        *,
+        sealed_key: bytes,
+        iv: bytes,
+        command: int,
+        plain: bytes,
+        time_text: str,
+    ) -> bytes:
+        """A device message carrying ``plain`` in a cm2 frame sealed under ``sealed_key``."""
+        frame = cm2_frame(
+            cm2.seal_body(plain, sealed_key, iv),
+            command=command,
+            function_type=cm2.FUNCTION_TYPE,
+            version=cm2.FRAME_VERSION,
+            encrypted=True,
+        )
+        dev_sn = self.serial if self.answer_dev_sn is None else self.answer_dev_sn
+        through = {"dev_sn": dev_sn} if dev_sn else {}
+        through |= {"lock_payload": frame.hex(), "time": time_text}
+        trans = encode_trans(cm2.P2P_COMMAND, through)
+        payload = {"account_id": self.owner_user_id, "device_sn": self.serial, "trans": trans}
+        answer_head = {"cmd": self.answer_cmd, "msg_seq": head["msg_seq"] + 1000, "sess_id": "beef"}
+        return json.dumps({"head": answer_head, "payload": json.dumps(payload)}).encode()
 
     def _on_publish(self, published: BrokerPublish) -> None:
         if published.topic != request_topic(self.product_code, self.serial):
@@ -619,24 +665,14 @@ class FakeMqttLock:
         topic = response_topic(self.product_code, self.serial)
 
         def message(sealed_key: bytes, command: int, plain: bytes, time_text: str) -> bytes:
-            frame = cm2_frame(
-                cm2.seal_body(plain, sealed_key, iv),
+            return self._message(
+                head,
+                sealed_key=sealed_key,
+                iv=iv,
                 command=command,
-                function_type=cm2.FUNCTION_TYPE,
-                version=cm2.FRAME_VERSION,
-                encrypted=True,
+                plain=plain,
+                time_text=time_text,
             )
-            dev_sn = self.serial if self.answer_dev_sn is None else self.answer_dev_sn
-            through = {"dev_sn": dev_sn} if dev_sn else {}
-            through |= {"lock_payload": frame.hex(), "time": time_text}
-            trans = encode_trans(cm2.P2P_COMMAND, through)
-            payload = {"account_id": self.owner_user_id, "device_sn": self.serial, "trans": trans}
-            answer_head = {
-                "cmd": self.answer_cmd,
-                "msg_seq": head["msg_seq"] + 1000,
-                "sess_id": "beef",
-            }
-            return json.dumps({"head": answer_head, "payload": json.dumps(payload)}).encode()
 
         time_text = f"{time_value:08x}"
         moved = self.answer_code == 0

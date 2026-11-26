@@ -1321,9 +1321,10 @@ class Station:
 
     def lock_state(self, device_sn: str) -> LockReading | None:
         """The lock state of ``device_sn`` (this station's own serial when it is a lock
-        itself): from its lock-state parameter (a dump, a parameter notify, the device
-        list's copy) or a cloud push about it, ordered by time as
-        :class:`~.locks.StationLocks` describes. None for a device not graded
+        itself): its one merged reading of its lock-state parameter (a dump, a parameter
+        notify, the device list's copy), cloud pushes about it and its own status reports
+        (over this station or the MQTT broker), the newest report winning as
+        :class:`~.locks.LockStates` describes. None for a device not graded
         :attr:`~..devices.capabilities.Capability.LOCK` or with nothing reported yet.
         Each change emits :class:`~..events.LockStateChanged`. Sync; raises
         ``UnsupportedError`` when ``device_sn`` is not paired to this station.

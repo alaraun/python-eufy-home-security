@@ -107,6 +107,7 @@ from .p2p.session import (
 )
 from .p2p.transport import ConnectPath, PPPPTransport, Wake
 from .station import RemoteStation, Station, station_block_aliases, station_channels
+from .station.locks import ListedLocks, LockStates
 from .storage import SessionCache, Store
 
 if TYPE_CHECKING:
@@ -437,6 +438,8 @@ class EufySecurity:
         # elsewhere, remote, paired devices and skipped devices alike.
         self.listed_devices: Mapping[str, CloudDevice] = MappingProxyType({})
         self._mqtt_locks: MqttLocks | None = None
+        # The lock state of listed locks no built station serves.
+        self._listed_locks = ListedLocks(self._bus, self._unserved_devices)
         # Built stations the last discovery's list did not name (reported once each).
         self._unlisted: frozenset[str] = frozenset()
         self._discovered = False
@@ -750,6 +753,7 @@ class EufySecurity:
             self.stations[serial] = station
             self._unsubs.append(station.subscribe(self._on_station_event))
         await self._forget_link_paths({d.device_sn for d in candidates})
+        self._listed_locks.refresh()
         self._report_stations_changed(first, built, candidates)
         return list(self.stations.values())
 
@@ -1307,8 +1311,10 @@ class EufySecurity:
     def use_mqtt(self, account: EufyMqttAccount | None) -> None:
         """Serve the lock commands of locks the eufy app reaches over MQTT through
         ``account`` (an :class:`~.mqtt.account.EufyMqttAccount` the consumer started for
-        this account); None stops. Their states from the broker arrive as
-        :class:`~.events.LockStateChanged` (``station_sn`` None). Each command reads the
+        this account); None stops. Their status reports from the broker go into each
+        lock's one merged reading (its station's, or the client's for a lock no station of
+        this client serves: :class:`~.events.LockStateChanged` with ``station_sn`` None),
+        which a command reads and waits on. Each command reads the
         account's user id and display name when it is sent, so this may come before the
         login."""
         if self._mqtt_locks is not None:
@@ -1317,7 +1323,28 @@ class EufySecurity:
         if account is not None:
             from .mqtt.locks import MqttLocks  # noqa: PLC0415 - the optional extra's module
 
-            self._mqtt_locks = MqttLocks(account, user=self.cloud, emit=self._bus.emit)
+            self._mqtt_locks = MqttLocks(
+                account,
+                user=self.cloud,
+                states=self._lock_states,
+                devices=self._listed_device,
+            )
+
+    def _listed_device(self, device_sn: str) -> CloudDevice | None:
+        return self.listed_devices.get(device_sn)
+
+    def _unserved_devices(self) -> list[CloudDevice]:
+        """The listed devices no built station serves."""
+        served = {d.device_sn for station in self.stations.values() for d in station.devices}
+        return [d for d in self.listed_devices.values() if d.device_sn not in served]
+
+    def _lock_states(self, device_sn: str) -> LockStates | None:
+        """The merged lock state of ``device_sn``: its station's, or the client's for a
+        listed device no built station serves; None for a device not listed."""
+        for station in self.stations.values():
+            if station._locks.serves(device_sn):
+                return station._locks
+        return self._listed_locks if self._listed_locks.serves(device_sn) else None
 
     def _lock_of(self, device_sn: str) -> tuple[Station | None, CloudDevice, LockControl]:
         for station in self.stations.values():
@@ -1518,8 +1545,10 @@ class EufySecurity:
     async def async_refresh_cloud_state(self) -> int:
         """Fetch the device list and apply each station's entry
         (:meth:`Station.apply_cloud_device`): an on-demand station's state, every
-        station's cloud copy of its settings. Returns how many values were news; wakes no
-        station and fetches nothing without a station.
+        station's cloud copy of its settings; the entries of :attr:`listed_devices` it
+        names are replaced by the fresh ones (a lock no station serves reads its state
+        from there). Returns how many station values were news; wakes no station and
+        fetches nothing without a station.
 
         :meth:`async_start` runs it every ``cloud_state_refresh`` seconds while there is a
         station, and once at start when a station has no cloud copy yet. A cloud failure is raised here, and in that loop
@@ -1538,6 +1567,10 @@ class EufySecurity:
         news = sum(
             stations[d.device_sn].apply_cloud_device(d) for d in devices if d.device_sn in stations
         )
+        listed = self.listed_devices
+        fresh = {d.device_sn: d for d in devices if d.device_sn in listed}
+        self.listed_devices = MappingProxyType({**listed, **fresh})
+        self._listed_locks.refresh()  # the locks no station serves read the fresh copy
         _LOGGER.debug("cloud state of %d station(s): %d new value(s)", len(stations), news)
         return news
 
@@ -1649,9 +1682,8 @@ class EufySecurity:
         if admitted is None:
             return
         self._bus.emit(admitted)
-        for hub in self.stations.values():
-            if hub.note_lock_push(admitted):
-                break
+        if not any(hub.note_lock_push(admitted) for hub in self.stations.values()):
+            self._listed_locks.on_push(admitted)
         if (alarm := self._alarms.push(admitted)) is not None:
             self._emit_alarm(alarm)
         if admitted.guard_mode is None or not admitted.station_sn:
