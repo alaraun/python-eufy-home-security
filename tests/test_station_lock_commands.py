@@ -645,6 +645,25 @@ async def test_a_held_move_ends_at_the_confirm_wait_after_the_take(
     assert (last.state, last.source, last.changed) == (LockState.LOCKED, LockStateSource.P2P, True)
 
 
+async def test_a_later_taken_command_outlasts_the_hold_it_replaced(
+    fake: FakeStation, locked_1940: FakeLock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A held move replaced by a later command the lock took: the earlier hold's end
+    does not end the later command's move while that call still waits."""
+    monkeypatch.setattr(control, "LOCK_CONFIRM_TIMEOUT", 0.2)
+    station = await _hub(fake, _lock(LOCK_1940), locked_1940)
+    locks = station._locks
+    try:
+        first = locks.begin_move(LOCK_1940, LockAction.UNLOCK)
+        locks.end_move(LOCK_1940, taken_at=first, keep=True)  # held for 0.2 s from the take
+        await asyncio.sleep(0.05)
+        locks.begin_move(LOCK_1940, LockAction.LOCK)  # its call still waits
+        await asyncio.sleep(0.3)  # past the first hold's end
+        assert _state(station) is LockState.LOCKING
+    finally:
+        await station.async_close()
+
+
 async def test_closing_the_station_cancels_a_held_moves_expiry(
     fake: FakeStation, locked_1940: FakeLock
 ) -> None:
