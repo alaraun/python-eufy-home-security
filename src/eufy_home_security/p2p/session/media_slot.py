@@ -82,6 +82,18 @@ class MediaWaits:
     wake_backoff: tuple[float, ...]
 
 
+def recording_is_native(serial: str, path: str) -> bool:
+    """Whether the station ``serial`` opens the recording ``path`` natively (the 10017
+    family); raises :class:`UnsupportedError` for a path it cannot open."""
+    if not is_station_recording_path(path):
+        raise UnsupportedError("not a validated station recording path")
+    # The app chooses native or JSON playback by station family, not filename.
+    native = history_query_verb(serial) == DB_QUERY_LOCAL_EVENTS
+    if not native and path.endswith(".dat"):
+        raise UnsupportedError("a 10011 station cannot play a native .dat path")
+    return native
+
+
 class MediaSlot:
     """A station session's media slot: the one stream it carries, opened and routed here.
 
@@ -254,12 +266,7 @@ class MediaSlot:
         e2e_key: E2EKey | None = None,
     ) -> MediaStream:
         """See :meth:`StationSession.async_open_recording`."""
-        if not is_station_recording_path(path):
-            raise UnsupportedError("not a validated station recording path")
-        # The app chooses native or JSON playback by station family, not filename.
-        native = history_query_verb(self._session.serial) == DB_QUERY_LOCAL_EVENTS
-        if not native and path.endswith(".dat"):
-            raise UnsupportedError("a 10011 station cannot play a native .dat path")
+        native = recording_is_native(self._session.serial, path)
         self._session._raise_if_closed()
         await self._session._e2e_ready(e2e_key)
         command = CMD_DOWNLOAD_VIDEO if download else CMD_RECORD_VIEW

@@ -850,7 +850,8 @@ the **key id**, and the record names one of two key types (`E2EKeyType`):
   `CommunicationError` naming the cipher (the cloud's error chained; a `CloudError` is
   also reported as a `CloudProblem`) with nothing sent, and the next request fetches
   again. A request refused anyway (a closed session, a standalone device's download or
-  play, a path that is not a recording's) fetches no key.
+  play, a path that is not a recording's, a native `.dat` path on a 10011 station)
+  fetches no key and opens no session.
 - **What the library does.** A session fetches each cloud cipher's key once
   (`E2EKeyProvider`; `EufySecurity` supplies it) and keeps it for its later recordings;
   recordings that need it at the same time share one fetch.

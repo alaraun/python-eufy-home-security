@@ -40,7 +40,11 @@ from eufy_home_security.p2p.media import (
     VideoVariant,
     generate_media_rsa_key,
 )
-from eufy_home_security.p2p.messages import CMD_RECORD_VIEW
+from eufy_home_security.p2p.messages import (
+    CMD_RECORD_VIEW,
+    DB_QUERY_HISTORY,
+    history_query_verb,
+)
 from eufy_home_security.p2p.session import E2EKeyProvider, P2PCredentials, StationSession
 from eufy_home_security.p2p.session import media_stream as media_stream_module
 from eufy_home_security.p2p.session.media_stream import MediaStream
@@ -709,19 +713,30 @@ async def test_a_recording_named_under_the_pin_key_is_refused_before_connecting(
         ("standalone", "async_download_recording", UnsupportedError),
         ("standalone", "async_play_recording", UnsupportedError),
         ("path", "async_open_recording", UnsupportedError),
+        ("path", "async_download_recording", UnsupportedError),
+        ("path", "async_play_recording", UnsupportedError),
+        ("dat", "async_open_recording", UnsupportedError),
+        ("dat", "async_download_recording", UnsupportedError),
+        ("dat", "async_play_recording", UnsupportedError),
     ],
 )
 async def test_a_recording_refused_before_its_open_fetches_no_cloud_key(
     e2e_hb2: FakeStation, refusal: str, call: str, error: type[Exception]
 ) -> None:
-    """A closed session's recording, a standalone device's transfer and a path that is not
-    a recording's are refused before the cloud is asked for the cipher key their history
-    row names."""
+    """A closed session's recording, a standalone device's transfer, a path that is not a
+    recording's and a native ``.dat`` path on a 10011 station are refused before the cloud
+    is asked for the cipher key their history row names, and before any session opens."""
     keys = _Keys(delay=0)
     session = _session(e2e_hb2, keys)
-    if refusal == "standalone":
+    if refusal in ("standalone", "dat"):
+        serial = SYNTHETIC.camera_sn if refusal == "standalone" else SYNTHETIC.station_sn
+        assert (history_query_verb(serial) == DB_QUERY_HISTORY) is (refusal == "dat")
         session = StationSession(
-            SYNTHETIC.camera_sn, session._credentials, host="127.0.0.1", e2e_keys=keys
+            serial,
+            session._credentials,
+            host="127.0.0.1",
+            port=e2e_hb2.discovery_port,
+            e2e_keys=keys,
         )
     elif refusal == "closed":
         await session.async_close()
