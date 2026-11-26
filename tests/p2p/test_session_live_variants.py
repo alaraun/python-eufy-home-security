@@ -635,6 +635,7 @@ async def test_an_e2e_recording_whose_key_is_not_to_be_had_fails_naming_the_ciph
         await session.async_close()
     assert not isinstance(err.value, PinProtectedKeyError)
     assert (err.value.key_type, err.value.key_id) == (E2EKeyType.CIPHER, 7)
+    assert str(err.value).count("cipher 7") == 1
 
 
 async def test_live_e2e_media_is_refused_as_the_app_plays_it_only_from_recordings(
@@ -1319,4 +1320,33 @@ async def test_a_shared_key_fetch_outlives_a_cancelled_waiter_and_ends_with_the_
         loop.set_exception_handler(None)
         await session.async_close()
     assert keys.asked == [7, 7, 7]
+    assert seen == []
+
+
+async def test_a_key_fetch_failing_as_its_last_caller_is_cancelled_leaves_no_stray_error(
+    e2e_hb2: FakeStation,
+) -> None:
+    """The provider fails in the same loop turn as the only caller is cancelled: the
+    failure is not left for the loop to report as never retrieved."""
+    keys = _GatedKeys(failing=(7,))
+    session = _session(e2e_hb2, keys)
+    seen: list[dict[str, object]] = []
+    loop = asyncio.get_running_loop()
+    loop.set_exception_handler(lambda _loop, context: seen.append(context))
+    try:
+        caller = asyncio.create_task(session._e2e_cipher_key(7))
+        async with asyncio.timeout(5):
+            while not keys.asked:
+                await asyncio.sleep(0.01)
+            keys.gate(7).set()  # the fetch fails on its next step, before the cancel lands
+            caller.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await caller
+        for _ in range(3):
+            await asyncio.sleep(0)
+        gc.collect()
+    finally:
+        loop.set_exception_handler(None)
+        await session.async_close()
+    assert not session._e2e_key_fetches
     assert seen == []
