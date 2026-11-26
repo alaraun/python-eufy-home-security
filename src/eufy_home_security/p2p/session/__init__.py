@@ -2670,13 +2670,13 @@ class StationSession:
         standalone device raises :class:`UnsupportedError` before anything is sent.
         ``e2e_key`` is as for :meth:`async_open_recording`.
         """
-        await self._e2e_ready(e2e_key)
         return await self._budget.download_recording(
             path,
             channel,
             write,
             first_frame_timeout=_or(first_frame_timeout, MEDIA_RECORDING_FIRST_FRAME_TIMEOUT),
             wait=wait,
+            e2e_key=e2e_key,
         )
 
     async def async_play_recording(
@@ -2706,7 +2706,6 @@ class StationSession:
         :meth:`async_download_recording` raises; ``e2e_key`` is as for
         :meth:`async_open_recording`.
         """
-        await self._e2e_ready(e2e_key)
         return await self._budget.play_recording(
             path,
             channel,
@@ -2714,6 +2713,7 @@ class StationSession:
             first_frame_timeout=_or(first_frame_timeout, MEDIA_RECORDING_FIRST_FRAME_TIMEOUT),
             wait=wait,
             realtime=realtime,
+            e2e_key=e2e_key,
         )
 
     def _send_native_recording(
@@ -2769,7 +2769,6 @@ class StationSession:
         Without it, a recording found end-to-end encrypted holds its records while the
         key is fetched (see ``docs/protocol/media.md``).
         """
-        await self._e2e_ready(e2e_key)
         return await self._media_slot.open_recording(
             path,
             channel,
@@ -2779,6 +2778,7 @@ class StationSession:
                 idle_timeout, MEDIA_DOWNLOAD_IDLE_TIMEOUT if download else MEDIA_IDLE_TIMEOUT
             ),
             wait=wait,
+            e2e_key=e2e_key,
         )
 
     def wake_backoff_left(self, channel: int) -> float:

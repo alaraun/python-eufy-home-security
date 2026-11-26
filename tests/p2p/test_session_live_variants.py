@@ -26,6 +26,7 @@ from eufy_home_security.exceptions import (
     CommandRejectedError,
     EndToEndEncryptedError,
     PinProtectedKeyError,
+    StationUnreachableError,
     UnsupportedError,
 )
 from eufy_home_security.models import E2EKey, E2EKeyType
@@ -694,6 +695,47 @@ async def test_a_recording_named_under_the_pin_key_is_refused_before_connecting(
         await session.async_close()
     assert e2e_hb2.sessions == 0
     assert keys.asked == []
+
+
+@pytest.mark.parametrize(
+    ("refusal", "call", "error"),
+    [
+        ("closed", "async_open_recording", StationUnreachableError),
+        ("closed", "async_download_recording", StationUnreachableError),
+        ("closed", "async_play_recording", StationUnreachableError),
+        ("standalone", "async_download_recording", UnsupportedError),
+        ("standalone", "async_play_recording", UnsupportedError),
+        ("path", "async_open_recording", UnsupportedError),
+    ],
+)
+async def test_a_recording_refused_before_its_open_fetches_no_cloud_key(
+    e2e_hb2: FakeStation, refusal: str, call: str, error: type[Exception]
+) -> None:
+    """A closed session's recording, a standalone device's transfer and a path that is not
+    a recording's are refused before the cloud is asked for the cipher key their history
+    row names."""
+    keys = _Keys(delay=0)
+    session = _session(e2e_hb2, keys)
+    if refusal == "standalone":
+        session = StationSession(
+            SYNTHETIC.camera_sn, session._credentials, host="127.0.0.1", e2e_keys=keys
+        )
+    elif refusal == "closed":
+        await session.async_close()
+    path = "/tmp/clip.mp4" if refusal == "path" else NATIVE_CLIP  # noqa: S108 (not opened)
+
+    async def write(_chunk: bytes) -> None:
+        raise AssertionError("nothing is written")
+
+    args: tuple[object, ...] = (path, CAMERA) if "open" in call else (path, CAMERA, write)
+    try:
+        with pytest.raises(error) as err:
+            await getattr(session, call)(*args, e2e_key=E2EKey(E2EKeyType.CIPHER, 7))
+    finally:
+        await session.async_close()
+    assert not isinstance(err.value, EndToEndEncryptedError)
+    assert keys.asked == []
+    assert e2e_hb2.sessions == 0
 
 
 async def test_every_record_held_during_a_slow_key_fetch_is_delivered(

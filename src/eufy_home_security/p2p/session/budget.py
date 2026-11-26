@@ -26,6 +26,7 @@ from .stats import HealthCounters, MediaCounters
 from .wake import WakeBackoff
 
 if TYPE_CHECKING:
+    from ...models import E2EKey
     from .media_slot import MediaSlot
 
 _LOGGER = logging.getLogger(__name__)
@@ -243,11 +244,13 @@ class SessionBudget:
         *,
         first_frame_timeout: float,
         wait: bool = True,
+        e2e_key: E2EKey | None = None,
     ) -> MediaClip:
         """See :meth:`StationSession.async_download_recording`."""
         if self._session.standalone:
             raise UnsupportedError("a standalone device lists no recordings to download")
         self._session._raise_if_closed()
+        await self._session._e2e_ready(e2e_key)
         async with self.download_lock:
             return await self._recording_on_extra(
                 path,
@@ -268,11 +271,13 @@ class SessionBudget:
         first_frame_timeout: float,
         wait: bool = True,
         realtime: bool = True,
+        e2e_key: E2EKey | None = None,
     ) -> MediaClip:
         """See :meth:`StationSession.async_play_recording`."""
         if self._session.standalone:
             raise UnsupportedError("a standalone device lists no recordings to play")
         self._session._raise_if_closed()
+        await self._session._e2e_ready(e2e_key)
         return await self._recording_on_extra(
             path,
             channel,
@@ -361,6 +366,8 @@ class BudgetOwner(Protocol):
     def standalone(self) -> bool: ...
 
     def _raise_if_closed(self) -> None: ...
+
+    async def _e2e_ready(self, key: E2EKey | None) -> None: ...
 
     def _short_lived_session(self) -> BudgetOwner: ...
 

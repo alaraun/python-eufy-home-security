@@ -64,6 +64,7 @@ from .media_stream import MediaStream, StreamOwner
 if TYPE_CHECKING:
     from cryptography.hazmat.primitives.asymmetric import rsa
 
+    from ...models import E2EKey
     from . import P2PCredentials
     from .budget import SessionBudget
 
@@ -250,13 +251,19 @@ class MediaSlot:
         first_frame_timeout: float,
         idle_timeout: float,
         wait: bool = False,
+        e2e_key: E2EKey | None = None,
     ) -> MediaStream:
         """See :meth:`StationSession.async_open_recording`."""
         if not is_station_recording_path(path):
             raise UnsupportedError("not a validated station recording path")
         # The app chooses native or JSON playback by station family, not filename.
-        if history_query_verb(self._session.serial) == DB_QUERY_LOCAL_EVENTS:
-            command = CMD_DOWNLOAD_VIDEO if download else CMD_RECORD_VIEW
+        native = history_query_verb(self._session.serial) == DB_QUERY_LOCAL_EVENTS
+        if not native and path.endswith(".dat"):
+            raise UnsupportedError("a 10011 station cannot play a native .dat path")
+        self._session._raise_if_closed()
+        await self._session._e2e_ready(e2e_key)
+        command = CMD_DOWNLOAD_VIDEO if download else CMD_RECORD_VIEW
+        if native:
             return await self.open_stream(
                 command,
                 channel,
@@ -268,9 +275,6 @@ class MediaSlot:
                 media_key=MediaKeyType.ECC,
                 native_recording_path=path,
             )
-        if path.endswith(".dat"):
-            raise UnsupportedError("a 10011 station cannot play a native .dat path")
-        command = CMD_DOWNLOAD_VIDEO if download else CMD_RECORD_VIEW
         build = download_video_payload if download else record_view_payload
         return await self.open_stream(
             command,
@@ -610,6 +614,10 @@ class SlotOwner(StreamOwner, Protocol):
     def connected(self) -> bool: ...
 
     def wake_backoff_left(self, channel: int) -> float: ...
+
+    def _raise_if_closed(self) -> None: ...
+
+    async def _e2e_ready(self, key: E2EKey | None) -> None: ...
 
     def _media_waits(self) -> MediaWaits: ...
 
