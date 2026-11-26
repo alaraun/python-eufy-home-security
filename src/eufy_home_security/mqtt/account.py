@@ -128,6 +128,12 @@ class EufyMqttAccount:
             except Exception:
                 _LOGGER.exception("MQTT cloud error listener %r failed", listener)
 
+    def serves(self, device_sn: str) -> bool:
+        """Whether a running client serves MQTT device ``device_sn``."""
+        return any(
+            d.device_sn == device_sn for client in self._clients.values() for d in client.devices
+        )
+
     def client_for(self, device_sn: str) -> EufyMqttClient:
         """The client serving MQTT device ``device_sn``; :class:`UnsupportedError` for
         a serial that is none of the account's MQTT devices."""

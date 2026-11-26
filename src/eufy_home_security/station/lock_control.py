@@ -54,7 +54,6 @@ from ..lock_commands.control import (
     check_control,
     ends_wait,
     has_member_record,
-    is_guest,
     lock_control,
     phase_wait,
 )
@@ -206,7 +205,7 @@ class StationLockControl:
 
     def control(self, device_sn: str) -> LockControl:
         device = self._station.sub_device(device_sn)
-        return lock_control(self.form(device), guest=is_guest(device))
+        return lock_control(self.form(device), device)
 
     # ── inbound ─────────────────────────────────────────────────────────────
 

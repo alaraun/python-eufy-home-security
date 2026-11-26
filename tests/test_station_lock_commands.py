@@ -1226,10 +1226,13 @@ async def test_lock_control_and_the_command_agree_for_every_lock(
 
 
 class _NoBroker:
-    """An MQTT account stand-in that is never asked to publish."""
+    """An MQTT account stand-in that serves every lock and is never asked to publish."""
 
     def add_listener(self, _callback: object) -> Callable[[], None]:
         return lambda: None
+
+    def serves(self, _device_sn: str) -> bool:
+        return True
 
 
 async def _no_credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:

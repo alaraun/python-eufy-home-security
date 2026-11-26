@@ -18,10 +18,12 @@ from typing import Any
 import pytest
 
 from eufy_home_security.cloud.models import CloudDevice
+from eufy_home_security.devices.lock_routes import LockForm
 from eufy_home_security.devices.locks import LockReading, LockState, LockStateSource
 from eufy_home_security.events import Event, EventBus, EventSource, LockStateChanged, SecurityEvent
 from eufy_home_security.exceptions import (
     CommandRejectedError,
+    CommunicationError,
     DeviceBusyError,
     DeviceTimeoutError,
     GuestAccessError,
@@ -31,7 +33,7 @@ from eufy_home_security.exceptions import (
 )
 from eufy_home_security.lock_commands import cm2, control, frames
 from eufy_home_security.lock_commands.actions import LockAction
-from eufy_home_security.lock_commands.control import LockPath
+from eufy_home_security.lock_commands.control import NOT_SELECTED_FOR_MQTT, LockPath
 from eufy_home_security.lock_commands.mqtt_trans import encode_trans
 from eufy_home_security.mqtt import locks as mqtt_locks_module
 from eufy_home_security.mqtt.account import EufyMqttAccount
@@ -417,6 +419,9 @@ class _StateThenFailure:
     def __init__(self) -> None:
         self.locks: MqttLocks | None = None
 
+    def serves(self, _device_sn: str) -> bool:
+        return True
+
     def add_listener(self, _callback: object) -> Callable[[], None]:
         return lambda: None
 
@@ -456,6 +461,9 @@ class _Recording:
         self.waits: list[tuple[object, object]] = []
         self.listener: Callable[[MqttMessage], None] | None = None
 
+    def serves(self, _device_sn: str) -> bool:
+        return True
+
     def add_listener(self, callback: Callable[[MqttMessage], None]) -> Callable[[], None]:
         self.listener = callback
         return lambda: None
@@ -490,6 +498,9 @@ async def test_an_mqtt_lock_command_keeps_the_apps_waits_within_its_bound(
 
 class _Silent:
     """An MQTT account whose request never ends."""
+
+    def serves(self, _device_sn: str) -> bool:
+        return True
 
     def add_listener(self, _callback: object) -> Callable[[], None]:
         return lambda: None
@@ -671,6 +682,77 @@ async def test_a_guest_of_an_mqtt_lock_is_refused(rig: Rig, wifi_lock: FakeMqttL
 async def test_a_device_not_listed_is_refused(rig: Rig) -> None:
     with pytest.raises(UnsupportedError, match="device list"):
         rig.eufy.lock_control(LOCK_SN)
+
+
+# ── which MQTT locks are writable: the account's own selection ───────────────
+
+F2_SN = "T85F2P2000054324"
+T8506_VARIANT_SN = "T85060" + "8" + "000054325"
+
+
+def _typed(serial: str, pn: str, device_type: int) -> CloudDevice:
+    return dataclasses.replace(lock(serial, pn), device_type=device_type)
+
+
+async def test_a_lock_only_the_lock_connector_selects_is_served_and_writable(rig: Rig) -> None:
+    """T85F2's data declares no MQTT support; the app's lock connector selects it by its
+    device type, so the account connects it and its commands go out."""
+    fake = FakeMqttLock(broker=rig.broker, serial=F2_SN, product_code="T85F2", owner_user_id=OWNER)
+    fake.attach()
+    account = await _served(rig, _typed(F2_SN, "T85F2", 229))
+    try:
+        control = rig.eufy.lock_control(F2_SN)
+        assert (control.path, control.writable) == (LockPath.MQTT, True)
+        assert account.client_for(F2_SN) is not None
+        assert await rig.eufy.async_lock(F2_SN, timeout=5) is LockState.LOCKED
+    finally:
+        await account.async_stop()
+    assert len(fake.received) == 1
+    assert fake.refused == []
+
+
+async def test_an_mqtt_lock_no_connector_selects_is_not_writable_and_sends_nothing(
+    rig: Rig,
+) -> None:
+    """The T8506 serial variant takes MQTT commands, but neither MQTT connector of the app
+    selects it: the account would run no connection for it, so it is not writable."""
+    variant = _typed(T8506_VARIANT_SN, "T8506", 184)
+    rig.eufy.listed_devices = MappingProxyType({T8506_VARIANT_SN: variant})
+    account = EufyMqttAccount(rig.eufy.cloud, port=rig.broker.port, server_ca_pem=rig.pki.ca_pem)
+    await account.async_start([variant])
+    rig.eufy.use_mqtt(account)
+    try:
+        assert account.clients == {}  # the account's own selection leaves it out
+        control = rig.eufy.lock_control(T8506_VARIANT_SN)
+        assert control.form is LockForm.MQTT
+        assert not control.writable
+        assert control.reason == NOT_SELECTED_FOR_MQTT
+        with pytest.raises(UnsupportedError, match="no MQTT connection of the eufy app"):
+            await rig.eufy.async_lock(T8506_VARIANT_SN)
+    finally:
+        await account.async_stop()
+    assert rig.broker.published == []
+
+
+@pytest.mark.parametrize("account_state", ["not started", "stopped"])
+async def test_a_writable_mqtt_lock_without_its_connection_is_a_communication_error(
+    rig: Rig, account_state: str
+) -> None:
+    """``lock_control`` does not follow the account's connection: a lock the account serves
+    stays writable before its start, during it and after a stop or a failed start, and a
+    command then fails as a connection problem, sending nothing."""
+    rig.eufy.listed_devices = MappingProxyType({LOCK_SN: lock()})
+    account = EufyMqttAccount(rig.eufy.cloud, port=rig.broker.port, server_ca_pem=rig.pki.ca_pem)
+    if account_state == "stopped":
+        await account.async_start([lock()])
+        await account.async_stop()
+    rig.eufy.use_mqtt(account)
+    assert rig.eufy.lock_control(LOCK_SN).writable
+    with pytest.raises(CommunicationError, match="no MQTT connection") as caught:
+        await rig.eufy.async_lock(LOCK_SN)
+    assert not isinstance(caught.value, UnsupportedError)
+    assert caught.value.device_sn == LOCK_SN
+    assert rig.broker.published == []
 
 
 # ── one merged reading per lock ───────────────────────────────────────────────

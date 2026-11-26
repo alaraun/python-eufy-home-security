@@ -10,9 +10,11 @@ import pytest
 
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.devices import model_settings
+from eufy_home_security.devices._lock_routes_data import MQTT_DEVICE_TYPES as GENERATED_TYPES
 from eufy_home_security.devices.model_settings import bundled_codes, settings_of
 from eufy_home_security.exceptions import ModelDataError, UnsupportedError
 from eufy_home_security.mqtt import (
+    LOCK_CONNECTOR_DEVICE_TYPES,
     SUPPORT_PROPERTY,
     device_key,
     is_mqtt_device,
@@ -36,7 +38,7 @@ def _declared_true() -> set[str]:
 
 
 def _device(serial: str, **entry: Any) -> CloudDevice:
-    return CloudDevice.from_api({"device_sn": serial, "device_type": 0, **entry})
+    return CloudDevice.from_api({"device_sn": serial, "device_type": 0} | entry)
 
 
 def test_the_selection_is_exactly_the_models_whose_data_declares_mqtt() -> None:
@@ -126,3 +128,30 @@ def test_the_device_key_is_the_serial_and_the_bind_time() -> None:
         "T85D0P2000054321-1700000000"
     )
     assert device_key(_device("T85D0P2000054321")) == "T85D0P2000054321-0"
+
+
+def test_the_lock_connectors_device_types_are_the_generated_list() -> None:
+    assert LOCK_CONNECTOR_DEVICE_TYPES == GENERATED_TYPES
+    assert {229, 230} <= LOCK_CONNECTOR_DEVICE_TYPES  # T85F2, T85F3
+
+
+@pytest.mark.parametrize(
+    ("serial", "device_type", "selected"),
+    [
+        ("T85F2P2000054321", 229, True),  # no property in its data: the lock connector's type
+        ("T85F3P2000054321", 230, True),
+        ("T85F2P2000054321", 0, False),  # neither connector selects it
+        ("T85D0P2000054321", 0, True),  # the property alone
+        ("T85060" + "8" + "000054321", 184, False),  # T8506 variant: no connector selects it
+        ("T85060" + "1" + "000054321", 184, False),
+    ],
+)
+def test_a_device_is_selected_by_either_connector_of_the_app(
+    serial: str, device_type: int, selected: bool
+) -> None:
+    assert is_mqtt_device(_device(serial, device_type=device_type)) is selected
+
+
+def test_the_lock_connector_serves_only_the_security_sdk_categories() -> None:
+    lock = _device("T85F2P2000054321", device_type=229, category="eufy_life")
+    assert not is_mqtt_device(lock)

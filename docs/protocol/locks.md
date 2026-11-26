@@ -179,8 +179,13 @@ acknowledgement alone never counts. In order:
    1961 one names no `userId`). A 1940 command (station or MQTT) raises `UnsupportedError`
    while the cloud client has no user id for the account (before its first login), and a
    1961 ECIES or 1930 command on a station built without a cloud client, which the lock's
-   public key comes from. An MQTT route with no account given to `use_mqtt()` raises
-   `MqttAccountRequiredError`; a command still waiting for the same lock raises
+   public key comes from. An MQTT route that the app's MQTT selection leaves out
+   ([mqtt.md](mqtt.md#which-devices): a T8506 with 7th serial character `8`) is not
+   writable and raises `UnsupportedError`, as the account runs no connection for it. An
+   MQTT route with no account given to `use_mqtt()` raises `MqttAccountRequiredError`;
+   one whose account runs no client for it now (not started yet, starting, stopped, or a
+   start that failed) raises `CommunicationError`, sending nothing: `lock_control()` does
+   not follow the account's connection. A command still waiting for the same lock raises
    `DeviceBusyError`. A lock whose reading already is the asked state returns it at once
    and sends nothing (the app's lock card offers lock only for a lock it shows open,
    unlock otherwise), unless that reading is a push that may be older than the lock's last

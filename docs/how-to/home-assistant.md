@@ -1776,8 +1776,12 @@ state. Whether this client can also lock and unlock it is per unit:
 `eufy.lock_control(device_sn)` answers from the lock's command route, firmware and cloud
 record, without a session or network, with `writable`, `path` (`station` or `mqtt`),
 `reason` (a text for the UI when not writable) and `guest`. A lock whose route is its
-station's session is writable only while this client runs that station. Give the `lock`
-entity lock and unlock where `writable`, and make it read-only otherwise.
+station's session is writable only while this client runs that station. A lock on the
+MQTT path is writable exactly when `EufyMqttAccount` connects it (one rule for both,
+[protocol/mqtt.md](../protocol/mqtt.md#which-devices)); `writable` does not follow the
+account's connection, so it holds while the account starts or after a failed start, and
+a command then raises `CommunicationError`. Give the `lock` entity lock and unlock where
+`writable`, and make it read-only otherwise.
 
 `await eufy.async_lock(device_sn)` / `async_unlock(device_sn)` send the command over that
 path and return the `LockState` once the lock reports the asked state, never on an
@@ -1785,10 +1789,12 @@ acknowledgement ([protocol/locks.md](../protocol/locks.md#commands)). Before sen
 raise `GuestAccessError` (the account is a guest of the lock), `UnsupportedError` (no
 route the library sends, no member record for the lock in the cloud's device list, or no
 cloud user id before the first login), `MqttAccountRequiredError` (an MQTT lock: call
-`eufy.use_mqtt(account)` with the account's `EufyMqttAccount`) or `DeviceBusyError`
-(a command for that lock still waits). After sending they raise `CommandRejectedError`
-(`err.code`; -151 is a refused sequence number), `LockNotMovedError` (`err.state`: jammed
-or stopped between positions) or `DeviceTimeoutError`. Every one of them imports from
+`eufy.use_mqtt(account)` with the account's `EufyMqttAccount`), `CommunicationError`
+(the account runs no connection for the lock now: not started, starting or stopped) or
+`DeviceBusyError` (a command for that lock still waits). After sending they raise
+`CommandRejectedError` (`err.code`; -151 is a refused sequence number),
+`LockNotMovedError` (`err.state`: jammed or stopped between positions) or
+`DeviceTimeoutError`. Every one of them imports from
 `eufy_home_security` itself, as every library error does. A lock whose reading (below: one
 merged reading of every source, never the MQTT reports alone) already is the asked state
 returns at once, sending nothing (not while that reading is a push that may be older than

@@ -28,6 +28,7 @@ from ..devices.lock_routes import lock_route
 from ..devices.locks import LockReading, LockState
 from ..exceptions import (
     CommandRejectedError,
+    CommunicationError,
     DeviceBusyError,
     DeviceTimeoutError,
     LockNotMovedError,
@@ -49,7 +50,6 @@ from ..lock_commands.control import (
     check_control,
     ends_wait,
     has_member_record,
-    is_guest,
     lock_control,
     phase_wait,
 )
@@ -77,7 +77,7 @@ def mqtt_lock_control(device: CloudDevice) -> LockControl:
         sec_sw_version=device.sec_sw_version or "",
         params={p.param_id: p.value for p in device.cloud_params},
     )
-    return lock_control(form, guest=is_guest(device))
+    return lock_control(form, device)
 
 
 def _through_data(message: MqttMessage) -> Mapping[str, Any] | None:
@@ -211,6 +211,14 @@ class MqttLocks:
         target = TARGET_STATES[action]
         if states.settled(serial, target):  # every source's reading, never MQTT's alone
             return target
+        if not self._account.serves(serial):
+            # Selected (the control says writable), but the account runs no client for it
+            # now: not started, starting, stopped or a failed start. A connection problem.
+            raise CommunicationError(
+                f"{redact_serial(serial)}: no MQTT connection serves the lock yet "
+                "(the MQTT account is not started, starting or stopped)",
+                device_sn=serial,
+            )
         self._busy.add(serial)
         try:
             return await self._run(

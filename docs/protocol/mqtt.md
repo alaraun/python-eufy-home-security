@@ -11,20 +11,30 @@ cloud or broker.
 
 ## Which devices
 
-A device is an MQTT device when both hold:
+The app runs two connectors on its one MQTT connection, and a device is an MQTT device when
+its device-list entry's `category` is one of `eufy_security`, `eufy_care`, `eufy_pet` (an
+entry without a category counts as `eufy_security`; the app's lights, `eufy_life`, have a
+client of their own) and either connector selects it:
 
-- its device-list entry's `category` is one of `eufy_security`, `eufy_care`,
-  `eufy_pet` (an entry without a category counts as `eufy_security`); the app's lights
-  (`eufy_life`) have a client of their own;
-- its model's thing description declares the property `is_support_mqtt` with default
-  `true`. The model is the entry's `device_new_pn`, else the product its serial names.
+- the current connector: its model's thing description declares the property
+  `is_support_mqtt` with default `true`. The model is the entry's `device_new_pn`, else
+  the product its serial names. The property is read from the bundled settings files
+  (`devices/data/models/<PN>.json`), so a regenerated data set moves products in or out by
+  itself. In the bundled data these models declare it: T8501, T8531, T8532, T85D0, T85D2,
+  T85F0, T85F1, T85L0, T85L1, T85M0, T85M1, T85P0, T85P1, T85V0, T8028 and T6010. T8L04,
+  a light, declares it too and is picked only when its entry's category is one of the
+  three.
+- the lock connector (legacy, still live for locks): the entry's cloud `device_type` is
+  one of `LOCK_CONNECTOR_DEVICE_TYPES` (189, 201, 202, 203, 205, 206, 207, 209, 210, 211,
+  212, 213, 229, 230, 299), generated with the lock routes from the app's lock
+  configuration (`scripts/gen_lock_routes.py`). Every lock the current connector selects
+  is on it, and T85F2 (229) and T85F3 (230), whose data declares no `is_support_mqtt`.
 
-The property is read from the bundled settings files (`devices/data/models/<PN>.json`),
-never from a list of device types, so a regenerated data set moves products in or out by
-itself. In the bundled data these models declare it: T8501, T8531, T8532, T85D0, T85D2,
-T85F0, T85F1, T85L0, T85L1, T85M0, T85M1, T85P0, T85P1, T85V0, T8028 and T6010. T8L04, a
-light, declares it too and is picked only when its entry's category is one of the three. `eufy_home_security.mqtt.mqtt_devices()`
-applies the rule to a device list.
+`eufy_home_security.mqtt.mqtt_devices()` applies the rule to a device list. The same rule
+decides whether a lock on the MQTT command route is writable (`lock_control()`,
+[locks.md](locks.md#commands)): a T8506 with 7th serial character `8` takes its commands
+over MQTT, but neither connector selects it, so the account runs no connection for it and
+it is not writable.
 
 With no MQTT device on the account the app asks for no certificate and opens no
 connection; the library does the same.
