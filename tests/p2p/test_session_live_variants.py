@@ -519,11 +519,16 @@ async def e2e_hb2() -> AsyncIterator[FakeStation]:
 class _Keys:
     """An :class:`E2EKeyProvider` recording the key ids asked, answering after ``delay``."""
 
-    def __init__(self, answer: str | None = E2E_CIPHER_TEXT, delay: float = 0.2) -> None:
+    def __init__(
+        self,
+        answer: str | None = E2E_CIPHER_TEXT,
+        delay: float = 0.2,
+        error: Exception | None = None,
+    ) -> None:
         self.answer = answer
         self.delay = delay
         self.asked: list[int] = []
-        self.error: Exception | None = None
+        self.error = error
 
     async def __call__(self, key_id: int) -> str | None:
         self.asked.append(key_id)
@@ -623,14 +628,12 @@ async def test_an_e2e_recording_of_the_users_pin_key_is_refused_without_a_fetch(
         (None, "cannot fetch cipher keys"),
         (_Keys(answer=None), "serves no RSA key"),
         (_Keys(answer="not a key"), "does not parse"),
-        (_Keys(answer=E2E_CIPHER_TEXT), "could not be fetched"),
+        (_Keys(error=RuntimeError("provider bug")), "could not be fetched: provider bug"),
     ],
 )
 async def test_an_e2e_recording_whose_key_is_not_to_be_had_fails_naming_the_cipher(
     e2e_hb2: FakeStation, keys: _Keys | None, message: str
 ) -> None:
-    if keys is not None and keys.answer == E2E_CIPHER_TEXT:
-        keys.error = CloudApiError(500, "boom")
     session = _session(e2e_hb2, keys)
     try:
         with pytest.raises(EndToEndEncryptedError, match=message) as err:
@@ -756,17 +759,25 @@ async def test_a_recording_refused_before_its_open_fetches_no_cloud_key(
     assert e2e_hb2.sessions == 0
 
 
-@pytest.mark.parametrize("call", ["async_open_recording", "async_download_recording"])
-async def test_a_cloud_failure_fetching_a_rows_key_is_a_communication_error_to_retry(
-    e2e_hb2: FakeStation, call: str
+@pytest.mark.parametrize(
+    ("call", "by_row"),
+    [
+        ("async_open_recording", True),
+        ("async_download_recording", True),
+        ("async_open_recording", False),
+    ],
+)
+async def test_a_cloud_failure_fetching_a_cipher_key_is_a_communication_error_to_retry(
+    e2e_hb2: FakeStation, call: str, by_row: bool
 ) -> None:
-    """The provider fails while the row's cipher key is fetched before the open: the call
-    raises a :class:`CommunicationError` naming the cipher (the cloud's error chained),
-    not the recording's refusal, sends nothing, and the next call fetches again."""
+    """The provider fails while a cloud cipher's key is fetched, before the open (the row
+    names the cipher; nothing is sent) or while a recording opened by path alone holds its
+    records: the call raises a :class:`CommunicationError` naming the cipher once (the
+    cloud's error chained), not the recording's refusal, and the next call fetches again."""
     keys = _Keys(delay=0)
     keys.error = CloudApiError(500, "boom")
     session = _session(e2e_hb2, keys)
-    key = E2EKey(E2EKeyType.CIPHER, 7)
+    key = E2EKey(E2EKeyType.CIPHER, 7) if by_row else None
 
     async def write(_chunk: bytes) -> None:
         return None
@@ -774,25 +785,27 @@ async def test_a_cloud_failure_fetching_a_rows_key_is_a_communication_error_to_r
     args: tuple[object, ...] = (
         (NATIVE_CLIP, CAMERA) if "open" in call else (NATIVE_CLIP, CAMERA, write)
     )
-    try:
-        with pytest.raises(CommunicationError, match="cipher 7") as err:
-            await getattr(session, call)(*args, e2e_key=key)
-        assert e2e_hb2.sessions == 0
-        keys.error = None
+
+    async def video_frames() -> int:
         async with asyncio.timeout(10):
             result = await getattr(session, call)(*args, e2e_key=key)
             if isinstance(result, MediaStream):
                 async with result:
                     frames = [frame async for frame in result]
-                assert (
-                    len([f for f in frames if f.kind is MediaKind.VIDEO])
-                    == e2e_hb2.recording_frames
-                )
-            else:
-                assert result.video_frames == e2e_hb2.recording_frames
+                return len([f for f in frames if f.kind is MediaKind.VIDEO])
+            return int(result.video_frames)
+
+    try:
+        with pytest.raises(CommunicationError, match="cipher 7") as err:
+            await video_frames()
+        if by_row:
+            assert e2e_hb2.sessions == 0
+        keys.error = None
+        assert await video_frames() == e2e_hb2.recording_frames
     finally:
         await session.async_close()
     assert not isinstance(err.value, UnsupportedError)
+    assert str(err.value).count("cipher 7") == 1
     assert isinstance(err.value.__cause__, CloudApiError)
     assert keys.asked == [7, 7]
 

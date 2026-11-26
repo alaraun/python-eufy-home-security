@@ -864,12 +864,13 @@ the **key id**, and the record names one of two key types (`E2EKeyType`):
   to 32 MiB, the frames still queued when the fetch starts included, so the holds of
   several ciphers do not stack up in an unread queue: from the first record that does not
   fit, nothing more is held until the key arrives, and video resumes at the first
-  keyframe after it. A cipher without an RSA key, a key that does not parse, a failed
-  fetch or one still running when the recording's first-frame wait (10 s) runs out ends
-  the stream with `EndToEndEncryptedError` (an
-  `UnsupportedError`) naming the cipher; a cloud failure is also reported as a
-  `CloudProblem`. On a stream that already delivered video, a further cipher whose key
-  cannot be had is not fetched again: its records are dropped (one warning) and video
+  keyframe after it. A cipher without an RSA key, a key that does not parse, or a fetch
+  still running when the recording's first-frame wait (10 s) runs out ends the stream
+  with `EndToEndEncryptedError` (an `UnsupportedError`) naming the cipher. A cloud
+  failure during the fetch ends it with the `CommunicationError` a fetch before the open
+  raises (the cloud's error chained, also reported as a `CloudProblem`), and the next
+  open fetches again. On a stream that already delivered video, a further cipher whose
+  key cannot be had is not fetched again: its records are dropped (one warning) and video
   resumes at a keyframe the stream decodes. A record of the PIN key ends the stream with
   `PinProtectedKeyError`: the key needs the user's PIN, which the library neither asks
   for nor stores. A live stream decodes no end-to-end record, as the app plays them only

@@ -196,7 +196,7 @@ class MediaStream:
         """Records held while an end-to-end key is fetched, None where the hold overflowed
         and records were dropped (the list None: no fetch running)."""
         self._key_wait_bytes = 0
-        self._e2e_failed: dict[int, EndToEndEncryptedError] = {}
+        self._e2e_failed: dict[int, EndToEndEncryptedError | CommunicationError] = {}
         """The ciphers whose key could not be had, and why: their records are dropped."""
         self._end_after_key = False
         """The station ended the recording while its key was fetched."""
@@ -780,7 +780,9 @@ class MediaStream:
             UnsupportedError(f"the station sends {variant.value} video, {reason}"), variant
         )
 
-    def _refuse_video(self, error: UnsupportedError, variant: VideoVariant) -> None:
+    def _refuse_video(
+        self, error: UnsupportedError | CommunicationError, variant: VideoVariant
+    ) -> None:
         """Fail the stream with ``error`` before its first keyframe; after it, drop the
         record (logged once per variant)."""
         if self._started:
@@ -845,12 +847,11 @@ class MediaStream:
         if self._closed or held is None:
             return
         if error is not None:
-            if not isinstance(error, EndToEndEncryptedError):
-                # A failed fetch ends this recording: the stream cannot ask again.
+            # A cloud failure stays the CommunicationError a fetch before the open raises
+            # (a later open asks again); any other failure refuses the recording.
+            if not isinstance(error, (EndToEndEncryptedError, CommunicationError)):
                 error = EndToEndEncryptedError(
-                    str(error)
-                    if isinstance(error, CommunicationError)
-                    else f"the key of cipher {key_id} for the recording's end-to-end "
+                    f"the key of cipher {key_id} for the recording's end-to-end "
                     f"encryption could not be fetched: {error}",
                     key_type=E2EKeyType.CIPHER,
                     key_id=key_id,
