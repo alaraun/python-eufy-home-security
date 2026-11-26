@@ -13,9 +13,7 @@ from typing import Any, Protocol
 from ..cloud.models import CloudDevice
 from ..events import HistoryRecord, SecurityEvent
 from ..exceptions import EufySecurityError, RecordNotFoundError, UnsupportedError
-from ..models import E2EKeyType
 from ..p2p.clip import ClipWriter, MediaClip
-from ..p2p.media import pin_key_refusal
 from ..p2p.messages import DB_QUERY_HISTORY, history_query_verb, record_id_day
 from ..p2p.session import StationSession
 from ..recordings import (
@@ -544,7 +542,9 @@ class StationHistory:
     ) -> MediaClip:
         """See :meth:`Station.async_download_recording`."""
         path, channel = self._recording_of(record)
-        clip = await self._station.session.async_download_recording(path, channel, write, wait=wait)
+        clip = await self._station.session.async_download_recording(
+            path, channel, write, wait=wait, e2e_key=record.e2e_key
+        )
         return await self._clip_of(record, clip)
 
     async def play_recording(
@@ -553,23 +553,18 @@ class StationHistory:
         """See :meth:`Station.async_play_recording`."""
         path, channel = self._recording_of(record)
         clip = await self._station.session.async_play_recording(
-            path, channel, write, wait=wait, realtime=realtime
+            path, channel, write, wait=wait, realtime=realtime, e2e_key=record.e2e_key
         )
         return await self._clip_of(record, clip)
 
     def _recording_of(self, record: HistoryRecord) -> tuple[str, int]:
         """The record's recording path and its camera's channel; raises
-        :class:`UnsupportedError` for a record without either, and
-        :class:`~..exceptions.PinProtectedKeyError` for one its row names end-to-end encrypted with the
-        user's PIN key, as the app refuses it before playing."""
+        :class:`UnsupportedError` for a record without either."""
         path = record.video_path
         if path is None:
             raise UnsupportedError("the record carries no recording")
         if record.device_sn is None:
             raise UnsupportedError("the record names no camera")
-        key = record.e2e_key
-        if key is not None and key.key_type is E2EKeyType.PIN:
-            raise pin_key_refusal(key.key_id)
         return path, self._station.channel_for(record.device_sn)
 
     async def _clip_of(self, record: HistoryRecord, clip: MediaClip) -> MediaClip:

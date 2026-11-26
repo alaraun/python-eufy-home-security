@@ -2345,7 +2345,8 @@ video and AAC untouched, starting at a keyframe) written through the integration
 
 **End-to-end encrypted recordings** (the owner turned on the app's video encryption)
 play and download like the others when the station seals them for the owner's cloud
-cipher: the library fetches that key itself. Under the user's PIN-protected key they
+cipher: the library fetches that key itself, before anything is sent when the row's
+`HistoryRecord.e2e_key` names the cipher. Under the user's PIN-protected key they
 raise `PinProtectedKeyError` (an `EndToEndEncryptedError`, an `UnsupportedError`):
 before anything is sent when the row's `HistoryRecord.e2e_key` names it, else at the
 first record; the library neither asks for nor stores a PIN, so offer no retry. See

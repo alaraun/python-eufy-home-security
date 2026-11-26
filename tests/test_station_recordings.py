@@ -13,6 +13,8 @@ from datetime import UTC, date, datetime, timedelta, timezone, tzinfo
 from typing import Any
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 import eufy_home_security.station as station_module
 import eufy_home_security.station.history as station_history
@@ -29,8 +31,10 @@ from eufy_home_security.exceptions import (
     UnsupportedError,
 )
 from eufy_home_security.images import ImageSource
+from eufy_home_security.models import E2EKey, E2EKeyType
 from eufy_home_security.p2p.clip import ClipWriter, MediaClip
 from eufy_home_security.p2p.did import static_key
+from eufy_home_security.p2p.media import VideoVariant
 from eufy_home_security.p2p.messages import HISTORY_RECORD_COUNTER
 from eufy_home_security.p2p.mpegts import TS_PACKET_LEN
 from eufy_home_security.p2p.session import P2PCredentials, StationSession
@@ -787,9 +791,11 @@ async def test_a_download_passes_wait_to_the_session(
     download = station.session.async_download_recording
     waits: list[bool] = []
 
-    async def spy(path: str, channel: int, write: ClipWriter, *, wait: bool = True) -> MediaClip:
+    async def spy(
+        path: str, channel: int, write: ClipWriter, *, wait: bool = True, e2e_key: E2EKey | None
+    ) -> MediaClip:
         waits.append(wait)
-        return await download(path, channel, write, wait=wait)
+        return await download(path, channel, write, wait=wait, e2e_key=e2e_key)
 
     async def write(_chunk: bytes) -> None:
         return None
@@ -808,10 +814,16 @@ async def test_a_play_passes_wait_and_realtime_to_the_session(
     calls: list[tuple[str, int, bool, bool]] = []
 
     async def spy(
-        path: str, channel: int, write: ClipWriter, *, wait: bool = True, realtime: bool = True
+        path: str,
+        channel: int,
+        write: ClipWriter,
+        *,
+        wait: bool = True,
+        realtime: bool = True,
+        e2e_key: E2EKey | None,
     ) -> MediaClip:
         calls.append((path, channel, wait, realtime))
-        return await play(path, channel, write, wait=wait, realtime=realtime)
+        return await play(path, channel, write, wait=wait, realtime=realtime, e2e_key=e2e_key)
 
     async def write(_chunk: bytes) -> None:
         return None
@@ -820,6 +832,55 @@ async def test_a_play_passes_wait_and_realtime_to_the_session(
     await station.async_play_recording(record, write, wait=False, realtime=False)
     await station.async_play_recording(record, write)
     assert calls == [(record.video_path, 0, False, False), (record.video_path, 0, True, True)]
+
+
+E2E_CIPHER = rsa.generate_private_key(65537, 1024)  # noqa: S505 (protocol)
+
+
+@pytest.mark.parametrize("transfer", ["async_download_recording", "async_play_recording"])
+async def test_a_record_its_row_names_under_a_cloud_cipher_plays_with_the_key_fetched_first(
+    fake: FakeStation, today: datetime, transfer: str
+) -> None:
+    """A row whose ``cipher_id`` names the owner's cloud cipher: the key is fetched before
+    an extra session is reserved, so no record of the recording waits for it."""
+    fake.video_variant = VideoVariant.E2E
+    fake.e2e_cipher_key = E2E_CIPHER
+    fake.e2e_media_version, fake.e2e_key_id = 5, 7
+    fake.recording_frames = 6
+    fake.rows = [_row(today, 7, SYNTHETIC.camera_sn, cipher_id=0x05000007)]
+    asked: list[tuple[int, int]] = []
+
+    async def keys(key_id: int) -> str:
+        asked.append((key_id, len(session._budget.extra_live)))
+        await asyncio.sleep(0.1)
+        return E2E_CIPHER.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        ).decode()
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
+
+    session = StationSession(
+        SYNTHETIC.station_sn, credentials, host="127.0.0.1", port=fake.discovery_port, e2e_keys=keys
+    )
+    station = Station(STATION, session, sub_devices=[CAMERA])
+    try:
+        (record,) = await station.async_list_recordings()
+        assert record.e2e_key == E2EKey(E2EKeyType.CIPHER, 7)
+
+        async def write(_chunk: bytes) -> None:
+            return None
+
+        async with asyncio.timeout(10):
+            clip = await getattr(station, transfer)(record, write)
+        outcomes = {shape.outcome for shape in session._media_counters.first_records}
+    finally:
+        await station.async_close()
+    assert asked == [(7, 0)]
+    assert "key_pending" not in outcomes
+    assert clip.video_frames == fake.recording_frames
 
 
 @pytest.mark.parametrize(

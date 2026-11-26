@@ -841,12 +841,16 @@ the **key id**, and the record names one of two key types (`E2EKeyType`):
   first video record, audio is dropped.
 - **History rows:** the row's `cipher_id` names the same key: above `0xFFFFFF`, its top
   byte is the key type and its low byte the key id (`HistoryRecord.cipher_id`,
-  `HistoryRecord.e2e_key`, `E2EKey.from_cipher_id`). A recording whose row names the PIN
-  key is refused before anything is sent (`PinProtectedKeyError`).
-- **What the library does.** A recording's stream (play or download) holds the records
-  of a cloud cipher it has no key for while it fetches the key once per stream
-  (`E2EKeyProvider`; `EufySecurity` supplies it), then decodes them in order. It holds up
-  to 32 MiB; records past that are dropped and video resumes at the next keyframe. A
+  `HistoryRecord.e2e_key`, `E2EKey.from_cipher_id`). As the app's player does, a
+  recording played or downloaded from its row (`Station.async_play_recording`,
+  `async_download_recording`; the session methods' `e2e_key`) has the key before
+  anything is sent: a cloud cipher's key is fetched first, so no record waits for it; the
+  PIN key is refused (`PinProtectedKeyError`).
+- **What the library does.** A session fetches each cloud cipher's key once
+  (`E2EKeyProvider`; `EufySecurity` supplies it) and keeps it for its later recordings.
+  A recording opened by path alone holds the records of a cloud cipher it has no key for
+  while it fetches the key, then decodes them in order. It holds up to 32 MiB; records
+  past that are dropped and video resumes at the next keyframe. A
   cipher without an RSA key, a key that does not parse or a failed fetch ends the stream
   with `EndToEndEncryptedError` (an `UnsupportedError`) naming the cipher; a cloud
   failure is also reported as a `CloudProblem`. A record of the PIN key ends it with

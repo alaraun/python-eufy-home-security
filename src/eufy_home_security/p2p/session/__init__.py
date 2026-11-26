@@ -106,7 +106,7 @@ from ...exceptions import (
     StationUnreachableError,
     UnsupportedError,
 )
-from ...models import STATION_CHANNEL, E2EKeyType, GuardMode
+from ...models import STATION_CHANNEL, E2EKey, E2EKeyType, GuardMode
 from ...recordings import RecordingRef
 from .._json import json_int
 from ..alarm import ALARM_FRAME_VALUES, AlarmFrame, decode_alarm_frame
@@ -140,6 +140,7 @@ from ..media import (
     decode_record_play_ctrl,
     decode_still,
     media_variant_label,
+    pin_key_refusal,
     video_codec_label,
 )
 from ..messages import (
@@ -546,6 +547,9 @@ class StationSession:
         # a recording fails naming its cipher).
         self.serial = serial.strip()
         self._e2e_keys = e2e_keys
+        self._e2e_cipher_keys: dict[int, rsa.RSAPrivateKey] = {}
+        """The cloud cipher keys fetched for end-to-end encrypted recordings, by key id
+        (shared with this session's extra and short-lived sessions)."""
         max_sessions = _session_budget(max_sessions)
         self.on_demand = on_demand
         self._idle_close = idle_close
@@ -2500,7 +2504,7 @@ class StationSession:
 
     def _short_lived_session(self) -> StationSession:
         """A second, unsupervised session to this station for one media request."""
-        return StationSession(
+        short = StationSession(
             self.serial,
             self._credentials,
             host=self._host or self._search_host,
@@ -2516,11 +2520,27 @@ class StationSession:
             local_networks=self._local_networks,
             e2e_keys=self._e2e_keys,
         )
+        short._e2e_cipher_keys = self._e2e_cipher_keys
+        return short
+
+    async def _e2e_ready(self, key: E2EKey | None) -> None:
+        """Have the key of a recording its history row names end-to-end encrypted
+        (``e2e_key``) before it opens, as the app's player does: a cloud cipher's key is
+        fetched (:meth:`_e2e_cipher_key`), the user's PIN key raises
+        :class:`PinProtectedKeyError`."""
+        if key is None:
+            return
+        if key.key_type is E2EKeyType.PIN:
+            raise pin_key_refusal(key.key_id)
+        await self._e2e_cipher_key(key.key_id)
 
     async def _e2e_cipher_key(self, key_id: int) -> rsa.RSAPrivateKey:
         """The RSA key of the owner's cloud cipher ``key_id``, for a recording end-to-end
-        encrypted under it; raises :class:`EndToEndEncryptedError` (cause chained) when
-        it cannot be had."""
+        encrypted under it, fetched once per session; raises
+        :class:`EndToEndEncryptedError` (cause chained) when it cannot be had."""
+        cached = self._e2e_cipher_keys.get(key_id)
+        if cached is not None:
+            return cached
 
         def refused(reason: str) -> EndToEndEncryptedError:
             return EndToEndEncryptedError(
@@ -2538,9 +2558,11 @@ class StationSession:
         if not text:
             raise refused("for which the cloud serves no RSA key")
         try:
-            return load_rsa_private_key(text)
+            key = load_rsa_private_key(text)
         except CipherUnusableError as err:
             raise refused("whose RSA key does not parse") from err
+        self._e2e_cipher_keys[key_id] = key
+        return key
 
     def _media_waits(self) -> MediaWaits:
         """The media waits as ``p2p.session`` holds them now, where tests and consumers
@@ -2624,6 +2646,7 @@ class StationSession:
         *,
         first_frame_timeout: float | None = None,
         wait: bool = True,
+        e2e_key: E2EKey | None = None,
     ) -> MediaClip:
         """Play a stored recording to its end and mux it into one MPEG-TS clip.
 
@@ -2645,7 +2668,9 @@ class StationSession:
         :meth:`async_open_recording` raises, and :class:`DeviceTimeoutError` when the
         recording ends before a keyframe; bytes already written stay written. A
         standalone device raises :class:`UnsupportedError` before anything is sent.
+        ``e2e_key`` is as for :meth:`async_open_recording`.
         """
+        await self._e2e_ready(e2e_key)
         return await self._budget.download_recording(
             path,
             channel,
@@ -2663,6 +2688,7 @@ class StationSession:
         first_frame_timeout: float | None = None,
         wait: bool = True,
         realtime: bool = True,
+        e2e_key: E2EKey | None = None,
     ) -> MediaClip:
         """Play a stored recording for a viewer: MPEG-TS into ``write`` as it arrives.
 
@@ -2677,8 +2703,10 @@ class StationSession:
         sent the whole recording (a station sends faster than realtime), even while
         frames read ahead are still being written. To stop early, cancel the call: the extra session
         closes, which is the only thing that stops a playback. Raises what
-        :meth:`async_download_recording` raises.
+        :meth:`async_download_recording` raises; ``e2e_key`` is as for
+        :meth:`async_open_recording`.
         """
+        await self._e2e_ready(e2e_key)
         return await self._budget.play_recording(
             path,
             channel,
@@ -2714,6 +2742,7 @@ class StationSession:
         first_frame_timeout: float | None = None,
         idle_timeout: float | None = None,
         wait: bool = False,
+        e2e_key: E2EKey | None = None,
     ) -> MediaStream:
         """Play a validated stored recording (``.zxvideo`` or native ``.dat``) off disk.
 
@@ -2732,7 +2761,15 @@ class StationSession:
         arriving and the next open on this session waits for it to drain. To take
         frames without that, use :meth:`async_trigger_frame`, which plays the
         recording on a short-lived session and closes it.
+
+        ``e2e_key`` is the end-to-end key the recording's history row names
+        (:attr:`~...events.HistoryRecord.e2e_key`): a cloud cipher's key is fetched before
+        anything is sent, as the app's player does, so the stream waits for no key; the
+        user's PIN key raises :class:`PinProtectedKeyError` before anything is sent.
+        Without it, a recording found end-to-end encrypted holds its records while the
+        key is fetched (see ``docs/protocol/media.md``).
         """
+        await self._e2e_ready(e2e_key)
         return await self._media_slot.open_recording(
             path,
             channel,

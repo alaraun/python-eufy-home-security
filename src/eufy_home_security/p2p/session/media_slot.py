@@ -303,7 +303,7 @@ class MediaSlot:
         creds = self._session._require_creds()
         # A recording may be end-to-end encrypted; the app plays that only from recordings.
         e2e_keys: dict[int, rsa.RSAPrivateKey] | None = (
-            {} if command in _RECORDING_COMMANDS else None
+            dict(self._session._e2e_cipher_keys) if command in _RECORDING_COMMANDS else None
         )
         if native_recording_path is not None:
             # HomeBase 2's recording key is the station owner account's ECC key;
@@ -598,6 +598,7 @@ class SlotOwner(StreamOwner, Protocol):
     _throttle: LogThrottle
     _recipe_lock: asyncio.Lock
     _budget: SessionBudget
+    _e2e_cipher_keys: dict[int, rsa.RSAPrivateKey]
 
     @property
     def standalone(self) -> bool: ...

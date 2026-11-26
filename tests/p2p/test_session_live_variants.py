@@ -26,7 +26,7 @@ from eufy_home_security.exceptions import (
     PinProtectedKeyError,
     UnsupportedError,
 )
-from eufy_home_security.models import E2EKeyType
+from eufy_home_security.models import E2EKey, E2EKeyType
 from eufy_home_security.p2p.media import MediaFrame, MediaKeyType, MediaKind, VideoVariant
 from eufy_home_security.p2p.session import E2EKeyProvider, P2PCredentials, StationSession
 from eufy_home_security.p2p.session import media_stream as media_stream_module
@@ -624,4 +624,51 @@ async def test_live_e2e_media_is_refused_as_the_app_plays_it_only_from_recording
     finally:
         await session.async_close()
     assert not isinstance(err.value, EndToEndEncryptedError)
+    assert keys.asked == []
+
+
+async def test_a_recording_opened_with_its_cloud_cipher_key_has_the_key_before_the_open(
+    e2e_hb2: FakeStation,
+) -> None:
+    """With ``e2e_key`` (the history row's) the key is fetched before the open goes out,
+    so no record waits for it; a later recording on the session reuses it."""
+    session: StationSession
+    open_at_fetch: list[bool] = []
+
+    class Keys(_Keys):
+        async def __call__(self, key_id: int) -> str | None:
+            open_at_fetch.append(session._media_slot.stream is not None)
+            return await super().__call__(key_id)
+
+    keys = Keys()
+    session = _session(e2e_hb2, keys)
+    key = E2EKey(E2EKeyType.CIPHER, 7)
+    try:
+        counts = []
+        for _ in range(2):
+            stream = await session.async_open_recording(NATIVE_CLIP, CAMERA, e2e_key=key)
+            async with asyncio.timeout(8), stream:
+                frames = [frame async for frame in stream]
+            assert "key_pending" not in {shape.outcome for shape in stream._shapes}
+            counts.append(len([f for f in frames if f.kind is MediaKind.VIDEO]))
+    finally:
+        await session.async_close()
+    assert open_at_fetch == [False]
+    assert keys.asked == [7]
+    assert counts == [e2e_hb2.recording_frames] * 2
+
+
+async def test_a_recording_named_under_the_pin_key_is_refused_before_connecting(
+    e2e_hb2: FakeStation,
+) -> None:
+    keys = _Keys()
+    session = _session(e2e_hb2, keys)
+    try:
+        with pytest.raises(PinProtectedKeyError, match=r"key id 10\)"):
+            await session.async_open_recording(
+                NATIVE_CLIP, CAMERA, e2e_key=E2EKey(E2EKeyType.PIN, 10)
+            )
+    finally:
+        await session.async_close()
+    assert e2e_hb2.sessions == 0
     assert keys.asked == []
