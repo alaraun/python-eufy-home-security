@@ -932,6 +932,44 @@ async def test_the_media_queue_takes_its_bound_behind_the_replayed_backlog(
         await session.async_close()
 
 
+async def test_a_second_replay_adds_to_the_unread_backlog_of_the_first(
+    e2e_hb2: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cipher 7's replay sits unread when cipher 8's records are held and replayed: records
+    arriving after both find room for the queue's bound behind both replays."""
+    monkeypatch.setattr(media_stream_module, "MEDIA_QUEUE_FRAMES", 4)
+    keys = _GatedKeys()
+    session = _session(e2e_hb2, keys)
+    stream = _e2e_stream(session)
+    try:
+        for n in range(6):
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+        keys.gate(7).set()
+        await _key_settled(stream)
+        first = len(stream._frames)
+        assert first > 4, "the first replay alone fills the plain bound"
+        for n in range(6, 2 * MEDIA_GOP + 4):
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub(8))
+        keys.gate(8).set()
+        await _key_settled(stream)
+        assert keys.asked == [7, 8]
+        replayed = len(stream._frames)
+        assert replayed - first > 4, "the second replay alone fills the plain bound"
+        assert stream.dropped == 0
+        queued = 0
+        for n in range(2 * MEDIA_GOP + 4, 10 * MEDIA_GOP):
+            queued = len(stream._frames)
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+            if stream.dropped:
+                break
+        assert stream.dropped, "the queue reached its bound"
+        assert queued == replayed + 4, "the bound's 4 frames behind both replays"
+        assert len(stream._frames) == queued
+    finally:
+        await stream.aclose()
+        await session.async_close()
+
+
 def _counter(frame: MediaFrame) -> int:
     return (frame.timestamp_ms - 1000) // 40
 
