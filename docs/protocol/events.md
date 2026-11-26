@@ -515,9 +515,10 @@ fw 3.8.7.4), so in practice a push is always the cloud's.
   the handshake completed: it is emitted once per connection, after the first
   successful parameter read. `connected=False` follows only a `True` that was
   announced. A bare `async_connect()` emits nothing.
-- **Background cloud failures are account events.** When a credential refresh or
-  the push-token upload hits a cloud error, `EufySecurity` emits one `CloudProblem`
-  per error type until the next successful cloud call or login. Such an error is
+- **Background cloud failures are account events.** When a credential refresh, the
+  push-token upload or the MQTT certificate request of an account given to `use_mqtt()`
+  (which never logs in, [mqtt.md](mqtt.md)) hits a cloud error, `EufySecurity` emits one
+  `CloudProblem` per error type until the next successful cloud call or login. Such an error is
   delivered only there: the station's `ConnectionChanged` carries
   `cause=CREDENTIALS_UNAVAILABLE` with `error=None`. The library's own cipher-refresh
   cooldown (`RefreshCooldownError`) is not a cloud problem and stays on
