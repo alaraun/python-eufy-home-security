@@ -3805,7 +3805,12 @@ ERROR `Unexpected message ID "<n>" in on_subscribe callback` on an unload is har
 `EufyMqttAccount` per account with the cloud device list and call `async_update_devices()`
 after each device-list refresh: the library decides which devices are MQTT devices, which
 login scope's connection serves each (one connection per scope holding MQTT devices),
-reuses each scope's certificate and reconnects by itself. Call `async_publish` and
+reuses each scope's certificate and reconnects by itself. The certificate request never
+logs in: a cloud error of it arrives as a `CloudProblem` with `station_sn` None once the
+account is given to `use_mqtt` (route it as the other cloud problems: an
+`AuthenticationError` to reauth; a `NoCachedSessionError` means the connection waits for
+the integration's next login, which the next ordinary cloud call or a reauth makes).
+Call `async_publish` and
 `async_request` on the account; it routes them by device. A request pending when a
 connection ends or the client stops raises `CommunicationError` at once. Call `async_stop()` on unload: it waits
 for a device update in progress and for a connect step (30 s at most), then closes what

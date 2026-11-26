@@ -1287,15 +1287,16 @@ class ConnectionChanged:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class CloudProblem:
-    """A background cloud call failed: a credential refresh or the push-token upload.
+    """A background cloud call failed: a credential refresh, the push-token upload or an
+    MQTT certificate fetch (:meth:`~.client.EufySecurity.use_mqtt`), which never logs in.
 
     Emitted by :class:`~.client.EufySecurity` once per error type until the next
     successful cloud call or login (a key fetch, a token upload, ``async_login``,
     ``async_reauthenticate``). ``station_sn`` names the station whose credential
-    refresh hit it; None for the push listener. The error is account-level, so it is
-    delivered here only: the station's ``ConnectionChanged`` carries just the cause
-    (``CREDENTIALS_UNAVAILABLE``, ``error=None``). The library's own cipher-refresh
-    cooldown (:class:`~.exceptions.RefreshCooldownError`) is not a cloud problem and
+    refresh hit it; None for the push listener and the MQTT certificate. The error is
+    account-level, so it is delivered here only: the station's ``ConnectionChanged``
+    carries just the cause (``CREDENTIALS_UNAVAILABLE``, ``error=None``). The library's
+    own cipher-refresh cooldown (:class:`~.exceptions.RefreshCooldownError`) is not a cloud problem and
     stays on ``ConnectionChanged.error``.
     """
 

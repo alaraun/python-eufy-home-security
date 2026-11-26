@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Final
 from .._logging import LogThrottle, redact_serial
 from ..cloud.models import CloudDevice, MqttCertificate
 from ..exceptions import (
+    CloudError,
     CommunicationError,
     DeviceTimeoutError,
     EufySecurityError,
@@ -110,8 +111,12 @@ class EufyMqttClient:
 
     ``port`` and ``server_ca_pem`` exist for tests against a local broker: the client
     connects to the certificate's endpoint on :data:`MQTT_PORT` and verifies it with the
-    system's trust store, as the eufy app does. Raises :class:`MissingDependencyError`
-    without the ``mqtt`` extra.
+    system's trust store, as the eufy app does. The certificate is fetched in the
+    background and never logs in (``login=False``): with no usable session the fetch fails
+    with :class:`NoCachedSessionError` and the client retries after its back-off, so the
+    next login of the consumer brings the connection back. ``on_cloud_error`` receives
+    each cloud error of a certificate fetch. Raises :class:`MissingDependencyError` without
+    the ``mqtt`` extra.
     """
 
     def __init__(
@@ -122,9 +127,11 @@ class EufyMqttClient:
         port: int = MQTT_PORT,
         keepalive: int = KEEPALIVE_SECONDS,
         server_ca_pem: str | None = None,
+        on_cloud_error: Callable[[CloudError], None] | None = None,
     ) -> None:
         self._aiomqtt = require_aiomqtt()
         self._cloud = cloud
+        self._on_cloud_error = on_cloud_error
         self._region = region
         self._port = port
         self._keepalive = keepalive
@@ -365,12 +372,15 @@ class EufyMqttClient:
         True when it was established and then lost."""
         refresh, self._refresh = self._refresh, False
         try:
+            # Background work: never an (interactive) login; the consumer's login restores it.
             certificate = await self._cloud.async_mqtt_certificate(
-                self._keys(), region=self._region, refresh=refresh
+                self._keys(), region=self._region, refresh=refresh, login=False
             )
             context = await async_tls_context(certificate, cadata=self._server_ca_pem)
         except EufySecurityError as err:
             self._log_repeated("certificate", "MQTT certificate unavailable: %s", err)
+            if isinstance(err, CloudError) and self._on_cloud_error is not None:
+                self._on_cloud_error(err)
             return False
         self._certificate = certificate
         self._client_id = self._cloud.mqtt_client_id(certificate, self._region)

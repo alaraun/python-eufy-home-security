@@ -12,10 +12,17 @@ from typing import Any
 import pytest
 
 from eufy_home_security.cloud.models import CloudDevice
-from eufy_home_security.exceptions import CommunicationError, UnsupportedError
+from eufy_home_security.events import CloudProblem, Event
+from eufy_home_security.exceptions import (
+    CloudError,
+    CommunicationError,
+    NoCachedSessionError,
+    UnsupportedError,
+)
 from eufy_home_security.mqtt import account as account_module
 from eufy_home_security.mqtt.account import EufyMqttAccount
 from eufy_home_security.mqtt.envelope import MqttMessage, response_topic
+from eufy_home_security.testing import FakeCloud
 
 from .conftest import (
     CAMERA,
@@ -253,3 +260,28 @@ async def test_listeners_reach_later_clients_until_removed(
     await asyncio.sleep(0.05)
     assert removed == []
     remove()  # a second call is a no-op
+
+
+async def test_a_certificate_fetchs_cloud_error_reaches_the_client_as_a_cloud_problem(
+    rig: Rig, account: EufyMqttAccount
+) -> None:
+    """The account's certificate fetch never logs in; its cloud error reaches the
+    account's listeners and, through ``use_mqtt``, the client's stream as one
+    ``CloudProblem`` (no station), which a consumer routes like any other."""
+    errors: list[CloudError] = []
+    account.add_cloud_error_listener(errors.append)
+    removed: list[CloudError] = []
+    account.add_cloud_error_listener(removed.append)()  # removed at once: never called
+    seen: list[Event] = []
+    rig.eufy.subscribe(seen.append)
+    rig.eufy.use_mqtt(account)
+    rig.cloud.call_errors.extend([FakeCloud.refusal(401)] * 2)
+    await account.async_start([EU_LOCK])
+    await until(lambda: len(errors) == 2)
+    await account.async_wait_connected(5)
+    rig.eufy.use_mqtt(None)
+    assert all(isinstance(e, NoCachedSessionError) for e in errors)
+    problems = [e for e in seen if isinstance(e, CloudProblem)]
+    assert [(type(p.error), p.station_sn) for p in problems] == [(NoCachedSessionError, None)]
+    assert "login" not in rig.cloud.calls
+    assert removed == []

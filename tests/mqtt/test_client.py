@@ -23,11 +23,13 @@ from cryptography.hazmat.primitives.asymmetric import ec
 
 from eufy_home_security._logging import LogThrottle
 from eufy_home_security.cloud import const
-from eufy_home_security.cloud.models import CloudDevice
+from eufy_home_security.cloud.models import CloudDevice, MqttCertificate
 from eufy_home_security.exceptions import (
+    CloudError,
     CommunicationError,
     DeviceTimeoutError,
     MissingDependencyError,
+    NoCachedSessionError,
     UnsupportedError,
 )
 from eufy_home_security.mqtt import client as client_module
@@ -40,7 +42,7 @@ from eufy_home_security.mqtt.envelope import (
     response_topic,
 )
 from eufy_home_security.mqtt.selection import device_key
-from eufy_home_security.testing import SYNTHETIC
+from eufy_home_security.testing import SYNTHETIC, FakeCloud
 
 from .conftest import (
     CAMERA,
@@ -230,6 +232,44 @@ async def test_a_publish_without_a_certificate_asks_for_one_at_once(
         await rig.client.async_publish(LOCK_SN, "x")
     assert rig.registers() == 2
     assert len(rig.broker.published) == 1
+
+
+async def test_the_background_certificate_fetch_never_logs_in(rig: Rig) -> None:
+    """A session the cloud no longer accepts makes the certificate fetch fail with
+    ``NoCachedSessionError``, not a login (which could ask for an e-mailed code); the
+    error goes to the client's cloud-error callback, and the client keeps retrying."""
+    seen: list[CloudError] = []
+    client = EufyMqttClient(
+        rig.eufy.cloud,
+        port=rig.broker.port,
+        server_ca_pem=rig.pki.ca_pem,
+        on_cloud_error=seen.append,
+    )
+    rig.cloud.call_errors.append(FakeCloud.refusal(401))
+    try:
+        await client.async_start([lock()])
+        await until(lambda: bool(seen))
+        await client.async_wait_connected(5)  # the next try, on the session restored
+    finally:
+        await client.async_stop()
+    assert isinstance(seen[0], NoCachedSessionError)
+    assert "login" not in rig.cloud.calls
+
+
+async def test_a_certificate_fetch_asks_without_a_login(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asked: list[object] = []
+    real = rig.eufy.cloud.async_mqtt_certificate
+
+    async def certificate(*args: Any, **kwargs: Any) -> MqttCertificate:
+        asked.append(kwargs.get("login"))
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(rig.eufy.cloud, "async_mqtt_certificate", certificate)
+    await rig.client.async_start([lock()])
+    await rig.client.async_wait_connected(5)
+    assert asked == [False]
 
 
 async def test_a_publish_after_an_unusable_cached_certificate_asks_for_a_new_one(

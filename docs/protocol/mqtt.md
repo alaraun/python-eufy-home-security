@@ -68,6 +68,13 @@ applies the app's rules for reusing it:
   reconnects all the same.
 - A publish while no certificate was obtained asks for one at once, without waiting out
   the reconnect back-off.
+- The client asks in the background and never logs in (`login=False`): without a usable
+  session (none cached, or one the cloud no longer accepts) the request fails with
+  `NoCachedSessionError` and the client tries again after its reconnect back-off, so the
+  connection comes back after the consumer's next login. A login there could make eufy
+  e-mail a verification code with no one to enter it. Each cloud error of the request
+  reaches `EufyMqttAccount.add_cloud_error_listener()`, and through
+  `EufySecurity.use_mqtt()` the client's stream as a `CloudProblem` (`station_sn` None).
 
 The certificate, its key and the thing name are masked in every log line and never shown
 in a repr.

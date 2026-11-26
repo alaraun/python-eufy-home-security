@@ -438,6 +438,7 @@ class EufySecurity:
         # elsewhere, remote, paired devices and skipped devices alike.
         self.listed_devices: Mapping[str, CloudDevice] = MappingProxyType({})
         self._mqtt_locks: MqttLocks | None = None
+        self._mqtt_unlisten: Callable[[], None] | None = None
         # The lock state of listed locks no built station serves.
         self._listed_locks = ListedLocks(self._bus, self._unserved_devices)
         # Built stations the last discovery's list did not name (reported once each).
@@ -1316,11 +1317,17 @@ class EufySecurity:
         this client serves: :class:`~.events.LockStateChanged` with ``station_sn`` None),
         which a command reads and waits on. Each command reads the
         account's user id and display name when it is sent, so this may come before the
-        login."""
+        login. A cloud error of the account's certificate fetch (which never logs in) is
+        reported as :class:`~.events.CloudProblem` (``station_sn`` None).
+        """
         if self._mqtt_locks is not None:
             self._mqtt_locks.close()
             self._mqtt_locks = None
+        if self._mqtt_unlisten is not None:
+            self._mqtt_unlisten()
+            self._mqtt_unlisten = None
         if account is not None:
+            self._mqtt_unlisten = account.add_cloud_error_listener(self._on_mqtt_cloud_error)
             from .mqtt.locks import MqttLocks  # noqa: PLC0415 - the optional extra's module
 
             self._mqtt_locks = MqttLocks(
@@ -1329,6 +1336,9 @@ class EufySecurity:
                 states=self._lock_states,
                 devices=self._listed_device,
             )
+
+    def _on_mqtt_cloud_error(self, error: CloudError) -> None:
+        self._cloud_failed(error, None)
 
     def _listed_device(self, device_sn: str) -> CloudDevice | None:
         return self.listed_devices.get(device_sn)

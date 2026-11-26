@@ -15,7 +15,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from .._logging import redact_serial
-from ..exceptions import CommunicationError, UnsupportedError
+from ..exceptions import CloudError, CommunicationError, UnsupportedError
 from .client import (
     KEEPALIVE_SECONDS,
     MQTT_PORT,
@@ -59,6 +59,7 @@ class EufyMqttAccount:
         self._server_ca_pem = server_ca_pem
         self._clients: dict[str, EufyMqttClient] = {}
         self._listeners: list[Listener] = []
+        self._cloud_listeners: list[Callable[[CloudError], None]] = []
         self._subscribe: frozenset[str] | None = None
         self._stopped = False
         """Set by :meth:`async_stop`, cleared by :meth:`async_start`: device updates are ignored."""
@@ -103,6 +104,28 @@ class EufyMqttAccount:
 
         return remove
 
+    def add_cloud_error_listener(
+        self, listener: Callable[[CloudError], None]
+    ) -> Callable[[], None]:
+        """Call ``listener`` with each cloud error of a client's certificate fetch (which
+        never logs in: :class:`~..exceptions.NoCachedSessionError` without a usable
+        session); returns its remover. :meth:`~..client.EufySecurity.use_mqtt` reports them
+        as :class:`~..events.CloudProblem`."""
+        self._cloud_listeners.append(listener)
+
+        def remove() -> None:
+            if listener in self._cloud_listeners:
+                self._cloud_listeners.remove(listener)
+
+        return remove
+
+    def _cloud_error(self, error: CloudError) -> None:
+        for listener in list(self._cloud_listeners):
+            try:
+                listener(error)
+            except Exception:
+                _LOGGER.exception("MQTT cloud error listener %r failed", listener)
+
     def client_for(self, device_sn: str) -> EufyMqttClient:
         """The client serving MQTT device ``device_sn``; :class:`UnsupportedError` for
         a serial that is none of the account's MQTT devices."""
@@ -129,6 +152,7 @@ class EufyMqttAccount:
             port=self._port,
             keepalive=self._keepalive,
             server_ca_pem=self._server_ca_pem,
+            on_cloud_error=self._cloud_error,
         )
         for listener in self._listeners:
             client.add_listener(listener)
