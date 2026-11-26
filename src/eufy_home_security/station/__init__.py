@@ -1325,8 +1325,8 @@ class Station:
         notify, the device list's copy), cloud pushes about it and its own status reports
         (over this station or the MQTT broker), the newest report winning as
         :class:`~.locks.LockStates` describes. None for a device not graded
-        :attr:`~..devices.capabilities.Capability.LOCK` or with nothing reported yet.
-        Each change emits :class:`~..events.LockStateChanged`. Sync; raises
+        :attr:`~..devices.capabilities.Capability.LOCK` or with nothing reported and no
+        command taken yet. Each change emits :class:`~..events.LockStateChanged`. Sync; raises
         ``UnsupportedError`` when ``device_sn`` is not paired to this station.
         """
         self.sub_device(device_sn)

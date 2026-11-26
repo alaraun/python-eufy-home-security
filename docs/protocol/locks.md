@@ -214,7 +214,9 @@ From the lock's accepting answer until a report ends the wait, the lock reads `l
 connection) or is cancelled leaves it so until the lock's next report taken, at most
 `LOCK_CONFIRM_TIMEOUT` (30 s) after the answer; a refusing status report ends it at once.
 While it lasts the next command is sent whatever the last report says, since the reading is
-never an asked state.
+never an asked state. When it ends the lock reads its last report again; a lock with
+nothing reported before it reads `unknown` (`LockStateSource.COMMAND`), the state its
+`LockStateChanged` names.
 
 The waits are the app's: 20 s for the lock's answer (over MQTT counted from the broker's
 acknowledgement, which has 15 s), then 30 s for its state. A `timeout` caps the whole

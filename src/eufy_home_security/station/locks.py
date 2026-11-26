@@ -323,10 +323,8 @@ class LockStates:
 
     def _emit(self, device_sn: str, old: LockReading | None) -> None:
         reading = self.reading(device_sn)
-        if reading is None:  # a move ended on a lock with nothing reported before it
-            if old is None:
-                return
-            reading = LockReading(state=LockState.UNKNOWN, source=LockStateSource.COMMAND)
+        if reading is None:
+            return
         self._bus.emit(
             LockStateChanged(
                 device_sn=device_sn,
@@ -365,7 +363,7 @@ class LockStates:
         stays as it is. Taken and ``keep`` (its wait failed or was cancelled): the lock
         reads locking or unlocking until its next report, at most
         :data:`~..lock_commands.control.LOCK_CONFIRM_TIMEOUT` after the take. Else the lock
-        reads its last report again."""
+        reads its last report again (unknown, from ``COMMAND``, with nothing reported)."""
         move = self._moving.get(device_sn)
         if taken_at is None or move is None or not move.waiting:
             return
@@ -376,7 +374,16 @@ class LockStates:
             )
             return
         del self._moving[device_sn]
+        self._no_report(device_sn)
         self._emit(device_sn, move.reading)
+
+    def _no_report(self, device_sn: str) -> None:
+        """A move ended: a lock with nothing reported before it reads unknown, from
+        :attr:`~..devices.locks.LockStateSource.COMMAND`."""
+        if device_sn not in self._readings:
+            self._readings[device_sn] = LockReading(
+                state=LockState.UNKNOWN, source=LockStateSource.COMMAND
+            )
 
     def _end_hold(self, device_sn: str) -> None:
         timer = self._hold_expiry.pop(device_sn, None)
@@ -389,6 +396,7 @@ class LockStates:
             del self._hold_expiry[device_sn]
             move = self._moving.pop(device_sn, None)
             if move is not None:
+                self._no_report(device_sn)
                 self._emit(device_sn, move.reading)
         except Exception:
             _LOGGER.exception("%s: lock hold expiry failed", redact_serial(device_sn))

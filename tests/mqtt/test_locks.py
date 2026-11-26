@@ -17,7 +17,7 @@ from typing import Any
 import pytest
 
 from eufy_home_security.cloud.models import CloudDevice
-from eufy_home_security.devices.locks import LockState, LockStateSource
+from eufy_home_security.devices.locks import LockReading, LockState, LockStateSource
 from eufy_home_security.events import Event, EventBus, EventSource, LockStateChanged, SecurityEvent
 from eufy_home_security.exceptions import (
     CommandRejectedError,
@@ -28,7 +28,7 @@ from eufy_home_security.exceptions import (
     MqttAccountRequiredError,
     UnsupportedError,
 )
-from eufy_home_security.lock_commands import cm2, frames
+from eufy_home_security.lock_commands import cm2, control, frames
 from eufy_home_security.lock_commands.actions import LockAction
 from eufy_home_security.lock_commands.control import LockPath
 from eufy_home_security.lock_commands.mqtt_trans import encode_trans
@@ -384,13 +384,15 @@ async def test_a_status_report_with_an_error_code_fails_the_mqtt_command(
     finally:
         await account.async_stop()
     assert (raised.value.command, raised.value.code) == (1940, 2)
-    # It sets no state: locking from the take, back to nothing reported at the refusal.
+    # It sets no state: locking from the take, unknown at the refusal (nothing reported).
     changes = [(e.state, e.source) for e in events if isinstance(e, LockStateChanged)]
     assert changes == [
         (LockState.LOCKING, LockStateSource.COMMAND),
         (LockState.UNKNOWN, LockStateSource.COMMAND),
     ]
-    assert rig.eufy.lock_state(LOCK_SN) is None
+    assert rig.eufy.lock_state(LOCK_SN) == LockReading(
+        state=LockState.UNKNOWN, source=LockStateSource.COMMAND
+    )
 
 
 async def test_a_status_report_before_the_answer_confirms_the_mqtt_command(
@@ -751,6 +753,32 @@ async def test_a_push_inside_the_slack_before_an_mqtt_report_is_taken_and_comman
         with pytest.raises(DeviceTimeoutError):
             await locks.async_command(device, action, control=control, timeout=5)
     assert len(account.waits) == 2
+
+
+@pytest.mark.parametrize("keep", [False, True], ids=["call-ended", "hold-expired"])
+async def test_a_move_ending_with_nothing_reported_reads_what_its_event_says(
+    monkeypatch: pytest.MonkeyPatch, keep: bool
+) -> None:
+    """A command's move ends on a lock with no report before it: the lock reads unknown
+    (source ``command``), the reading its last ``LockStateChanged`` names."""
+    monkeypatch.setattr(control, "LOCK_CONFIRM_TIMEOUT", 0.05)
+    bus = EventBus()
+    seen: list[Event] = []
+    bus.subscribe(seen.append)
+    device = lock()
+    states = ListedLocks(bus, lambda: [device])
+    taken = states.begin_move(LOCK_SN, LockAction.LOCK)
+    states.end_move(LOCK_SN, taken_at=taken, keep=keep)
+    await until(lambda: len(seen) == 2)
+    changes = [e for e in seen if isinstance(e, LockStateChanged)]
+    assert [(e.state, e.source) for e in changes] == [
+        (LockState.LOCKING, LockStateSource.COMMAND),
+        (LockState.UNKNOWN, LockStateSource.COMMAND),
+    ]
+    assert states.reading(LOCK_SN) == LockReading(
+        state=LockState.UNKNOWN, source=LockStateSource.COMMAND
+    )
+    assert changes[-1].observed_at is None
 
 
 async def test_each_report_taken_emits_one_event_and_sets_the_public_reading(

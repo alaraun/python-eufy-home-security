@@ -1378,9 +1378,9 @@ class EufySecurity:
         station's reports, the device list's copy, pushes, its own status reports over its
         station or the MQTT broker; the newest report wins, see
         :class:`~.station.locks.LockStates`), whichever station serves it, or none. None
-        before anything was reported and for a device that is no lock. Each report taken
-        emits :class:`~.events.LockStateChanged`. Sync; raises ``UnsupportedError`` for a
-        device not listed.
+        before anything was reported or a command was taken, and for a device that is no
+        lock. Each report taken emits :class:`~.events.LockStateChanged`. Sync; raises
+        ``UnsupportedError`` for a device not listed.
         """
         states = self._lock_states(device_sn)
         if states is None:

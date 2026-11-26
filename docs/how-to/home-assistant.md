@@ -1804,22 +1804,25 @@ drive the entity. Once the lock took the command (its answer accepted it) the lo
 `locking` or `unlocking` (`source` `command`) until a report ends the wait. When the call
 then fails (a timeout, a lost connection) or is cancelled, the lock keeps reading `locking`
 or `unlocking` until its next report taken, at most 30 s (the app's state wait) after the
-take, then its last report again (with a `LockStateChanged`; `unknown` when nothing was
-reported before). A refusing status report ends it at once. Meanwhile the next lock or
-unlock is always sent, as the reading is never the asked state; a call cancelled before
-the lock took it leaves the reading as it was. A command names the account's nickname as
+take, then its last report again (with a `LockStateChanged`; `unknown`, `source`
+`command`, when nothing was reported before, and `lock_state` gives that reading too). A
+refusing status report ends it at once. Meanwhile the next lock or unlock is always sent,
+as the reading is never the asked state; a call cancelled before the lock took it leaves
+the reading as it was. A command names the account's nickname as
 its sender, as the app does (`eufy.cloud.display_name`: the e-mail's local part only when
 the account has none).
 Declared from the eufy app, not tested on hardware.
 
 `eufy.lock_state(device_sn)` gives the lock's one merged `LockReading`, whichever station
 serves it or none (`station.lock_state(device_sn)` the same for a lock of that station;
-None before anything was reported, and for a device that is no lock; `UnsupportedError`
-for a device not listed): `state`, a `LockState`, `source` (`p2p`, `notify`, `cloud`,
-`push` or `lock`, the lock's own status report, or `command`: locking or unlocking while a
-command of this client the lock took is unconfirmed, below), `raw` (the parameter's value,
-or the status report's code) or `event_type` (the push's), and `observed_at` (epoch seconds
-the report or the take dates from; None for a cloud copy without an upload time). Each
+None before anything was reported or a command was taken, and for a device that is no
+lock; `UnsupportedError` for a device not listed): `state`, a `LockState`, `source` (`p2p`,
+`notify`, `cloud`, `push` or `lock`, the lock's own status report, or `command`: locking or
+unlocking while a command of this client the lock took is unconfirmed, below, and
+`unknown` after such a command ended on a lock with nothing reported before it), `raw`
+(the parameter's value, or the status report's code) or `event_type` (the push's), and
+`observed_at` (epoch seconds the report or the take dates from; None for a cloud copy
+without an upload time or that `unknown`). Each
 report the reading takes emits `LockStateChanged(device_sn, state, source, station_sn,
 raw, event_type, observed_at, changed)` on the client's stream, the first one included; `changed` is False
 when the state repeats the previous reading's (another source, raw value or time). A
