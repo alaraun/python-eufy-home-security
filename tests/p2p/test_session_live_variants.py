@@ -27,12 +27,32 @@ from eufy_home_security.exceptions import (
     UnsupportedError,
 )
 from eufy_home_security.models import E2EKey, E2EKeyType
-from eufy_home_security.p2p.media import MediaFrame, MediaKeyType, MediaKind, VideoVariant
+from eufy_home_security.p2p.media import (
+    MediaDecoder,
+    MediaFrame,
+    MediaKeyType,
+    MediaKind,
+    VideoVariant,
+    generate_media_rsa_key,
+)
+from eufy_home_security.p2p.messages import CMD_RECORD_VIEW
 from eufy_home_security.p2p.session import E2EKeyProvider, P2PCredentials, StationSession
 from eufy_home_security.p2p.session import media_stream as media_stream_module
 from eufy_home_security.p2p.session.media_stream import MediaStream
+from eufy_home_security.p2p.xzyh import FrameType
 from eufy_home_security.testing import SYNTHETIC
-from eufy_home_security.testing.station import MEDIA_KEYFRAME, FakeStation
+from eufy_home_security.testing.station import (
+    MEDIA_AUDIO,
+    MEDIA_GOP,
+    MEDIA_KEYFRAME,
+    MEDIA_RECORDING_PFRAME,
+    E2EMediaKey,
+    FakeStation,
+    audio_record,
+    e2e_audio_record,
+    e2e_video_record,
+    video_record,
+)
 
 HB2_SN = "T8010P2000054321"
 """A synthetic HomeBase 2 serial."""
@@ -672,3 +692,96 @@ async def test_a_recording_named_under_the_pin_key_is_refused_before_connecting(
         await session.async_close()
     assert e2e_hb2.sessions == 0
     assert keys.asked == []
+
+
+async def test_every_record_held_during_a_slow_key_fetch_is_delivered(
+    e2e_hb2: FakeStation,
+) -> None:
+    """More records than the media queue holds arrive while the key is fetched (the whole
+    recording and its end): all of them are delivered, none dropped."""
+    e2e_hb2.recording_frames = media_stream_module.MEDIA_QUEUE_FRAMES + 50
+
+    class Keys(_Keys):
+        async def __call__(self, key_id: int) -> str | None:
+            while e2e_hb2.media_frames_sent < e2e_hb2.recording_frames:
+                await asyncio.sleep(0.02)
+            await asyncio.sleep(0.2)  # the end of playback too
+            return await super().__call__(key_id)
+
+    session = _session(e2e_hb2, Keys(delay=0))
+    try:
+        await session.async_connect()
+        stream = await session.async_open_recording(NATIVE_CLIP, CAMERA)
+        async with asyncio.timeout(10), stream:
+            frames = [frame async for frame in stream]
+    finally:
+        await session.async_close()
+    video = [f for f in frames if f.kind is MediaKind.VIDEO]
+    assert len(video) == e2e_hb2.recording_frames
+    assert len(frames) - len(video) == e2e_hb2.recording_frames  # one audio record each
+    assert (stream.dropped, stream.skipped) == (0, 0)
+    assert stream.end_frame
+
+
+# A recording stream driven record by record (no station): the hold and its replay.
+
+_E2E_RECORD_KEY = E2EMediaKey.for_cipher(E2E_CIPHER.public_key())
+
+
+def _e2e_sub(key_id: int = 7, version: int = 5) -> bytes:
+    return bytes([version, 0, CAMERA, key_id, 1, 0])
+
+
+def _e2e_video(n: int, *, size: int = 0) -> bytes:
+    """Video record ``n`` of a recording sealed for cipher 7: a keyframe every
+    :data:`MEDIA_GOP`, ``size`` padding bytes added to the picture."""
+    keyframe = n % MEDIA_GOP == 0
+    body = (MEDIA_KEYFRAME if keyframe else MEDIA_RECORDING_PFRAME) + bytes(size)
+    clear = video_record(body, keyframe=keyframe, counter=n, timestamp_ms=1000 + 40 * n)
+    return e2e_video_record(clear, _E2E_RECORD_KEY)
+
+
+def _e2e_audio(n: int) -> bytes:
+    clear = audio_record(MEDIA_AUDIO, counter=n, timestamp_ms=1000 + 40 * n)
+    return e2e_audio_record(clear, _E2E_RECORD_KEY)
+
+
+def _e2e_stream(session: StationSession, first_frame_timeout: float = 5.0) -> MediaStream:
+    return MediaStream(
+        session,
+        command=CMD_RECORD_VIEW,
+        channel=CAMERA,
+        decoder=MediaDecoder(generate_media_rsa_key()[1], e2e_keys={}),
+        stop_body=None,
+        first_frame_timeout=first_frame_timeout,
+        idle_timeout=5.0,
+    )
+
+
+async def _key_settled(stream: MediaStream) -> None:
+    async with asyncio.timeout(5):
+        while stream._key_task is not None:
+            await asyncio.sleep(0.01)
+
+
+async def test_the_media_queue_bounds_records_again_after_the_replay(
+    e2e_hb2: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The held records go into the queue whole; records arriving after the replay find
+    the queue bounded again and are dropped for the slow reader."""
+    monkeypatch.setattr(media_stream_module, "MEDIA_QUEUE_FRAMES", 4)
+    session = _session(e2e_hb2, _Keys(delay=0))
+    stream = _e2e_stream(session)
+    try:
+        for n in range(6):
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+        await _key_settled(stream)
+        queued = len(stream._frames)
+        assert queued == 5  # the sixth frame is held for a continuation
+        assert stream.dropped == 0
+        stream._feed(FrameType.VIDEO_FRAME, _e2e_video(6), subheader=_e2e_sub())
+        assert len(stream._frames) == queued
+        assert stream.dropped > 0
+    finally:
+        await stream.aclose()
+        await session.async_close()

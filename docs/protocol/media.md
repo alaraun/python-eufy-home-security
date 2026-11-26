@@ -849,7 +849,8 @@ the **key id**, and the record names one of two key types (`E2EKeyType`):
 - **What the library does.** A session fetches each cloud cipher's key once
   (`E2EKeyProvider`; `EufySecurity` supplies it) and keeps it for its later recordings.
   A recording opened by path alone holds the records of a cloud cipher it has no key for
-  while it fetches the key, then decodes them in order. It holds up to 32 MiB; records
+  while it fetches the key, then decodes them in order and queues every one, past the
+  media queue's 250 frames too (nothing read them meanwhile). It holds up to 32 MiB; records
   past that are dropped and video resumes at the next keyframe. A
   cipher without an RSA key, a key that does not parse or a failed fetch ends the stream
   with `EndToEndEncryptedError` (an `UnsupportedError`) naming the cipher; a cloud

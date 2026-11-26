@@ -193,6 +193,8 @@ class MediaStream:
         self._end_after_key = False
         """The station ended the recording while its key was fetched."""
         self._key_task: asyncio.Task[rsa.RSAPrivateKey] | None = None
+        self._replaying = False
+        """Held records are being decoded: they are queued whatever the queue holds."""
 
     @property
     def closed(self) -> bool:
@@ -401,7 +403,7 @@ class MediaStream:
                 return "key_pending"
         # Decide what to drop before decoding: a keyframe unwrap and its copies are
         # the expensive part, and they are wasted on a frame that is thrown away.
-        if len(self._frames) >= MEDIA_QUEUE_FRAMES:
+        if len(self._frames) >= MEDIA_QUEUE_FRAMES and not self._replaying:
             if is_video and not self._need_keyframe:
                 self._lagging = True
             if is_video:
@@ -797,10 +799,14 @@ class MediaStream:
             self._refuse_video(error, VideoVariant.E2E)
             return
         self._decoder.add_e2e_key(key_id, task.result())
-        for record in held:
-            if self.closed:  # a held record can fail the stream
-                return
-            self._take(*record)
+        self._replaying = True  # nothing read them while they were held
+        try:
+            for record in held:
+                if self.closed:  # a held record can fail the stream
+                    return
+                self._take(*record)
+        finally:
+            self._replaying = False
         if self._key_pending:
             return  # a held record named another cipher: its fetch runs now
         if self._key_wait_overflow:
