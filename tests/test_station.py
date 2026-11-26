@@ -1483,6 +1483,26 @@ def test_has_setting_answers_from_the_device_s_own_list() -> None:
     assert scanned.has_setting("alarm_delay_away", "T9999P0000000002") is False
 
 
+@pytest.mark.parametrize(("listed_keys", "battery"), [((), None), (("battery_value",), 49)])
+def test_a_listed_model_without_a_file_reports_a_level_only_where_its_listing_declares_one(
+    listed_keys: tuple[str, ...], battery: int | None
+) -> None:
+    """A model the release does not bundle follows its cloud listing like has_battery:
+    no battery_value listed, no level from its block's 1101."""
+    listed = tuple(settings_of("T8160")[key] for key in ("watermark_set", *listed_keys))
+    unlisted = _sub("T7402P0000000002", 0, 3)  # catalogued, no bundled file
+    station = _unconnected_station(host=None, local_ip=None, local_port=0)
+    scanned = Station(
+        station.device,
+        station.session,
+        sub_devices=(unlisted,),
+        listed_settings=lambda code: listed if code == "T7402" else (),
+    )
+    assert scanned.has_battery("T7402P0000000002") is (battery is not None)
+    device = scanned._state(_dump_of({3: {1101: "49"}})).devices[3]
+    assert device.battery == battery
+
+
 def test_setting_returns_the_listed_object_per_target() -> None:
     hub = _hub_with(CAMERA)
     by_channel = hub.setting("watermark_set", channel=0)
