@@ -99,7 +99,8 @@ class MediaStream:
     is kept. A frame no video record follows is delivered when the stream ends, by the
     station's end-of-playback frame or at ``idle_timeout``, after which :attr:`ended` is
     True (:attr:`end_frame` tells which). When a slow reader lets
-    :data:`MEDIA_QUEUE_FRAMES` pile up, video is dropped until the next keyframe
+    :data:`MEDIA_QUEUE_FRAMES` pile up (more behind the records an end-to-end key fetch
+    held, :attr:`_queue_bound`), video is dropped until the next keyframe
     (counted in :attr:`dropped`); after a keyframe that does not decode, a frame with no
     NAL unit or a part whose frame already went out, video is skipped to the next keyframe
     (counted in :attr:`skipped`), so whatever is delivered still decodes.
@@ -201,6 +202,10 @@ class MediaStream:
         self._key_fetch_id = 0
         self._replaying = False
         """Held records are being decoded: they are queued whatever the queue holds."""
+        self._backlog = 0
+        """Frames a key-fetch replay queued that the reader may not have read yet (at most
+        the queue's length at the latest read): the queue takes that many more
+        (:attr:`_queue_bound`)."""
 
     @property
     def closed(self) -> bool:
@@ -229,7 +234,10 @@ class MediaStream:
     async def __anext__(self) -> MediaFrame:
         while True:
             if self._frames:
-                return self._frames.popleft()
+                frame = self._frames.popleft()
+                # The backlog's extra room shrinks as the reader works through it.
+                self._backlog = min(self._backlog, len(self._frames))
+                return frame
             if self._error is not None:
                 error, self._error = self._error, None
                 raise error
@@ -299,7 +307,7 @@ class MediaStream:
         """
         if self._closed:
             return False
-        if len(self._frames) >= MEDIA_QUEUE_FRAMES and self.dropped:
+        if len(self._frames) >= self._queue_bound and self.dropped:
             return True
         if not self._started:
             return now >= self._opened_at + self._first_frame_timeout
@@ -423,7 +431,7 @@ class MediaStream:
                 return "key_pending"
         # Decide what to drop before decoding: a keyframe unwrap and its copies are
         # the expensive part, and they are wasted on a frame that is thrown away.
-        if len(self._frames) >= MEDIA_QUEUE_FRAMES and not self._replaying:
+        if len(self._frames) >= self._queue_bound and not self._replaying:
             if is_video and not self._need_keyframe:
                 self._lagging = True
             if is_video:
@@ -627,6 +635,12 @@ class MediaStream:
         self._frames.extend(self._held_audio)
         self._held_audio = []
         self._wake.set()
+
+    @property
+    def _queue_bound(self) -> int:
+        """Frames the queue holds before records are dropped for a slow reader: the
+        records a key-fetch replay queued wait ahead of :data:`MEDIA_QUEUE_FRAMES` more."""
+        return MEDIA_QUEUE_FRAMES + self._backlog
 
     @property
     def _key_fetching(self) -> int | None:
@@ -841,6 +855,7 @@ class MediaStream:
                 return
         else:
             self._decoder.add_e2e_key(key_id, task.result())
+        queued = len(self._frames)
         self._replaying = True  # nothing read them while they were held
         try:
             for record in held:
@@ -852,6 +867,7 @@ class MediaStream:
                     self._take(*record)
         finally:
             self._replaying = False
+        self._backlog += len(self._frames) - queued
         if self._key_pending:
             return  # a held record named another cipher: its fetch runs now
         if self._end_after_key:

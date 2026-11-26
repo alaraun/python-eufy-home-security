@@ -113,7 +113,8 @@ image = await station.async_preset_image(device_sn, preset=1)  # pan/tilt: turn,
   starting with a start code ([frames in parts](#frames-in-parts-app)). Audio is ADTS
   AAC.
 - A slow reader does not stall the session: past 250 buffered frames (video and
-  audio together), new frames are dropped, video until the next keyframe, and
+  audio together; more after an [end-to-end key fetch](#end-to-end-encrypted-recordings-app)),
+  new frames are dropped, video until the next keyframe, and
   counted in `stream.dropped` (`media_frames_dropped_for_reader`). A keyframe that
   does not decode, a frame with no NAL unit or a part whose frame already went out skips
   video to the next keyframe, counted in `stream.skipped`
@@ -850,9 +851,12 @@ the **key id**, and the record names one of two key types (`E2EKeyType`):
   (`E2EKeyProvider`; `EufySecurity` supplies it) and keeps it for its later recordings.
   A recording opened by path alone holds the records of a cloud cipher it has no key for
   while it fetches the key, then decodes them in order and queues every one, past the
-  media queue's 250 frames too (nothing read them meanwhile). It holds up to 32 MiB: from
-  the first record that does not fit, nothing more is held until the key arrives, and
-  video resumes at the first keyframe after it. A cipher without an RSA key, a key that
+  media queue's 250 frames too (nothing read them meanwhile). Records arriving after
+  that queue behind them: the queue takes 250 frames more than the replayed frames the
+  reader has not reached yet, so a reader that keeps up with the station loses none,
+  and the queue never holds more than the replayed records plus 250 frames. It holds up
+  to 32 MiB: from the first record that does not fit, nothing more is held until the key
+  arrives, and video resumes at the first keyframe after it. A cipher without an RSA key, a key that
   does not parse, a failed fetch or one still running when the recording's first-frame
   wait (10 s) runs out ends the stream with `EndToEndEncryptedError` (an
   `UnsupportedError`) naming the cipher; a cloud failure is also reported as a

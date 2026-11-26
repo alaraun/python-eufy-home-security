@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import struct
+import time
 from collections.abc import AsyncIterator
 
 import pytest
@@ -723,6 +724,36 @@ async def test_every_record_held_during_a_slow_key_fetch_is_delivered(
     assert stream.end_frame
 
 
+@pytest.mark.parametrize("pause", [0, 0.001])
+async def test_records_after_the_replay_queue_behind_its_backlog_for_a_reader_keeping_up(
+    e2e_hb2: FakeStation, pause: float
+) -> None:
+    """The key arrives halfway through a recording opened by path: the records arriving
+    while the reader works through the replayed backlog are queued behind it, not dropped
+    as if the reader were slow."""
+    e2e_hb2.recording_frames = 800
+
+    class Keys(_Keys):
+        async def __call__(self, key_id: int) -> str | None:
+            while e2e_hb2.media_frames_sent < 400:
+                await asyncio.sleep(0.005)
+            return await super().__call__(key_id)
+
+    session = _session(e2e_hb2, Keys(delay=0))
+    frames: list[MediaFrame] = []
+    try:
+        await session.async_connect()
+        stream = await session.async_open_recording(NATIVE_CLIP, CAMERA)
+        async with asyncio.timeout(20), stream:
+            async for frame in stream:
+                frames.append(frame)
+                await asyncio.sleep(pause)
+    finally:
+        await session.async_close()
+    assert len([f for f in frames if f.kind is MediaKind.VIDEO]) == e2e_hb2.recording_frames
+    assert (stream.dropped, stream.skipped) == (0, 0)
+
+
 # A recording stream driven record by record (no station): the hold and its replay.
 
 _E2E_RECORD_KEY = E2EMediaKey.for_cipher(E2E_CIPHER.public_key())
@@ -764,11 +795,12 @@ async def _key_settled(stream: MediaStream) -> None:
             await asyncio.sleep(0.01)
 
 
-async def test_the_media_queue_bounds_records_again_after_the_replay(
+async def test_the_media_queue_takes_its_bound_behind_the_replayed_backlog(
     e2e_hb2: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The held records go into the queue whole; records arriving after the replay find
-    the queue bounded again and are dropped for the slow reader."""
+    room for the queue's bound behind them, then are dropped for the slow reader. The
+    extra room shrinks as the reader works through the backlog."""
     monkeypatch.setattr(media_stream_module, "MEDIA_QUEUE_FRAMES", 4)
     session = _session(e2e_hb2, _Keys(delay=0))
     stream = _e2e_stream(session)
@@ -776,12 +808,23 @@ async def test_the_media_queue_bounds_records_again_after_the_replay(
         for n in range(6):
             stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
         await _key_settled(stream)
-        queued = len(stream._frames)
-        assert queued == 5  # the sixth frame is held for a continuation
-        assert stream.dropped == 0
-        stream._feed(FrameType.VIDEO_FRAME, _e2e_video(6), subheader=_e2e_sub())
+        assert len(stream._frames) == 5  # the sixth frame is held for a continuation
+        queued = 0
+        for n in range(6, 40):
+            queued = len(stream._frames)
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+            if stream.dropped:
+                break
+        assert queued == 5 + 4, "the bound's 4 frames behind the 5 replayed"
         assert len(stream._frames) == queued
-        assert stream.dropped > 0
+        now = time.monotonic()
+        assert stream._expired(now), "full at its bound and dropping: unread"
+        await anext(stream)
+        assert not stream._expired(now), "under its bound: read"
+        for _ in range(5):
+            await anext(stream)
+        assert len(stream._frames) == 3
+        assert stream._queue_bound == 4 + 3, "as many replayed frames as are left at most"
     finally:
         await stream.aclose()
         await session.async_close()
