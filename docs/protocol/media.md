@@ -858,11 +858,17 @@ the **key id**, and the record names one of two key types (`E2EKeyType`):
   `UnsupportedError`) naming the cipher; a cloud failure is also reported as a
   `CloudProblem`. On a stream that already delivered video, a further cipher whose key
   cannot be had is not fetched again: its records are dropped (one warning) and video
-  resumes at a keyframe the stream decodes. A record of the PIN key ends it with
+  resumes at a keyframe the stream decodes. A record of the PIN key ends the stream with
   `PinProtectedKeyError`: the key needs the user's PIN, which the library neither asks
   for nor stores. A live stream decodes no end-to-end record, as the app plays them only
   from recordings.
-- Not tested on hardware: the key-type rule and the layouts come from the eufy app.
+- **The key id is the library's choice.** The key type follows the eufy app's current
+  playback path (the table above); the key id is the record's byte 3 (from a row: its
+  low byte). The app's current path takes no key id from the record, and its older path,
+  which takes byte 3, treats version 4 with key id 2–9 as not end-to-end encrypted, so
+  this combination is the library's own.
+- Not tested on hardware: the key-type rule and the layouts come from the eufy app, the
+  key id as above.
 
 ## Streaming quality **[verified]**
 

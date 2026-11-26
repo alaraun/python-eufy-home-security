@@ -471,8 +471,9 @@ sharing changes, so cache it per station. A station event push also carries the 
 session key for every station the current app supports **[declared: app]**
 ([session-crypto.md](session-crypto.md)). The RSA `private_key` serves a station whose
 CONN_INIT is not version 8 (the legacy RSA handshake), and unwraps the key of a recording
-end-to-end encrypted under that cipher ([media.md](media.md#end-to-end-encrypted-recordings-app);
-there a lowercased key ends the recording with `EndToEndEncryptedError`). Whether it is usable depends on the
+end-to-end encrypted under that cipher
+([media.md](media.md#end-to-end-encrypted-recordings-app); there a lowercased key ends
+the recording with `EndToEndEncryptedError`). Whether it is usable depends on the
 record **[verified, one account]**: in one response to a shared member, ciphers 98 and 155
 came back intact (a mixed-case PEM that parses as RSA-1024) and 13, 40 and 212 came back
 **lowercased by the server**, armour included. A lowercased body is irreversible, so
