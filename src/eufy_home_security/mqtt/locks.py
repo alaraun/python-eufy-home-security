@@ -255,6 +255,8 @@ class MqttLocks:
 
         unwatch = states.watch(serial, on_reading)
         self._states[serial] = state
+        taken_at: float | None = None
+        keep = True  # a taken command whose wait fails or is cancelled holds its move
         try:
             replies: list[LockReply] = []
 
@@ -310,6 +312,7 @@ class MqttLocks:
                         f"{redact_serial(serial)}: {replies[-1].result.value}",
                         device_sn=serial,
                     )
+                taken_at = states.begin_move(serial, action)
                 budget = LOCK_CONFIRM_TIMEOUT if deadline is None else deadline - loop.time()
                 await asyncio.wait({state}, timeout=max(0.0, budget))
                 if not state.done():
@@ -318,6 +321,7 @@ class MqttLocks:
                         device_sn=serial,
                     )
             result = state.result()
+            keep = False
             if result in FAULT_STATES:
                 raise LockNotMovedError(
                     cm2.P2P_COMMAND,
@@ -327,5 +331,9 @@ class MqttLocks:
                     device_sn=serial,
                 )
             return result
+        except CommandRejectedError:
+            keep = False  # the lock refused it: it does not move
+            raise
         finally:
+            states.end_move(serial, taken_at=taken_at, keep=keep)
             unwatch()

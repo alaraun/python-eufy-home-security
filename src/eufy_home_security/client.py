@@ -1504,6 +1504,7 @@ class EufySecurity:
         """
         try:
             self.use_mqtt(None)
+            self._listed_locks.close()
             if self._cloud_state_task is not None:
                 task, self._cloud_state_task = self._cloud_state_task, None
                 task.cancel()

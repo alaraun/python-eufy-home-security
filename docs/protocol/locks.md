@@ -207,6 +207,13 @@ acknowledgement alone never counts. In order:
    stale dump does not end it. This last rule is the library's: the app ends on the first
    status report with code 0, whatever state it names.
 
+From the lock's accepting answer until a report ends the wait, the lock reads `locking` or
+`unlocking` (`LockStateSource.COMMAND`). A call that fails after that (a timeout, a lost
+connection) or is cancelled leaves it so until the lock's next report taken, at most
+`LOCK_CONFIRM_TIMEOUT` (30 s) after the answer; a refusing status report ends it at once.
+While it lasts the next command is sent whatever the last report says, since the reading is
+never an asked state.
+
 The waits are the app's: 20 s for the lock's answer (over MQTT counted from the broker's
 acknowledgement, which has 15 s), then 30 s for its state; a `timeout`
 bounds the whole command, the public-key query, the connect and the send included. Nothing

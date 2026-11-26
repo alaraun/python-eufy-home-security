@@ -110,7 +110,10 @@ async def test_a_lock_over_mqtt_is_confirmed_by_its_status_report(
     assert [a for a, _ in wifi_lock.received] == [LockAction.LOCK]
     assert wifi_lock.users == [(OWNER, SHORT_USER)]  # the member record's ids, as the app sends
     changes = [(e.state, e.source, e.station_sn) for e in events if isinstance(e, LockStateChanged)]
-    assert changes == [(LockState.LOCKED, LockStateSource.LOCK, None)]
+    assert changes == [
+        (LockState.LOCKING, LockStateSource.COMMAND, None),  # the lock took it
+        (LockState.LOCKED, LockStateSource.LOCK, None),
+    ]
     sent = json.loads(rig.broker.published[-1].payload)
     assert (sent["head"]["cmd"], sent["head"]["cmd_status"]) == (9, 2)
 
@@ -376,7 +379,13 @@ async def test_a_status_report_with_an_error_code_fails_the_mqtt_command(
     finally:
         await account.async_stop()
     assert (raised.value.command, raised.value.code) == (1940, 2)
-    assert not [e for e in events if isinstance(e, LockStateChanged)]  # it sets no state
+    # It sets no state: locking from the take, back to nothing reported at the refusal.
+    changes = [(e.state, e.source) for e in events if isinstance(e, LockStateChanged)]
+    assert changes == [
+        (LockState.LOCKING, LockStateSource.COMMAND),
+        (LockState.UNKNOWN, LockStateSource.COMMAND),
+    ]
+    assert rig.eufy.lock_state(LOCK_SN) is None
 
 
 async def test_a_status_report_before_the_answer_confirms_the_mqtt_command(
@@ -712,6 +721,52 @@ async def test_each_report_taken_emits_one_event_and_sets_the_public_reading(
     assert rig.eufy.lock_state(LOCK_SN) == again
     with pytest.raises(UnsupportedError, match="device list"):
         rig.eufy.lock_state(LOCK2_SN)
+
+
+async def test_a_cancelled_mqtt_command_the_lock_took_keeps_it_moving_and_the_next_is_sent(
+    rig: Rig, wifi_lock: FakeMqttLock
+) -> None:
+    """Over MQTT as on the station path: an unlock the lock took (its answer accepted it)
+    whose call is cancelled keeps the lock unlocking; a lock command is then sent
+    although the last report is locked."""
+    account = await _served(rig)
+    try:
+        await wifi_lock.async_report(4)
+        await until(lambda: rig.eufy.lock_state(LOCK_SN) is not None)
+        wifi_lock.report = False
+        unlocking = asyncio.create_task(rig.eufy.async_unlock(LOCK_SN))
+        await until(
+            lambda: rig.eufy.lock_state(LOCK_SN).state is LockState.UNLOCKING  # type: ignore[union-attr]
+        )
+        unlocking.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await unlocking
+        held = rig.eufy.lock_state(LOCK_SN)
+        assert held is not None
+        assert (held.state, held.source) == (LockState.UNLOCKING, LockStateSource.COMMAND)
+        wifi_lock.report = True
+        assert await rig.eufy.async_lock(LOCK_SN, timeout=5) is LockState.LOCKED
+    finally:
+        await account.async_stop()
+    assert [a for a, _ in wifi_lock.received] == [LockAction.UNLOCK, LockAction.LOCK]
+
+
+async def test_a_timed_out_mqtt_command_keeps_it_moving_until_the_locks_next_report(
+    rig: Rig, wifi_lock: FakeMqttLock
+) -> None:
+    wifi_lock.report = False
+    account = await _served(rig)
+    try:
+        with pytest.raises(DeviceTimeoutError, match="locked state"):
+            await rig.eufy.async_lock(LOCK_SN, timeout=0.5)
+        assert rig.eufy.lock_state(LOCK_SN).state is LockState.LOCKING  # type: ignore[union-attr]
+        await wifi_lock.async_report(4)
+        await until(
+            lambda: rig.eufy.lock_state(LOCK_SN).source is LockStateSource.LOCK  # type: ignore[union-attr]
+        )
+    finally:
+        await account.async_stop()
+    assert rig.eufy.lock_state(LOCK_SN).state is LockState.LOCKED  # type: ignore[union-attr]
 
 
 VIDEO_LOCK_SN = "T8531P2000054323"

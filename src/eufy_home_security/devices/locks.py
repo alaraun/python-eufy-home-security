@@ -57,7 +57,10 @@ class LockStateSource(StrEnum):
     PUSH = "push"
     """A cloud push about the lock (its ``event_type``)."""
     LOCK = "lock"
-    """The lock's own status report (it follows a lock or unlock command)."""
+    """The lock's own status report (over its station or the MQTT broker)."""
+    COMMAND = "command"
+    """Locking or unlocking: a lock or unlock of this client the lock took, until the
+    lock's next report (no report of the lock itself)."""
 
 
 CODE_STATES: Final[Mapping[int, LockState]] = MappingProxyType(

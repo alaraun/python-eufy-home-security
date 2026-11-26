@@ -434,6 +434,8 @@ class StationLockControl:
         # (a dump repeating an old fault) does not end the command.
         self._pending[serial] = pending
         unwatch = self._locks.watch(serial, on_reading)
+        taken_at: float | None = None
+        keep = True  # a taken command whose wait fails or is cancelled holds its move
         try:
             applied = await _within(
                 deadline,
@@ -467,9 +469,11 @@ class StationLockControl:
                         device_sn=serial,
                     )
                 if not pending.state.done():
+                    taken_at = self._locks.begin_move(serial, action)
                     budget = LOCK_CONFIRM_TIMEOUT if deadline is None else deadline - loop.time()
                     await self._first(pending, budget, serial, f"{target.value} state", state=True)
             state = pending.state.result()
+            keep = False
             if state in FAULT_STATES:
                 raise LockNotMovedError(
                     sent.command,
@@ -479,7 +483,11 @@ class StationLockControl:
                     device_sn=serial,
                 )
             return state
+        except CommandRejectedError:
+            keep = False  # the lock refused it: it does not move
+            raise
         finally:
+            self._locks.end_move(serial, taken_at=taken_at, keep=keep)
             unwatch()
             self._pending.pop(serial, None)
             for task in pending.resends:

@@ -1347,7 +1347,10 @@ class Station:
         :class:`~.lock_control.StationLockControl`). Returns at once, sending nothing, when
         the lock already reads locked. ``timeout`` bounds the whole call, public-key query,
         connect and send included (default: the eufy app's 20 s for the lock's answer, then
-        30 s for its state, the steps before them unbounded). Raises before sending:
+        30 s for its state, the steps before them unbounded). Once the lock took the
+        command it reads locking (unlocking) until a report ends the wait; a call that
+        fails or is cancelled after that keeps it so until the lock's next report, at most
+        ``LOCK_CONFIRM_TIMEOUT`` after the take, and the next command is sent meanwhile. Raises before sending:
         ``UnsupportedError`` (no lock, no route, a route this library cannot send or one
         served over MQTT: use :meth:`EufySecurity.async_lock`), ``GuestAccessError`` (a
         guest account), ``DeviceBusyError`` (a command for this lock still waits). After:
@@ -1718,12 +1721,13 @@ class Station:
 
     async def async_close(self) -> None:
         """Close the session; forget the device-siren states and cancel their expiry and
-        the held garage doors' expiry."""
+        the held garage doors' and locks' expiry."""
         try:
             await self.session.async_close()
         finally:
             await self._activity.close()
             self._garage.close()
+            self._locks.close()
             for timer in self._alarms.siren_expiry.values():
                 timer.cancel()
             self._alarms.siren_expiry.clear()

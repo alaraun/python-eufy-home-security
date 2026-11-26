@@ -4,14 +4,16 @@ a station's locks by :class:`StationLocks` and for locks no station serves by
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
 from .._logging import redact_serial
 from ..cloud.models import CloudDevice
 from ..devices.capabilities import Capability, profile_for_serial
-from ..devices.locks import PUSH_STATES, LockReading, LockStateSource, state_of_code
+from ..devices.locks import PUSH_STATES, LockReading, LockState, LockStateSource, state_of_code
 from ..devices.model_settings import lock_state_read, product_code_of
 from ..devices.support import Support
 from ..events import (
@@ -23,6 +25,9 @@ from ..events import (
     SecurityEvent,
     wall_ms,
 )
+from ..lock_commands import control
+from ..lock_commands.actions import LockAction
+from ..lock_commands.control import TARGET_STATES, ends_wait
 from ..models import ValueSource
 from .base import ParamReport
 
@@ -48,6 +53,23 @@ _SOURCES: Final[Mapping[ValueSource, LockStateSource]] = {
 _DATED_BY_ARRIVAL: Final = frozenset({LockStateSource.PUSH, LockStateSource.LOCK})
 """Sources whose reading is dated by its arrival: a parameter report after it replaces it
 even when it repeats the value taken before."""
+
+
+_MOVING: Final[Mapping[LockAction, LockState]] = {
+    LockAction.LOCK: LockState.LOCKING,
+    LockAction.UNLOCK: LockState.UNLOCKING,
+}
+
+
+@dataclass(slots=True)
+class _Move:
+    """A command of this client the lock took."""
+
+    reading: LockReading
+    """Locking or unlocking, from :attr:`~..devices.locks.LockStateSource.COMMAND`."""
+    target: LockState
+    waiting: bool = True
+    """The command's call still waits; False: it failed or was cancelled (held)."""
 
 
 def _ms(seconds: float | None) -> int | None:
@@ -80,6 +102,11 @@ class LockStates:
       report by more than :data:`LOCK_REPORT_SLACK_SECONDS`;
     * the lock's own status report is always taken.
 
+    A command of this client the lock took makes it read locking or unlocking
+    (:meth:`begin_move`) until a report ends the command's wait, or, when its call failed
+    or was cancelled, until the lock's next report taken, at most
+    :data:`~..lock_commands.control.LOCK_CONFIRM_TIMEOUT` after the take (:meth:`end_move`).
+
     Subclasses name the locks and their parameter reports.
     """
 
@@ -95,6 +122,13 @@ class LockStates:
         self._report_ms: dict[str, int] = {}
         """Per lock, the latest time a dated parameter report dates from (epoch ms)."""
         self._watchers: dict[str, list[Callable[[LockReading], None]]] = {}
+        self._moving: dict[str, _Move] = {}
+        """Per lock, locking or unlocking: a command of this client the lock took, while it
+        waits and, after its call failed or was cancelled, until the lock's next report or
+        the hold's expiry."""
+        self._hold_expiry: dict[str, asyncio.TimerHandle] = {}
+        """Per lock held by a failed or cancelled command, the end of the hold
+        (:data:`~..lock_commands.control.LOCK_CONFIRM_TIMEOUT` after the take)."""
 
     # ── the locks (subclasses) ───────────────────────────────────────────────
 
@@ -116,7 +150,10 @@ class LockStates:
     # ── reading ──────────────────────────────────────────────────────────────
 
     def reading(self, device_sn: str) -> LockReading | None:
-        return self._readings.get(device_sn)
+        """The lock's reading: locking or unlocking while a command it took is unconfirmed
+        (:meth:`begin_move`), else its last report taken."""
+        move = self._moving.get(device_sn)
+        return move.reading if move is not None else self._readings.get(device_sn)
 
     def serves(self, device_sn: str) -> bool:
         """Whether ``device_sn`` is one of the devices these states are kept for (its own
@@ -240,10 +277,24 @@ class LockStates:
         )
 
     def _set(self, device_sn: str, reading: LockReading) -> None:
-        old = self._readings.get(device_sn)
+        old = self.reading(device_sn)
         self._readings[device_sn] = reading
+        move = self._moving.get(device_sn)
+        # A command's own wait goes on past a report that does not end it (a stale dump);
+        # a failed or cancelled command's hold ends at the lock's next report.
+        if move is not None and (not move.waiting or ends_wait(reading.state, move.target)):
+            del self._moving[device_sn]
+            self._end_hold(device_sn)
         for watcher in list(self._watchers.get(device_sn, ())):
             watcher(reading)
+        self._emit(device_sn, old)
+
+    def _emit(self, device_sn: str, old: LockReading | None) -> None:
+        reading = self.reading(device_sn)
+        if reading is None:  # a move ended on a lock with nothing reported before it
+            if old is None:
+                return
+            reading = LockReading(state=LockState.UNKNOWN, source=LockStateSource.COMMAND)
         self._bus.emit(
             LockStateChanged(
                 device_sn=device_sn,
@@ -256,6 +307,65 @@ class LockStates:
                 changed=old is None or old.state is not reading.state,
             )
         )
+
+    # ── a command's move ─────────────────────────────────────────────────────
+
+    def begin_move(self, device_sn: str, action: LockAction) -> float:
+        """The lock took a lock or unlock of this client: it reads locking or unlocking
+        (``source`` :attr:`~..devices.locks.LockStateSource.COMMAND`) until a report that
+        ends the command's wait (:func:`~..lock_commands.control.ends_wait`). Returns the
+        take's loop time for :meth:`end_move`."""
+        old = self.reading(device_sn)
+        self._end_hold(device_sn)  # this command's move replaces a held one
+        self._moving[device_sn] = _Move(
+            reading=LockReading(
+                state=_MOVING[action],
+                source=LockStateSource.COMMAND,
+                observed_at=self._now_ms() / 1000,
+            ),
+            target=TARGET_STATES[action],
+        )
+        self._emit(device_sn, old)
+        return asyncio.get_running_loop().time()
+
+    def end_move(self, device_sn: str, *, taken_at: float | None, keep: bool) -> None:
+        """A command's call ended. Not taken (``taken_at`` None): an earlier command's hold
+        stays as it is. Taken and ``keep`` (its wait failed or was cancelled): the lock
+        reads locking or unlocking until its next report, at most
+        :data:`~..lock_commands.control.LOCK_CONFIRM_TIMEOUT` after the take. Else the lock
+        reads its last report again."""
+        move = self._moving.get(device_sn)
+        if taken_at is None or move is None or not move.waiting:
+            return
+        if keep:
+            move.waiting = False
+            self._hold_expiry[device_sn] = asyncio.get_running_loop().call_at(
+                taken_at + control.LOCK_CONFIRM_TIMEOUT, self._expire_hold, device_sn
+            )
+            return
+        del self._moving[device_sn]
+        self._emit(device_sn, move.reading)
+
+    def _end_hold(self, device_sn: str) -> None:
+        timer = self._hold_expiry.pop(device_sn, None)
+        if timer is not None:
+            timer.cancel()
+
+    def _expire_hold(self, device_sn: str) -> None:
+        # A loop callback: an error is logged; the lock reads its last report again.
+        try:
+            del self._hold_expiry[device_sn]
+            move = self._moving.pop(device_sn, None)
+            if move is not None:
+                self._emit(device_sn, move.reading)
+        except Exception:
+            _LOGGER.exception("%s: lock hold expiry failed", redact_serial(device_sn))
+
+    def close(self) -> None:
+        """Cancel every held lock's expiry."""
+        for timer in self._hold_expiry.values():
+            timer.cancel()
+        self._hold_expiry.clear()
 
 
 class StationLocks(LockStates):
