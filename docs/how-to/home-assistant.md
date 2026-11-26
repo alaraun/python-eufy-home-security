@@ -1856,9 +1856,11 @@ always taken; a parameter value is taken when it differs from the lock's last va
 last status report's code included), and also when it repeats but dates from after the
 push the state came from. So the next dump after a push replaces it, and `jammed`, which
 only a push reports, lasts until the lock's next report
-([events.md](../protocol/events.md#lock-pushes-declared-app)). The device list's copy
-counts only when it is not older than the reading. Keep `state` (and `raw`) as attributes
-when the entity maps passage and privacy mode to unlocked and locked.
+([events.md](../protocol/events.md#lock-pushes-declared-app)). A changed value from the
+device list's copy is taken unless the cloud dates it more than 30 s
+(`LOCK_REPORT_SLACK_SECONDS`) before the reading; a copy without an upload time never
+replaces a dated reading. Keep `state` (and `raw`) as attributes when the entity maps
+passage and privacy mode to unlocked and locked.
 A lock that no station of this client serves (a Wi-Fi lock without a P2P id is skipped,
 `SkippedDevice`) has no `station.lock_state`; the client keeps its reading
 (`eufy.lock_state`) from the device list's copy, pushes about it and, served through
