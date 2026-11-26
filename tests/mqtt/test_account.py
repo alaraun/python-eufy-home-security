@@ -141,7 +141,8 @@ async def test_a_device_update_after_a_stop_starts_no_client(
     await account.async_wait_connected(5)
     stop = asyncio.create_task(account.async_stop())
     await asyncio.sleep(0)
-    assert account._lifecycle.locked()  # the stop holds the lifecycle
+    assert account._stopped  # marked at once, before the stop awaits anything
+    assert account.clients == {}
     if not queued:
         await stop
     update = asyncio.create_task(account.async_update_devices([EU_LOCK, SCOPE_LOCK]))
@@ -183,6 +184,32 @@ async def test_a_cancel_of_a_stop_still_stops_every_client(rig: Rig) -> None:
         finally:
             for client in clients:
                 await client.async_stop()
+
+
+async def test_a_stop_cancelled_behind_a_slow_device_update_still_stops_every_client(
+    rig: Rig, account: EufyMqttAccount, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A bounded stop (an unload) cancelled while a device update still reads the list:
+    the running client is stopped all the same, and the update starts no new one."""
+    await account.async_start([EU_LOCK])
+    await account.async_wait_connected(5)
+    held = hold_selection(monkeypatch, account_module)
+    try:
+        update = asyncio.create_task(account.async_update_devices([EU_LOCK, SCOPE_LOCK]))
+        await until(held.entered.is_set)
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(0.2):
+                await account.async_stop()
+    finally:
+        held.release.set()
+    async with asyncio.timeout(5):
+        await update
+    await until(lambda: mqtt_tasks() == [], 3.0)
+    assert account.clients == {}
+    await until(lambda: rig.broker.connected_clients == [])
+    assert len(rig.broker.connects) == 1  # no client for the update's new scope
+    await account.async_update_devices([EU_LOCK, SCOPE_LOCK])  # stopped: ignored
+    assert account.clients == {}
 
 
 async def test_a_client_stop_failing_after_a_cancel_is_logged_once(

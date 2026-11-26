@@ -146,6 +146,8 @@ class EufyMqttAccount:
     async def _start_client(
         self, scope: str, devices: list[CloudDevice], *, connect_without_devices: bool = False
     ) -> None:
+        if self._stopped:  # a stop came while a start or device update ran: no new client
+            return
         client = EufyMqttClient(
             self._cloud,
             region=scope,
@@ -208,23 +210,27 @@ class EufyMqttAccount:
 
     async def async_stop(self) -> None:
         """Stop every client; their pending requests get a :class:`CommunicationError`.
-        A start or device update in progress finishes first, then is stopped; a later
-        device update is ignored until the next :meth:`async_start`. The clients stop
-        together; a cancel of the caller propagates at once and they still stop. A client
-        stop that fails is logged as a warning, and the first such failure is raised to a
-        caller still waiting."""
-        async with self._lifecycle:
-            self._stopped = True
-            clients, self._clients = list(self._clients.values()), {}
-            # Tasks, not awaits in turn: a cancel of the caller still stops every client.
-            stops = [asyncio.create_task(c.async_stop()) for c in clients]
+
+        The account is marked stopped and its clients are taken and told to stop at once,
+        before anything is awaited, so a cancel of the caller (a bounded unload) still
+        stops every client. A start or device update in progress starts no client after
+        that and finishes first (each client's stop waits for its own start or update); a
+        later device update is ignored until the next :meth:`async_start`. A cancel of the
+        caller propagates at once. A client stop that fails is logged as a warning, and the
+        first such failure is raised to a caller still waiting."""
+        self._stopped = True
+        clients, self._clients = list(self._clients.values()), {}
+        # Tasks, not awaits in turn: a cancel of the caller still stops every client.
+        stops = [asyncio.create_task(c.async_stop()) for c in clients]
+        for stop in stops:
+            self._ending.add(stop)
+            stop.add_done_callback(self._stop_ended)
+        async with self._lifecycle:  # a start or device update in progress ends first
+            pass
+        if stops:
+            await asyncio.wait(stops)
             for stop in stops:
-                self._ending.add(stop)
-                stop.add_done_callback(self._stop_ended)
-            if stops:
-                await asyncio.wait(stops)
-                for stop in stops:
-                    stop.result()
+                stop.result()
 
     def _stop_ended(self, stop: asyncio.Task[None]) -> None:
         """Done callback of a client stop: its failure is logged here, read or not."""
