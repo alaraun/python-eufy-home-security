@@ -42,6 +42,11 @@ _SOURCES: Final[Mapping[ValueSource, LockStateSource]] = {
 }
 
 
+_DATED_BY_ARRIVAL: Final = frozenset({LockStateSource.PUSH, LockStateSource.LOCK})
+"""Sources whose reading is dated by its arrival: a parameter report after it replaces it
+even when it repeats the value taken before."""
+
+
 class StationLocks:
     """The lock state of every device on a station graded
     :attr:`~..devices.capabilities.Capability.LOCK`.
@@ -72,6 +77,7 @@ class StationLocks:
         """Per lock, the time of the last push taken (epoch ms)."""
         self._report_ms: dict[str, int] = {}
         """Per lock, the latest time a dated parameter report dates from (epoch ms)."""
+        self._watchers: dict[str, list[Callable[[LockReading], None]]] = {}
 
     def reading(self, device_sn: str) -> LockReading | None:
         return self._readings.get(device_sn)
@@ -118,7 +124,7 @@ class StationLocks:
     def _after_push(self, device_sn: str, at: int | None) -> bool:
         """Whether a report dated ``at`` replaces the push the lock's state came from."""
         reading = self._readings.get(device_sn)
-        if reading is None or reading.source is not LockStateSource.PUSH or at is None:
+        if reading is None or reading.source not in _DATED_BY_ARRIVAL or at is None:
             return False
         return at > self._push_ms[device_sn]
 
@@ -152,9 +158,33 @@ class StationLocks:
         )
         return True
 
+    def on_report(self, device_sn: str, state_code: int) -> None:
+        """Take the lock's own status report (a lock-state code), news from now."""
+        self._push_ms[device_sn] = self._now_ms()
+        self._set(
+            device_sn,
+            LockReading(
+                state=state_of_code(state_code), source=LockStateSource.LOCK, raw=str(state_code)
+            ),
+        )
+
+    def watch(self, device_sn: str, callback: Callable[[LockReading], None]) -> Callable[[], None]:
+        """Call ``callback`` with every reading taken for ``device_sn`` (a repeated state
+        included) until the returned unsubscribe is called."""
+        watchers = self._watchers.setdefault(device_sn, [])
+        watchers.append(callback)
+
+        def unsubscribe() -> None:
+            if callback in watchers:
+                watchers.remove(callback)
+
+        return unsubscribe
+
     def _set(self, device_sn: str, reading: LockReading) -> None:
         old = self._readings.get(device_sn)
         self._readings[device_sn] = reading
+        for watcher in list(self._watchers.get(device_sn, ())):
+            watcher(reading)
         if old is not None and old.state is reading.state:
             return
         self._bus.emit(

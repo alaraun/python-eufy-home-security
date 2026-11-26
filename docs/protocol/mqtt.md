@@ -134,7 +134,7 @@ Every message body is a JSON object:
 | `sess_id` | 4 random hex digits per request |
 | `seed` | 32 random hex digits |
 | `timestamp` | epoch seconds |
-| `payload` | JSON **text**, not an object: `account_id` is the device owner's id (`member.admin_user_id`), `trans` the command |
+| `payload` | JSON **text**, not an object: `account_id` is the device owner's id (`member.admin_user_id`), `trans` the command; a lock command carries only `account_id` (its key user id), `device_sn` and `trans` ([Lock commands](#lock-commands)) |
 
 A received message is parsed leniently: unknown head fields are ignored, quoted numbers
 accepted, missing fields take their defaults, and a `payload` that is no JSON object is
@@ -212,3 +212,39 @@ too) does nothing until the next start.
 `eufy-security mqtt` lists the account's MQTT devices and their topics; with `--connect`
 it fetches the certificate, connects, subscribes and counts what arrives, and never
 publishes ([cli.md](../reference/cli.md)).
+
+## Lock commands
+
+`EufySecurity.use_mqtt(account)` serves the locks whose route is MQTT
+([locks.md](locks.md#routes)) through an `EufyMqttAccount` the consumer started for the
+account (`None` stops; it may come before the login: each command reads the account's
+user id and nickname when it is sent). `async_lock`/`async_unlock` then publish the lock
+command as the eufy app's lock card and lock screens send it, for every MQTT lock:
+
+- the 1940 payload object of the station path
+  ([locks.md](locks.md#1940-cm2-frame-in-through-data)), unchanged: the cm2 frame (version
+  3, slave id 0) under the time key, named and keyed by the key user id, in
+  `{"apiCommand":6018,"lock_payload":"<frame hex>","seq_num":<n>,"time":<t>}`;
+- as `trans` the base64 of the compact JSON
+  `{"cmd":1940,"mChannel":0,"mValue3":0,"payload":{...}}` (no `account_id` there);
+- in a command message (`cmd` 9, `cmd_status` 2) whose payload is exactly
+  `{"account_id":"<key user id>","device_sn":"<serial>","trans":"<trans>"}`, without the
+  `data`, `update_data` and `method` fields of other commands.
+
+The app's thing-model screens of some locks build another form (`apiCommand` 1940, another
+key order, an `account_id` of `""` inside `trans`); the library does not send it.
+
+The publish has 15 s for the broker's acknowledgement, then the lock 20 s to answer, then 30 s
+to report the asked state (a `timeout` bounds the whole call instead). The lock answers in a
+device message (`cmd` 8) on its response topic: its through data `{"dev_sn", "lock_payload",
+"time"}` names the lock (the topic's lock when `dev_sn` is missing) and opens under the key
+its own `time` names; an answer to another request is skipped. The refusals, waits and
+sequence numbers of [locks.md](locks.md#commands) apply.
+
+The lock's status reports (device messages on its response topic, read as its answers are)
+set its state: each change emits
+`LockStateChanged` with `source` `lock` and `station_sn` None. They are read for a lock that
+took a command from this client (the command's key user id opens them). A status report with
+a non-zero code ends a waiting command with `CommandRejectedError(code)`, as on the station
+path. Declared from the
+eufy app, not tested against the broker.

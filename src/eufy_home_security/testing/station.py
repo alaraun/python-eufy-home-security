@@ -108,6 +108,7 @@ from ..p2p.station_config_codecs import (
 )
 from ..p2p.storage_info import CMD_SD_INFO
 from ..p2p.xzyh import Frame, FrameCipher, FrameType, StreamDecoder, encode_frame
+from .locks import LOCK_COMMANDS, FakeLock
 from .station_config import mode_list_params, schedule_params
 from .synthetic import SYNTHETIC
 
@@ -673,6 +674,9 @@ class FakeStation:
     7500 notify after :attr:`garage_report_delay` seconds. False: receipt only, the
     command dropped."""
     garage_report_delay: float = 0.0
+    locks: dict[int, FakeLock] = field(default_factory=dict)
+    """Smart locks by channel: each answers the 1350 lock commands sent to its channel
+    (:class:`~.locks.FakeLock`)."""
     live_ends_unpinged_after: float | None = None
     """End a live stream when no 1139 ping arrived for this many seconds (a T8170: about
     10 s); None streams until stopped."""
@@ -1208,6 +1212,9 @@ class FakeStation:
         if obj.get("account_id") != self.account_id:
             return  # the real station drops these without a word
         cmd = obj["cmd"]
+        if cmd in LOCK_COMMANDS and (lock := self.locks.get(obj.get("mChannel", -1))) is not None:
+            lock.on_command(self, cmd, obj)
+            return
         if cmd == 1224:
             if self._arm(obj["payload"]["mode_type"]):
                 result = {"cmd": 1224, "code": 0}

@@ -30,7 +30,7 @@ from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, NoReturn
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 from .._logging import (
     Credential,
@@ -512,6 +512,8 @@ class EufyCloudApi:
         self._login_lock = asyncio.Lock()
         self._dsk_fetches: dict[str, asyncio.Future[str]] = {}
         """The DSK fetch in flight per station (see :meth:`async_get_dsk_key`)."""
+        self._lock_keys: dict[tuple[str, int], bytes] = {}
+        """Lock public keys fetched, by (lock serial, key type)."""
         self._cipher_unavailable: dict[tuple[str, int], tuple[float, str | None, str]] = {}
         """(monotonic time, owner id source, owner id) of the last ``get_ciphers`` answer
         without a key per (station, cipher id), for the back-off. The source is None when
@@ -540,11 +542,17 @@ class EufyCloudApi:
         return None
 
     @property
-    def activation_user_name(self) -> str:
-        """The name an arming-group activation is recorded under: :attr:`nick_name`, as
-        the app sends it, else :attr:`user_name`. No request: see
-        :meth:`async_activation_user_name`."""
+    def display_name(self) -> str:
+        """The account's name as the app sends it (an arming-group activation's
+        ``user_name``, a lock command's sender): :attr:`nick_name`, else
+        :attr:`user_name`. No request."""
         return self.nick_name or self.user_name
+
+    @property
+    def activation_user_name(self) -> str:
+        """The name an arming-group activation is recorded under: :attr:`display_name`.
+        No request: see :meth:`async_activation_user_name`."""
+        return self.display_name
 
     async def async_get_nick_name(self, region: str, *, login: bool = True) -> str | None:
         """The account's nickname from its profile (``get_profile``, read-only) on
@@ -2916,6 +2924,51 @@ class EufyCloudApi:
         sec.user_id = base.user_id
         return sec
 
+    # ── lock public keys ─────────────────────────────────────────────────────
+
+    async def async_get_lock_public_key(
+        self, device_sn: str, key_type: int, *, region: str | None = None, login: bool = True
+    ) -> bytes:
+        """The public key of lock ``device_sn`` of ``key_type`` (2: the key a lock command's
+        AES key is wrapped to, 3: the lock's ECDH key), as bytes.
+
+        One signed GET of ``app/public_key/query`` on the security realm, as the eufy app
+        asks it; a key once fetched is kept for the life of this object (the app asks
+        again only when it holds none). ``region`` defaults to the lock's
+        (:meth:`device_region`). Raises :class:`EmptyResponseError` when the cloud holds no
+        key, :class:`ProtocolError` for one that is not hex, and the call's typed errors.
+        """
+        held = self._lock_keys.get((device_sn, key_type))
+        if held is not None:
+            return held
+        scope = region or self.device_region(device_sn)
+        path = const.LOCK_PUBLIC_KEY_PATH
+
+        async def fetch(base: _Identity) -> Any:
+            sec = await self._security_identity(base)
+            _code, _resp, data = await self._call(
+                const.security_host(const.scope_region(scope)),
+                path,
+                None,
+                sec,
+                category=True,
+                query={"device_sn": device_sn, "type": str(key_type)},
+            )
+            return data
+
+        data = await self._with_session(fetch, scope, login=login)
+        text = data.get("public_key") if isinstance(data, Mapping) else None
+        if not isinstance(text, str) or not text:
+            raise EmptyResponseError(
+                0, "the cloud holds no public key for the lock", endpoint=path, device_sn=device_sn
+            )
+        try:
+            key = bytes.fromhex(text)
+        except ValueError as exc:
+            raise ProtocolError("lock public key is not hex") from exc
+        self._lock_keys[(device_sn, key_type)] = key
+        return key
+
     # ── push token ─────────────────────────────────────────────────────────
 
     async def async_register_push_token(self, token: str) -> None:
@@ -3534,9 +3587,12 @@ class EufyCloudApi:
         bootstrap: crypto.KeyExchange | None = None,
         preset_key: str | None = None,
         auth: _Identity | None = None,
+        query: Mapping[str, str] | None = None,
     ) -> tuple[int, dict[str, Any], Any]:
         """POST one MegaCrypto call; sign, encrypt, and check the body code.
 
+        With ``query`` the call is a GET of ``path`` with that query instead: no body
+        (``payload`` is not sent), the signature over the timestamp and nonce alone.
         Returns ``(code, full response, decrypted data)``. Raises the typed error
         for a failing ``code`` unless it is in ``tolerate``; ``data`` is the
         decrypted payload (dict or list), or None on a success with no data.
@@ -3550,18 +3606,24 @@ class EufyCloudApi:
             bootstrap=bootstrap,
             preset_key=preset_key,
             auth=auth,
+            get=query is not None,
         )
-        status, retry_after, text, started = await self._post(
-            f"https://{host}{path}",
-            path,
-            headers,
-            body,
-            shown=(
-                {"client_public_key": bootstrap.client_public_key}
-                if bootstrap is not None
-                else dict(payload or {})
-            ),
-        )
+        if query is not None:
+            status, retry_after, text, started = await self._get(
+                f"https://{host}{path}?{urlencode(query)}", path, headers
+            )
+        else:
+            status, retry_after, text, started = await self._post(
+                f"https://{host}{path}",
+                path,
+                headers,
+                body,
+                shown=(
+                    {"client_public_key": bootstrap.client_public_key}
+                    if bootstrap is not None
+                    else dict(payload or {})
+                ),
+            )
         await self._raise_for_status(
             status, text, path, retry_after=retry_after, started=started, region=identity.region
         )
@@ -3583,13 +3645,16 @@ class EufyCloudApi:
         bootstrap: crypto.KeyExchange | None,
         preset_key: str | None,
         auth: _Identity | None,
+        get: bool = False,
     ) -> tuple[str, dict[str, str]]:
         """The body and headers of one call, stamped and signed now.
 
         A key exchange (``bootstrap`` with ``preset_key``) sends the client public key
         in plain, signed with the preset and authenticated by ``auth``; any other call
         sends ``payload`` encrypted under ``identity``'s shared key and signed with its
-        signing key, authenticated by ``identity``'s token.
+        signing key, authenticated by ``identity``'s token. A ``get`` has no body
+        (``""``): its signature covers the timestamp and nonce alone, as the eufy app
+        signs a request without a body.
         """
         ts = str(int(time.time()))
         nonce = crypto.new_key_ident()
@@ -3602,6 +3667,12 @@ class EufyCloudApi:
             authenticated = auth is not None
             auth_token = auth.auth_token if auth else None
             auth_user_id = auth.user_id if auth else None
+        elif get:
+            body = ""
+            signature = crypto.x_signature(crypto.signing_key(identity.shared_key), ts, nonce)
+            authenticated = identity.auth_token is not None
+            auth_token = identity.auth_token
+            auth_user_id = identity.user_id
         else:
             # Established identity: encrypt the body (an empty body still must be
             # encrypted — the gateway decrypts every authenticated body).
@@ -3622,6 +3693,28 @@ class EufyCloudApi:
             auth_user_id=auth_user_id,
         )
         return body, headers
+
+    async def _get(
+        self, url: str, path: str, headers: dict[str, str]
+    ) -> tuple[int, float | None, str, float]:
+        """GET ``url``; returns and raises as :meth:`_post`."""
+        import aiohttp  # noqa: PLC0415 - deferred so a cache-only run never imports it
+
+        _LOGGER.debug("→ GET %s headers=%s", path, Payload(headers))
+        timeout = aiohttp.ClientTimeout(total=const.HTTP_TIMEOUT_SECONDS)
+        started = time.monotonic()
+        try:
+            async with self._http().get(url, headers=headers, timeout=timeout) as resp:
+                status = resp.status
+                retry_after = _retry_after(resp.headers.get("Retry-After"))
+                text = await resp.text()
+        except (aiohttp.ClientError, TimeoutError) as exc:
+            _LOGGER.debug("← %s failed after %.0f ms: %r", path, _ms(started), exc)
+            raise CommunicationError(f"cloud request to {path} failed: {exc}") from exc
+        except UnicodeDecodeError as exc:
+            raise ProtocolError(f"cloud response to {path} was not text: {exc}") from exc
+        _WIRE.debug("← %s HTTP %s body %s", path, status, text)
+        return status, retry_after, text, started
 
     async def _post(
         self, url: str, path: str, headers: dict[str, str], body: str, *, shown: Mapping[str, Any]

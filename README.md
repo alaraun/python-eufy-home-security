@@ -47,8 +47,8 @@ automatically, so do not add this repository to HACS.
 
 - **MQTT transport (optional, `mqtt` extra)**: the client certificate, device selection,
   topics, envelope and an asyncio client for the eufy broker the app uses for its Wi-Fi
-  locks. Declared from the eufy app, not yet tested against the broker; lock commands are
-  not part of it yet.
+  locks, which lock and unlock over it. Declared from the eufy app, not yet tested against
+  the broker.
 
 Pure `asyncio` on `aiohttp`, `cryptography`, `firebase-messaging` and `protobuf`: no
 Node.js bridge, no add-on, no threads (the optional MQTT extra's `aiomqtt` runs its
@@ -65,7 +65,7 @@ broker connect step, name lookup to TLS handshake, in the event loop's executor)
 | other HomeBases and cameras | *declared* only: known from the app, never tested. Every product the app names is in the model list; settings files for 166 products ship with the library, generated from eufy's own code; a product without one is listed read-only from the cloud |
 | per-mode actions and delays | readable and writable; the Home, Away and Custom 1 delays are verified by write + read-back, the action flags' names are not checked against the app |
 | firmware updates | reported, never installed |
-| smart locks, garage doors | *declared* only, never tested: lock state and events for every bundled lock model (no lock command yet), garage-door state and open/close for the garage-door cameras (T8452, T8453) |
+| smart locks, garage doors | *declared* only, never tested: lock state and events for every bundled lock model, lock and unlock confirmed by the lock's state on every route but the BLE-bridge locks (T8500, T8510), garage-door state and open/close for the garage-door cameras (T8452, T8453) |
 | API | not stable: names and signatures may change in any 0.x release |
 | packaging | a pure-Python wheel with typing (`py.typed`) on PyPI |
 

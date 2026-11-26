@@ -1379,6 +1379,7 @@ class StationSession:
         payload: Mapping[str, Any] | Sequence[Any] | None = None,
         timeout: float | None = None,
         confirm: Callable[[], asyncio.Future[Any]] | None = None,
+        head: Mapping[str, Any] | None = None,
     ) -> CommandOutcome:
         """Send a GCM ``DeviceMsgBean`` command and report how far it got.
 
@@ -1410,6 +1411,8 @@ class StationSession:
         ``confirm``, for a command whose effect the station reports in another frame, is
         called under the command lock just before the send; the future it returns counts
         as the result once done (``APPLIED``), ending the wait like a 0x0547 reply.
+        ``head`` holds fields the bean carries before ``account_id``
+        (:func:`~..messages.device_msg`).
         """
         timeout = _or(timeout, COMMAND_TIMEOUT)
         await self.async_connect()
@@ -1421,6 +1424,7 @@ class StationSession:
             channel=channel,
             value3=value3,
             transaction=str(int(time.time() * 1000)),
+            head=head,
         )
         receipt = asyncio.Event()
         header = _command_header_channel(channel)

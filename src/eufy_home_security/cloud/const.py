@@ -153,6 +153,9 @@ SECURITY_DEVICES_PATH: Final = "/v3/app/get_devs_list"
 SECURITY_LIST_PAGE: Final = 1000
 """``num`` of a security-realm list request: the app asks page 0 with 1000 entries."""
 CIPHERS_PATH: Final = "/v3/app/cipher/get_ciphers"
+LOCK_PUBLIC_KEY_PATH: Final = "/v3/app/public_key/query"
+"""A lock's public key (security realm): a signed GET with ``device_sn`` and ``type`` (2: the
+key a command's AES key is wrapped to, 3: the ECDH key), see docs/protocol/locks.md."""
 DSK_KEYS_PATH: Final = "/app/devicerelation/get_dsk_keys"
 PUSH_TOKEN_PATH: Final = "/app/push/register_push_token"  # noqa: S105 — a URL path, not a secret
 OTA_ROM_PATH: Final = "/app/ota/get_rom_version"

@@ -221,7 +221,8 @@ def _doors_section() -> list[str]:
         "Lock state (`lock`: the lock-state parameter, behind a station and per other"
         " context) and garage doors (`garage_door`: the door-state, motor and sensor"
         " parameters and the door command), *declared (eufy app)* from each model's"
-        " settings file. No lock command is sent.",
+        " settings file. Lock and unlock depend on each unit's command route:"
+        " `EufySecurity.lock_control()` ([locks.md](../protocol/locks.md#commands)).",
         "",
     ]
     return out + _table(("model", "name", "capability", "parameters"), rows)

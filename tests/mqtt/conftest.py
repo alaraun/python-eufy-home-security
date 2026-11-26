@@ -26,6 +26,7 @@ from eufy_home_security.testing.mqtt import FakeMqttBroker, MqttTestPki, make_mq
 LOCK_SN = "T85D0P2000054321"
 LOCK2_SN = "T85L0P2000054322"
 OWNER = "fedcba9876543210fedcba9876543210fedcba98"
+SHORT_USER = "0a1b"
 
 
 def lock(
@@ -37,7 +38,12 @@ def lock(
             "device_type": 0,
             "device_new_pn": pn,
             "bind_time": bind_time,
-            "member": {"admin_user_id": OWNER, "member_type": 1},
+            "member": {
+                "admin_user_id": OWNER,
+                "member_type": 1,
+                "member_user_id": SYNTHETIC.account_id,
+                "short_user_id": SHORT_USER,
+            },
             **({REGION_KEY: region} if region else {}),
         }
     )
@@ -47,6 +53,14 @@ def answer(head: dict[str, Any], trans: str = "answer") -> bytes:
     """A device message's body with ``head`` (``cmd`` 8 by default) and ``trans``."""
     payload = json.dumps({"account_id": OWNER, "device_sn": LOCK_SN, "trans": trans})
     return json.dumps({"head": {"cmd": CMD_UPLINK_TRANS, **head}, "payload": payload}).encode()
+
+
+@dataclass
+class AccountUser:
+    """The account a lock command is sent for, as the cloud client gives it."""
+
+    user_id: str | None = SYNTHETIC.account_id
+    display_name: str = "Synthetic Nick"
 
 
 CAMERA = CloudDevice.from_api({"device_sn": SYNTHETIC.camera_sn, "device_type": 0})
@@ -82,10 +96,20 @@ SCOPE = f"eu{const.SCOPE_SEPARATOR}FR"
 
 
 @pytest.fixture
-async def rig(pki: MqttTestPki, short_waits: None) -> AsyncIterator[Rig]:
+def nick_name() -> str | None:
+    """The account's nickname the fake cloud's login answers (parametrize to set one)."""
+    return None
+
+
+@pytest.fixture
+async def rig(pki: MqttTestPki, short_waits: None, nick_name: str | None) -> AsyncIterator[Rig]:
     """The client of the default scope, ``eu``; the account also logs in to :data:`SCOPE`."""
     countries = ["EE", "FR"]
-    cloud = FakeCloud(mqtt_answer=pki.register_answer(), country_regions={"EE": "eu", "FR": "eu"})
+    cloud = FakeCloud(
+        mqtt_answer=pki.register_answer(),
+        country_regions={"EE": "eu", "FR": "eu"},
+        nick_name=nick_name,
+    )
     store = warm_store(email=SYNTHETIC.email, cloud=cloud, country=countries)
     eufy = build_eufy_security(email=SYNTHETIC.email, store=store, cloud=cloud, country=countries)
     await eufy.async_login()

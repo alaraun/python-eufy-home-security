@@ -99,6 +99,20 @@ def test_a_request_is_the_apps_head_and_payload_json() -> None:
     assert head == MqttHead.from_json(body["head"])
 
 
+def test_a_lock_command_payload_carries_only_account_device_and_trans() -> None:
+    _head, data = build_request(
+        client_id=_CLIENT,
+        account_id=SYNTHETIC.account_id,
+        device_sn=_SN,
+        trans="opaque-trans",
+        msg_seq=7,
+        extra_fields=False,
+    )
+    assert json.loads(data)["payload"] == (
+        f'{{"account_id":"{SYNTHETIC.account_id}","device_sn":"{_SN}","trans":"opaque-trans"}}'
+    )
+
+
 def test_the_generated_head_fields_take_the_apps_shapes() -> None:
     head, _data = build_request(
         client_id=_CLIENT, account_id="", device_sn=_SN, trans="", msg_seq=1, need_ack=True

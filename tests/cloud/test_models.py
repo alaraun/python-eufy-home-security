@@ -310,6 +310,8 @@ _FULL_ENTRY = {
     "member": {
         "admin_user_id": "owner-id",
         "member_type": 2,
+        "member_user_id": "member-id",
+        "short_user_id": "0a1b",
         "email": "owner@example.com",
         "nick_name": "Owner",
         "mobile": "+000000",
@@ -556,3 +558,14 @@ def test_face_records_are_a_list_or_nothing() -> None:
     assert parse_faces([{"ai_face_id": 3}, {}], "p") == [CloudFace(face_id=3)]
     with pytest.raises(ProtocolError):
         parse_faces({"ai_face_id": 3}, "p")
+
+
+def test_member_short_and_own_user_ids_are_read_and_cached() -> None:
+    device = CloudDevice.from_api(_FULL_ENTRY)
+    assert (device.short_user_id, device.member_user_id) == ("0a1b", "member-id")
+    cached = CloudDevice.from_api(device_cache_entry(_FULL_ENTRY, keep_params=False))
+    assert (cached.short_user_id, cached.member_user_id) == ("0a1b", "member-id")
+    bare = CloudDevice.from_api({"device_sn": "T8502P2000000001", "device_type": 52})
+    assert (bare.short_user_id, bare.member_user_id) == (None, None)
+    assert "0a1b" not in repr(device)
+    assert "member-id" not in repr(device)

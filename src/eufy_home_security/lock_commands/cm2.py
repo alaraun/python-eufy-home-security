@@ -14,9 +14,10 @@ eufy app; not tested on hardware; docs/protocol/locks.md § 1940):
 
 The answer comes back as 1940 through-data ``{"dev_sn", "lock_payload", "time"}``; its
 own time value names the key, and for a time-key request a positive time other than the
-request's marks an answer to another request, encrypted or not. Builders raise
-:class:`ValueError` on an argument outside its domain; :func:`parse_on_off_reply` raises
-:class:`~eufy_home_security.exceptions.ProtocolError` (or its subclass
+request's marks an answer to another request, encrypted or not. The lock's status report
+(command 0x4A, :func:`parse_status_report`) comes the same way, unasked and after a lock or
+unlock. Builders raise :class:`ValueError` on an argument outside its domain; the readers
+raise :class:`~eufy_home_security.exceptions.ProtocolError` (or its subclass
 :class:`~eufy_home_security.exceptions.LockReplyMismatchError`) and nothing else.
 """
 
@@ -46,6 +47,8 @@ from .actions import (
 
 P2P_COMMAND: Final = 1940
 COMMAND_ON_OFF: Final = 0x23
+STATUS_COMMAND: Final = 0x4A
+"""The cm2 command of a lock's status report."""
 FUNCTION_TYPE: Final = 2
 FRAME_VERSION: Final = 3
 HKDF_VERSION: Final = "1"
@@ -62,6 +65,8 @@ _TIME_FIELD_USER_LEN: Final = 40
 _MEMBER_TYPE_OWN_KEY: Final = 2
 _MAX_NOISE: Final = 99
 _SIGNED_HEX: Final = re.compile(r"[+-]?[0-9a-fA-F]+")
+_TAG_BATTERY: Final = 0xA1
+_TAG_STATE: Final = 0xA2
 _INT32: Final = range(-(2**31), 2**31)
 
 _RESULTS: Final = {
@@ -245,9 +250,9 @@ def _answer_time(value: object) -> int:
     return -1
 
 
-def _answer_key(request: Cm2Request, time_text: str) -> bytes:
+def _answer_key(time_text: str, *, user_id: str, hkdf: bool) -> bytes:
     """The key an encrypted answer opens with, from the answer's own ``time``."""
-    if request.hkdf:
+    if hkdf:
         user, salt = open_hkdf_time_field(time_text)
         return hkdf_key(user, salt)
     try:
@@ -256,18 +261,41 @@ def _answer_key(request: Cm2Request, time_text: str) -> bytes:
         raise ProtocolError(f"lock answer time {time_text!r} is not hex") from exc
     if len(time_text) != _TIME_HEX_DIGITS:
         raise ProtocolError(f"lock answer time {time_text!r} is not 8 hex digits")
-    return request.user_id[-_KEY_USER_CHARS:].encode() + time_bytes
+    return user_id[-_KEY_USER_CHARS:].encode() + time_bytes
+
+
+def _frame(answer: Mapping[str, object]) -> frames.Cm2Frame:
+    try:
+        raw = bytes.fromhex(_text(answer, "lock_payload"))
+    except ValueError as exc:
+        raise ProtocolError("lock answer payload is not hex") from exc
+    return frames.parse_cm2_frame(raw)
+
+
+def _open_body(
+    frame: frames.Cm2Frame,
+    answer: Mapping[str, object],
+    *,
+    serial: str,
+    user_id: str,
+    hkdf: bool,
+) -> bytes:
+    """``frame``'s body, decrypted under the key the answer's ``time`` names when the
+    frame is encrypted; ProtocolError when it is empty or does not open."""
+    body = frame.body
+    if frame.encrypted:
+        key = _answer_key(_text(answer, "time"), user_id=user_id, hkdf=hkdf)
+        body = cbc_decrypt(body, key, serial_iv(serial))
+    if not body:
+        raise ProtocolError("lock answer body is empty")
+    return body
 
 
 def parse_on_off_reply(answer: Mapping[str, object], request: Cm2Request) -> LockReply:
     """The lock's answer to ``request`` from its 1940 through-data object."""
     if _text(answer, "dev_sn") != request.serial:
         raise LockReplyMismatchError("lock answer names another serial")
-    try:
-        raw = bytes.fromhex(_text(answer, "lock_payload"))
-    except ValueError as exc:
-        raise ProtocolError("lock answer payload is not hex") from exc
-    frame = frames.parse_cm2_frame(raw)
+    frame = _frame(answer)
     if (frame.function_type, frame.command) != (FUNCTION_TYPE, COMMAND_ON_OFF):
         raise LockReplyMismatchError(f"lock answer is for command {frame.command:#x}")
     if not request.hkdf:
@@ -276,11 +304,63 @@ def parse_on_off_reply(answer: Mapping[str, object], request: Cm2Request) -> Loc
         answer_time = _answer_time(answer.get("time"))
         if answer_time > 0 and request.time_value > 0 and answer_time != request.time_value:
             raise LockReplyMismatchError("lock answer carries another time value than the request")
-    body = frame.body
-    if frame.encrypted:
-        key = _answer_key(request, _text(answer, "time"))
-        body = cbc_decrypt(body, key, serial_iv(request.serial))
-    if not body:
-        raise ProtocolError("lock answer body is empty")
+    body = _open_body(
+        frame, answer, serial=request.serial, user_id=request.user_id, hkdf=request.hkdf
+    )
     code = body[0]
     return LockReply(code, _RESULTS.get(code, LockResult.REFUSED))
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LockStatusReport:
+    """A lock's status report: its code (0: a status; another refuses the command), the
+    lock-state code (:data:`~eufy_home_security.devices.locks.CODE_STATES`) and the battery
+    level, each entry 0 when missing, as the eufy app reads them. Only a code-0 report
+    states the lock's state."""
+
+    code: int
+    state_code: int
+    battery: int
+
+
+def _entry(body: bytes, tag: int) -> int:
+    """The first byte of entry ``tag`` in ``body`` after its code byte, read as the eufy
+    app reads it: a signed byte, 0 when the entry is missing or cut short. Lengths are
+    signed bytes too; a length that does not move the scan forward ends it."""
+    index = 1
+    while index < len(body):
+        if body[index] == tag:
+            return _signed(body[index + 2]) if index + 2 < len(body) else 0
+        if index + 1 >= len(body):
+            break
+        following = index + 2 + _signed(body[index + 1])
+        if following <= index:
+            break
+        index = following
+    return 0
+
+
+def _signed(byte: int) -> int:
+    return byte - 0x100 if byte > 0x7F else byte
+
+
+def parse_status_report(
+    answer: Mapping[str, object], *, serial: str, user_id: str, hkdf: bool = False
+) -> LockStatusReport | None:
+    """The status report of the lock ``serial`` in its 1940 through-data object, None when
+    the object names another lock or carries another command.
+
+    ``user_id`` is the key user id (:func:`key_user_id`), ``hkdf`` whether the lock's
+    route keys by HKDF; the report opens with the key its own ``time`` names. The body is
+    a code byte followed by ``[tag, length, value]`` entries: ``A1`` the battery level,
+    ``A2`` the lock-state code.
+    """
+    if answer.get("dev_sn") != serial:
+        return None
+    frame = _frame(answer)
+    if (frame.function_type, frame.command) != (FUNCTION_TYPE, STATUS_COMMAND):
+        return None
+    body = _open_body(frame, answer, serial=serial, user_id=user_id, hkdf=hkdf)
+    return LockStatusReport(
+        code=body[0], state_code=_entry(body, _TAG_STATE), battery=_entry(body, _TAG_BATTERY)
+    )

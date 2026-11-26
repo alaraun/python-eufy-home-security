@@ -56,6 +56,8 @@ class LockStateSource(StrEnum):
     """The device list's parameters (the cloud's copy)."""
     PUSH = "push"
     """A cloud push about the lock (its ``event_type``)."""
+    LOCK = "lock"
+    """The lock's own status report (it follows a lock or unlock command)."""
 
 
 CODE_STATES: Final[Mapping[int, LockState]] = MappingProxyType(
@@ -122,7 +124,8 @@ _DECLARED: Final = Evidence(
     Support.DECLARED,
     "declared (eufy app): the model's smart_lock_onoff_status read and the lock card's "
     "state codes and push events",
-    "state only: no lock or unlock command; not verified on hardware",
+    "state; lock and unlock where the model's command route allows it "
+    "(EufySecurity.lock_control); not verified on hardware",
 )
 
 

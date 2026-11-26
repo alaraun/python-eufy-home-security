@@ -158,7 +158,8 @@ The app compares it with the chosen country before logging in.
 
 `POST app-passport-{region}-pr.eufy.com/passport/get_profile`, body `{}`, on a session:
 the account's profile, read-only **[app]**. The library reads only `data.nick_name`, the
-account's nickname (the name the app records arming-group activations under), and only
+account's nickname (the name the app records arming-group activations under and names a
+lock command's sender with; `EufyCloudApi.display_name`), and only
 when no login answer gave one: `EufyCloudApi.async_get_nick_name`, at most once per
 process from `async_activation_user_name`, cached with the session like a login's
 `nick_name`. The answer's other keys (expected: `user_id`, `email`) are **[open]**.

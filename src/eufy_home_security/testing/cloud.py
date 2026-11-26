@@ -127,12 +127,15 @@ class _ReplayResponse:
 
 
 class _ReplaySession:
-    """An ``aiohttp`` session whose every POST gets one :class:`_HttpAnswer`."""
+    """An ``aiohttp`` session whose every POST or GET gets one :class:`_HttpAnswer`."""
 
     def __init__(self, answer: _HttpAnswer) -> None:
         self._answer = answer
 
     def post(self, url: str, **kwargs: Any) -> _ReplayResponse:
+        return _ReplayResponse(self._answer)
+
+    def get(self, url: str, **kwargs: Any) -> _ReplayResponse:
         return _ReplayResponse(self._answer)
 
 
@@ -417,8 +420,8 @@ class FakeCloud:
     last_login_ab: dict[str, str] = field(default_factory=dict)
     """The ``ab`` of the last login per region (``get_last_login_code``)."""
     nick_name: str | None = None
-    """The account's nickname, which the profile (``get_profile``, recorded as
-    ``"profile"``) answers; None answers a profile without one."""
+    """The account's nickname, which a login and the profile (``get_profile``, recorded
+    as ``"profile"``) answer; None answers them without one."""
     arming_groups: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     """Each house id's raw arming groups; the arming-group requests change them."""
     arming_guided: int = 2
@@ -445,6 +448,9 @@ class FakeCloud:
     mqtt_requests: list[tuple[str, bool, dict[str, Any]]] = field(default_factory=list)
     """(host, whether the ``category``/``app-tab`` headers were sent, body) of each
     ``app/mqtt/register/iot`` request, in order."""
+    lock_public_keys: dict[tuple[str, int], bytes] = field(default_factory=dict)
+    """(lock serial, key type) -> the public key ``app/public_key/query`` answers (recorded
+    as ``"public_key:<serial>"``); another pair is answered with no key."""
 
     @staticmethod
     def refusal(
@@ -517,12 +523,19 @@ class FakeCloud:
         def note(call: str) -> None:
             self.calls.append(call if region == self.region else f"{call}@{region}")
 
+        if path == const.LOCK_PUBLIC_KEY_PATH:
+            serial = str(payload.get("device_sn"))
+            note(f"public_key:{redact_serial(serial)}")
+            self._raise_call_error()
+            public = self.lock_public_keys.get((serial, int(payload.get("type", 0))))
+            return None if public is None else {"public_key": public.hex()}
         if path == const.LOGIN_PATH:
             note("login")
             if self.login_error is not None:
                 raise _Refusal(self.login_error)
             self.last_login_ab[region] = str(payload.get("ab"))
-            return {"auth_token": _AUTH_TOKEN, "user_id": self.user_id}
+            nick = {} if self.nick_name is None else {"nick_name": self.nick_name}
+            return {"auth_token": _AUTH_TOKEN, "user_id": self.user_id, **nick}
         if path == const.LAST_LOGIN_CODE_PATH:
             note("last_login_code")
             self._raise_call_error()
@@ -806,13 +819,14 @@ class _FakeCloudApi(EufyCloudApi):
         bootstrap: KeyExchange | None = None,
         preset_key: str | None = None,
         auth: _Identity | None = None,
+        query: Mapping[str, str] | None = None,
     ) -> tuple[int, dict[str, Any], Any]:
         self._raise_if_held_off(login=False)
         if path == const.MQTT_REGISTER_PATH:
             self._fake.mqtt_requests.append((host, category, dict(payload or {})))
         token = _request_region.set(identity.region)
         try:
-            data = await self._fake._answer(path, payload or {})
+            data = await self._fake._answer(path, query if query is not None else payload or {})
         except _Refusal as refusal:
             # The library's envelope, answered with the refusal's HTTP answer.
             replay = functools.partial(
@@ -826,6 +840,7 @@ class _FakeCloudApi(EufyCloudApi):
                 bootstrap=bootstrap,
                 preset_key=preset_key,
                 auth=auth,
+                query=query,
             )
             await self._refuse(refusal.error, path, identity.region, replay)
         finally:

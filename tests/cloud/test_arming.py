@@ -341,6 +341,28 @@ async def test_an_activation_is_recorded_under_the_login_s_nickname(
     ]
 
 
+@pytest.mark.parametrize(
+    ("nick", "expected"),
+    [
+        ("Kim R", "Kim R"),
+        (None, SYNTHETIC.email.split("@")[0]),
+        ("", SYNTHETIC.email.split("@")[0]),
+    ],
+)
+async def test_the_display_name_is_the_nickname_else_the_e_mail_name(
+    fake_mega: FakeMega, cache: SessionCache, nick: str | None, expected: str
+) -> None:
+    if nick is not None:
+        fake_mega.login_data["nick_name"] = nick
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+    assert api.display_name == api.activation_user_name == expected
+    assert _sent(fake_mega, "profile") == []  # no request
+
+
 def _sent(fake_mega: FakeMega, endpoint: str) -> list[dict[str, Any]]:
     return [body for name, body in fake_mega.calls if name == endpoint]
 

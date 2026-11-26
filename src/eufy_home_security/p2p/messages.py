@@ -251,15 +251,18 @@ def device_msg(
     value3: int = 0,
     transaction: str | None = None,
     media: bool = False,
+    head: Mapping[str, Any] | None = None,
 ) -> bytes:
     """Serialize a ``DeviceMsgBean`` command to compact JSON bytes.
 
     ``payload`` is an object for nearly every command, but a list for the image
     download (cmd 1308 takes ``[{"file": path}]``). ``media`` adds the fields the
     app sends on media commands only: ``mValueStrSub`` (the account id) and
-    ``mValue5``.
+    ``mValue5``. ``head`` holds fields written before ``account_id`` (a lock command's
+    wrapped ``key``).
     """
     obj: dict[str, Any] = {
+        **(head or {}),
         "account_id": account_id,
         "cmd": cmd,
         "mChannel": channel,

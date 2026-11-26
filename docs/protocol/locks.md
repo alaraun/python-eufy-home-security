@@ -3,7 +3,8 @@
 How a lock or unlock command is encoded for a eufy smart lock, per lock family, and how the
 lock's answer is read. The library holds these as pure codecs
 (`eufy_home_security.lock_commands`) and the choice of form as generated data
-(`devices.lock_routes`); nothing in the library sends a lock command yet.
+(`devices.lock_routes`), and sends them over a station session or the MQTT broker
+(§ Commands).
 
 **Grade: declared (eufy app); not tested on hardware.** Every byte below follows the eufy
 app's behaviour; no lock has answered any of it. The ECIES scheme is pinned against the
@@ -38,7 +39,7 @@ lock configuration (`devices/_lock_routes_data.py`, `scripts/gen_lock_routes.py`
 | T8501, T8503 | 1930 (ECIES-wrapped key) | current |
 | T8501, T8503 reporting parameter 6610 = `"1"` | 1930 (ECDH key) | current |
 | T8500, T8510 | 1911 (a BLE frame through the station) | current; no codec here |
-| T85D0, T85D2, T85F0, T85F1, T85F2, T85F3, T85L0, T85L1, T85P0, T85P1, T8506 with 7th serial character `8`; T8531, T8532, T85M0, T85M1, T85V0 not behind a station | MQTT (the 1940 frame over the eufy cloud's broker) | current; no transport here |
+| T85D0, T85D2, T85F0, T85F1, T85F2, T85F3, T85L0, T85L1, T85P0, T85P1, T8506 with 7th serial character `8`; T8531, T8532, T85M0, T85M1, T85V0 not behind a station | MQTT (the 1940 frame over the eufy cloud's broker) | current; sent over the broker ([mqtt.md](mqtt.md#lock-commands)) |
 
 The HKDF thresholds are the app's defaults for two Remote Config values; the generator takes
 a fetched Remote Config over them when it names the keys. Versions compare as the app
@@ -58,9 +59,12 @@ or parameter picks between them, and the library ports both.
   nothing is stored); for 1961 it comes from one
   counter shared by every lock, set to the last reported sequence number plus one and
   incremented after each command.
-- **User fields**: the lock member record's `admin_user_id` and `short_user_id` (hex text)
-  and the account's nickname. An absent `short_user_id` is sent as each form sends it: 1940
-  as an empty `A5` entry, 1961 by leaving the field out; 1930 needs its 2 bytes.
+- **User fields**: the lock member record's `admin_user_id` (1940: the key user id, below)
+  and `short_user_id` (hex text) and the account's nickname as the sender
+  (`EufyCloudApi.display_name`: the login's or the profile's `nick_name`, the e-mail's local
+  part only without one). An absent `short_user_id` is sent as each form sends it: 1940 as
+  an empty `A5` entry, 1961 by leaving the field out; 1930 needs its 2 bytes. 1961 leaves an
+  absent `admin_user_id` out too.
 - **Result**: an answer code 0 is accepted (the state change follows), anything else is
   refused; the 1940 answer also names "already unlocked" (48) and "already locked" (49).
   A well-formed answer for another lock, another command or another time value (both
@@ -115,7 +119,8 @@ the body is the result code.
 ## 1961: JSON
 
 `{"shortUserId", "slOperation", "userId", "userName"}` with `slOperation` **1 lock, 0
-unlock** and `userId` the member's `admin_user_id` (`shortUserId` left out when absent),
+unlock** and `userId` the member's `admin_user_id` (`shortUserId` and `userId` left out
+when absent),
 written compact with the app's JSON escaping (`<`, `>`, `&`, `=`, `'` as `\u` escapes).
 
 - **ECIES form**: the object gains `seq_num`, is encrypted under a random 16-byte AES key
@@ -156,10 +161,74 @@ an ephemeral key `r`, `S` = x-coordinate of `r · LockKey`, `K` = TLS-1.2 P_SHA2
 under `K[16:48]` over IV and ciphertext. Output: the compressed ephemeral point (33 bytes),
 the IV (16), the ciphertext and the tag (32).
 
+## Commands
+
+`EufySecurity.async_lock(device_sn, timeout=None)` and `async_unlock` send the lock's form
+over the path its route takes (`Station.async_lock`/`async_unlock` for the station path
+alone) and return the `LockState` once the lock reports the asked state. A station or lock
+acknowledgement alone never counts. In order:
+
+1. **Before sending** (nothing goes out on a refusal). `lock_control(device_sn)` decides
+   from the route, the firmware and the cloud record, without a session: no route, the
+   1911 form, or a station route whose station this client does not run raise
+   `UnsupportedError`; an account whose member record for the lock names a
+   guest (`member_type` 0, or none named, which the app reads as 0) raises
+   `GuestAccessError`, as the app refuses guests. A cloud entry without a member record
+   raises `UnsupportedError`, as the app sends nothing then; a record without
+   `admin_user_id` is enough (a 1940 command is then keyed by the account's own user id, a
+   1961 one names no `userId`). A 1940 command (station or MQTT) raises `UnsupportedError`
+   while the cloud client has no user id for the account (before its first login), and a
+   1961 ECIES or 1930 command on a station built without a cloud client, which the lock's
+   public key comes from. An MQTT route with no account given to `use_mqtt()` raises
+   `MqttAccountRequiredError`; a command still waiting for the same lock raises
+   `DeviceBusyError`. A lock whose last reading already is the
+   asked state returns it at once and sends nothing (the app's lock card offers lock only
+   for a lock it shows open, unlock otherwise). An unknown or offline reading refuses
+   nothing.
+2. **The station's result** (P2P): a non-zero code raises `CommandRejectedError(code)`,
+   except -151 (sequence number refused) on the 1940 and 1930 forms, where the wait for the
+   lock's answer goes on, as in the app. On the 1961 form the station's result is the
+   lock's answer: any non-zero code refuses, -151 included. Over MQTT the broker's
+   acknowledgement takes its place (15 s; [mqtt.md](mqtt.md#lock-commands)).
+3. **The lock's answer** (1940 and 1930: a through-data notify `{"cmd": 1940|1930,
+   "payload": {"dev_sn": ..., ...}}`; over MQTT a device message on the response topic): an
+   answer to another request (another time value) is skipped; a non-zero answer code (48/49:
+   already unlocked/locked, or another) raises `CommandRejectedError(code)`. A -151 followed
+   by neither an answer nor a resend within the wait raises `CommandRejectedError(-151)`.
+4. **The state**: the asked state from any source (the lock's status report, `0x4A` in the
+   1940 through data: a code byte, then `A1` the battery level and `A2` the lock-state code,
+   a missing entry read as 0 as the app reads it; a parameter dump or notify; a push)
+   taken after the send returns it, also when it comes
+   before the lock's answer; `jammed` or
+   `intermediate` raises `LockNotMovedError` (`err.state`); a status report with a non-zero
+   code raises `CommandRejectedError`; another state keeps the wait, so a
+   stale dump does not end it. This last rule is the library's: the app ends on the first
+   status report with code 0, whatever state it names.
+
+The waits are the app's: 20 s for the lock's answer (over MQTT counted from the broker's
+acknowledgement, which has 15 s), then 30 s for its state; a `timeout`
+bounds the whole command, the public-key query, the connect and the send included. Nothing
+within it raises `DeviceTimeoutError`, whose message names what was missing: the send
+("not sent"), the station's result after the send went out ("no station result"), the
+lock's answer or its state.
+
+**Sequence numbers.** The 1940 and 1930 forms (and MQTT) count per lock: a report `R` (the
+station's notify 1916 `{"dev_sn", "seq_num", "bus_type", "lock_cmd"}`) is stored as `R + 1`,
+each send takes the stored value plus one and stores it, so a report `R` puts `R + 2` on the
+wire; with nothing stored the current Unix time stands in. A 1916 naming the waiting 1940
+command (`lock_cmd` the on/off command) resends it with the next number, each time one
+arrives within the wait. The 1961 form counts on one number per station client from a random
+start below 1000; a 1916 of a 1961 lock moves it to `R + 1`. All are kept in memory, as the
+app keeps them: a restart starts again from these fallbacks.
+
+**Public keys.** The 1961 (ECIES) and 1930 forms need the lock's key:
+`EufyCloudApi.async_get_lock_public_key(device_sn, key_type)`, a signed GET of
+`v3/app/public_key/query` (type 2 the ECC key, 3 the ECDH key), cached in memory per lock and
+type.
+
 ## Not covered
 
-- Sending: the session wiring (the station command wrapper, sequence numbers from the
-  station, the public key fetch and cache, waiting for the state) is not built.
-- The 1911 form (T8500, T8510) and the MQTT transport.
+- The 1911 form (T8500, T8510): the BLE frame through the station is not built;
+  `lock_control()` says so.
 - Multi-packet frames: a lock command and its answer fit one packet; a multi-packet answer
   raises `ProtocolError`.

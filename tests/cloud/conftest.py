@@ -13,6 +13,7 @@ import asyncio
 import functools
 import inspect
 import json
+import re
 from collections.abc import Callable, Mapping
 from typing import Any, cast
 
@@ -20,6 +21,7 @@ import aiohttp
 import pytest
 from aioresponses import CallbackResult
 from cryptography.hazmat.primitives.asymmetric import ec
+from yarl import URL
 
 # aioresponses 0.7.9 builds a ClientResponse without the `stream_writer` argument
 # that aiohttp 3.14 made a required keyword-only. Give it a default so the pinned
@@ -128,6 +130,8 @@ class FakeMega:
         # Endpoint ("login", "devices", "push" …) -> a delay overriding ``latency``.
         self.slow: dict[str, float] = {}
         self.cipher_objects: list[dict[str, Any]] | None = None
+        # (device_sn, type) -> the public key hex app/public_key/query answers.
+        self.lock_public_keys: dict[tuple[str, int], str] = {}
         # get_house_list's house_infos, and each house id's own device list, both on
         # ``region``'s cluster only.
         self.houses: list[dict[str, Any]] = []
@@ -297,6 +301,12 @@ class FakeMega:
                 ),
                 repeat=True,
             )
+        # app/public_key/query: a signed GET, answered from ``lock_public_keys``.
+        mock.get(
+            re.compile(re.escape(_url(sec, const.LOCK_PUBLIC_KEY_PATH)) + r"\?.*"),
+            callback=self._delayed("public_key", self._public_key, region),
+            repeat=True,
+        )
         # get_faces_by_ids: a security-realm call answered from ``arming_data["faces"]``.
         mock.post(
             _url(sec, const.FACES_BY_IDS_PATH),
@@ -595,6 +605,28 @@ class FakeMega:
         if self.cipher_objects is None:
             return self._reply(shared, 0, None)  # empty success
         return self._reply(shared, 0, self.cipher_objects)
+
+    def _public_key(self, url: str, **kwargs: Any) -> CallbackResult:
+        """A signed GET: no body, the signature over the timestamp and nonce alone."""
+        headers = kwargs["headers"]
+        target = URL(str(url))
+        self.headers.setdefault("public_key", []).append({**headers, "host": str(target.host)})
+        if refused := self._security_refusal("public_key", kwargs, category=True):
+            return refused
+        shared = self._shared_for(kwargs, SECURITY_REALM)
+        if kwargs.get("data") is not None:
+            return self._refuse("public_key", "a body on a GET")
+        signature = crypto.x_signature(
+            crypto.signing_key(shared), headers["x-request-ts"], headers["x-request-once"]
+        )
+        if headers.get("x-signature") != signature:
+            return self._refuse("public_key", "signature not over the timestamp and nonce")
+        query = dict(target.query)
+        self.calls.append(("public_key", query))
+        if failure := self._failure_once("public_key", kwargs, SECURITY_REALM):
+            return failure
+        key = self.lock_public_keys.get((str(query.get("device_sn")), int(query.get("type", 0))))
+        return self._reply(shared, 0, None if key is None else {"public_key": key})
 
     def _get_dsk(self, url: str, **kwargs: Any) -> CallbackResult:
         shared = self._shared_for(kwargs)

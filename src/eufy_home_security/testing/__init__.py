@@ -5,6 +5,8 @@ Never imported by the package itself: import it from a test suite only.
 - :data:`SYNTHETIC`: the synthetic identities (serials, DID, keys, account) the fakes
   use; never a real identifier.
 - :class:`FakeStation`: a HomeBase speaking PPPP/XZYH on loopback, handshake to media.
+- :class:`FakeLock`: a smart lock behind the fake station (``FakeStation.locks``) that
+  answers lock and unlock commands and reports its new state.
 - :class:`FakeCloud`: the eufy cloud answered below the HTTP envelope.
 - :func:`v1_still`, :func:`v2_still`: a JPEG as an obfuscated V1 or V2 eufy still.
 - :func:`warm_store`: a cache document as after one login.
@@ -30,6 +32,7 @@ from .cloud import (
     station_device,
     warm_store,
 )
+from .locks import FakeLock
 from .station import FakeStation, v1_still, v2_still
 from .station_config import mode_list_params, schedule_params
 from .synthetic import SYNTHETIC, Synthetic
@@ -38,6 +41,7 @@ from .timeouts import short_timeouts
 __all__ = [
     "SYNTHETIC",
     "FakeCloud",
+    "FakeLock",
     "FakeStation",
     "Synthetic",
     "build_eufy_security",
