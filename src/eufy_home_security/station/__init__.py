@@ -412,7 +412,9 @@ class SubDeviceState:
     battery: int | None
     """Battery level in %, from the parameters the model's settings file names (1101
     when it names none, see :func:`~..devices.model_settings.battery_level`); None
-    when the block reports none of them or a value the model reads as no level."""
+    when the block reports none of them or a value the model reads as no level, and for
+    a model whose settings, bundled or listed, declare no level
+    (:meth:`Station.has_battery` False: a siren, a keypad, a mains-powered camera)."""
     wifi_rssi: int | None = None
     """Wi-Fi signal in dBm (param 1142), reported by cameras."""
     sub1g_rssi: int | None = None
@@ -464,7 +466,7 @@ class SubDeviceState:
     """The raw per-mode siren action (params 1509-1513, app ``getSirenAction``), by mode;
     only the modes the block reports."""
     low_battery: bool | None = None
-    """A motion sensor's low-battery flag (param 1601, handler ``sensor_is_low_power``)."""
+    """A sensor's or siren's low-battery flag (param 1601, handler ``sensor_is_low_power``)."""
     upgrading: bool | None = None
     """Whether a firmware update is being installed (param 1134, the flag the eufy app's
     device card shows as upgrading); None when the block omits it."""
@@ -1426,24 +1428,35 @@ class Station:
         )
 
     def has_battery(self, device_sn: str | None = None) -> bool | None:
-        """Whether the camera or doorbell ``device_sn`` (the station itself for ``None``)
-        runs on a battery, as the eufy app decides whether to show one **[declared]**:
-        True when its settings list (:meth:`settings_for`) declares
+        """Whether the device ``device_sn`` (the station itself for ``None``) has a
+        battery level, as the eufy app decides whether to show one **[declared]**, for
+        every kind: True when its settings list (:meth:`settings_for`) declares
         :data:`~..devices.model_settings.BATTERY_PROPERTY`, False when the list is
-        known and declares none (a mains-powered camera, a wired doorbell), whose
-        block may still report ``battery`` and ``charging`` figures the app hides.
+        known and declares none (a mains-powered camera, a wired doorbell, a siren, a
+        keypad, most stations), whose block may still report ``battery`` and
+        ``charging`` figures the app hides (:attr:`SubDeviceState.battery` is None for
+        such a model). A low-battery flag
+        (:attr:`SubDeviceState.low_battery`) is separate.
 
-        None when the model has no settings list, and for every other kind (a
-        sensor or keypad declares its battery differently; the app's rule is the
-        camera card's). Sync; raises ``UnsupportedError`` as :meth:`settings_for`.
+        None when the model has no settings list or the serial no catalogued model.
+        Sync; raises ``UnsupportedError`` as :meth:`settings_for`.
         """
         serial = self.serial if device_sn in (None, self.serial) else device_sn
 
         def settings() -> Iterator[Setting]:
-            # Lazy: another kind returns None before settings_for can raise.
+            # Lazy: an uncatalogued serial returns None before settings_for can raise.
             yield from self.settings_for(serial)
 
         return declares_battery(serial, settings())
+
+    def _battery_level(self, serial: str | None, params: Mapping[int, str]) -> int | None:
+        """The block's battery level, None where the model's settings (bundled or listed)
+        declare no :data:`~..devices.model_settings.BATTERY_PROPERTY`."""
+        if serial is None:
+            return battery_level(None, params)
+        if declares_battery(serial, self._settings_of(serial)) is False:
+            return None
+        return battery_level(self._product_code(serial), params)
 
     def _settings_of(self, serial: str) -> tuple[Setting, ...]:
         """:meth:`settings_for` of ``serial``, paired or not (a dump can name a device
@@ -1966,7 +1979,7 @@ class Station:
                 serial_source=source,
                 kind=model.kind if model else kind_from_params(params),
                 name=params.get(PARAM_DEVICE_NAME) or (cloud.name if cloud else None),
-                battery=battery_level(self._product_code(serial) if serial else None, params),
+                battery=self._battery_level(serial, params),
                 wifi_rssi=wifi_rssi,
                 sub1g_rssi=None if wifi_rssi is not None and sub1g_rssi == 0 else sub1g_rssi,
                 firmware=(dump_firmware if serial == self.serial else None)

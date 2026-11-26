@@ -49,6 +49,7 @@ class StubCloud:
     rescans: ClassVar[list[bool]] = []
     invites: ClassVar[list[CloudInvite]] = []
     accepted: ClassVar[list[tuple[CloudInvite, str | None]]] = []
+    paired: ClassVar[list[CloudDevice]] = []
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         self.user_name = "user"
@@ -83,6 +84,7 @@ class StubCloud:
                 station_sn=SYNTHETIC.station_sn,
                 channel=0,
             ),
+            *StubCloud.paired,
         ]
 
     async def async_get_station_owner_id(self, station_sn: str, *, refresh: bool = False) -> str:
@@ -129,6 +131,7 @@ async def fake(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> AsyncIterator[
     StubCloud.challenge = None
     StubCloud.invites = []
     StubCloud.accepted = []
+    StubCloud.paired = []
     StubCloud.device_refreshes = []
     StubCloud.rescans = []
     monkeypatch.setattr(client_module, "EufyCloudApi", StubCloud)
@@ -188,6 +191,25 @@ async def test_status_human_json_raw(
 
     assert await run(["--host", "127.0.0.1", "status", "--raw"], tmp_path) == 0
     assert "SET_ARMING" in capsys.readouterr().out
+
+
+async def test_status_shows_no_level_for_a_model_declaring_none(
+    fake: FakeStation, tmp_path: Any, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A siren's 1101 is no battery level (its model declares none); its low-battery flag
+    still shows."""
+    siren = "T8970P0000000005"
+    StubCloud.paired = [
+        CloudDevice(
+            device_sn=siren, device_type=0, name="Hall", station_sn=SYNTHETIC.station_sn, channel=5
+        )
+    ]
+    fake.params[5] = {1101: "49", 1601: "1"}
+    assert await run(["--host", "127.0.0.1", "status"], tmp_path) == 0
+    line = next(x for x in capsys.readouterr().out.splitlines() if '"Hall"' in x)
+    assert siren in line
+    assert "LOW BATTERY" in line
+    assert "battery 49%" not in line
 
 
 async def test_status_received_prints_every_key_of_the_dump(

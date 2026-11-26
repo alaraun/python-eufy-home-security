@@ -37,6 +37,7 @@ from eufy_home_security.devices.model_settings import (
 from eufy_home_security.devices.param_info import STATE_PARAM_INFO
 from eufy_home_security.devices.recipes import ConnectType
 from eufy_home_security.devices.settings import Scope, SettingUnit, mode_table_setting
+from eufy_home_security.devices.types import model_for_serial
 from eufy_home_security.exceptions import ModelDataError, UnsupportedError
 from eufy_home_security.p2p.mode_actions import ACTION_FLAGS, MODE_DELAY_CHOICES
 
@@ -235,16 +236,33 @@ def test_the_cloud_code_wins_over_the_serial() -> None:
         ("T8213P0000000001", "T8213", True),  # a doorbell
         ("T84A1P0000000001", "T84A1", False),  # a camera listing settings, no battery
         ("T81A0P0000000001", "T9999", None),  # no settings: unknown
-        ("T9000P0000000001", "T9000", None),  # a station lists one: not this rule's
-        ("T8910P0000000001", "T8910", None),  # a sensor lists one: not this rule's
+        ("T9000P0000000001", "T9000", True),  # a station listing one
+        ("T8910P0000000001", "T8910", True),  # a sensor listing one
+        ("T8970P0000000001", "T8970", False),  # a siren listing none (low battery only)
+        ("T8960P0000000001", "T8960", False),  # a keypad
+        ("T8030P0000000001", "T8030", False),  # a station
         ("T0000P0000000001", "T81A0", None),  # an uncatalogued serial
     ],
 )
-def test_declares_battery_reads_a_camera_or_doorbells_settings(
+def test_declares_battery_reads_the_models_settings(
     serial: str, code: str, expected: bool | None
 ) -> None:
     settings = settings_of(code, standalone=True).values()
     assert declares_battery(serial, settings) is expected
+
+
+@pytest.mark.parametrize("code", bundled_codes())
+def test_every_catalogued_model_declares_a_battery_as_its_file_lists_battery_value(
+    code: str,
+) -> None:
+    """Every kind, every context: True exactly when the bundled file lists
+    ``battery_value``; None for a serial outside the catalogue."""
+    data = json.loads(model_settings._root().joinpath(f"{code}.json").read_text(encoding="utf-8"))
+    serial = f"{code[:5]}P0000000001"
+    expected = "battery_value" in data["settings"] if model_for_serial(serial) else None
+    contexts = [settings_of(code, standalone=True)]
+    contexts += [settings_of(code, connect) for connect in (None, *ConnectType)]
+    assert [declares_battery(serial, s.values()) for s in contexts] == [expected] * len(contexts)
 
 
 @pytest.mark.parametrize(

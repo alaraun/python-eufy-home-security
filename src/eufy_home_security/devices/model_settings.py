@@ -125,21 +125,21 @@ leads to the NAS settings (with a parent that cell shows the parent's name and o
 nothing). A device paired to a station reports none of them.
 """
 BATTERY_PROPERTY: Final = "battery_value"
-"""The thing-description property of a model that runs on a battery.
+"""The thing-description property of a model with a battery level.
 
-The eufy app shows a camera's battery and charging state only when its thing
-description has this property (and the product's feature flags allow it); a
-mains-powered camera or a wired doorbell, whose block reports a charging field too,
-gets a power-source icon instead. See :meth:`~..station.Station.has_battery`.
+The eufy app shows a device's battery level (and a camera's charging state) only when
+its thing description has this property, for every kind: a mains-powered camera or a
+wired doorbell, whose block reports a charging field too, gets a power-source icon
+instead, and a siren, sensor, keypad or station without it shows at most its
+low-battery flag. See :meth:`~..station.Station.has_battery` and :func:`battery_level`.
 """
 BATTERY_DEVICE_FLAG: Final = "device_is_battery_device"
 """The setting whose declared default marks a model as a battery device **[declared]**: a
 constant of the model's settings, read from no device. See :func:`reached_on_demand`.
 """
 BATTERY_KINDS: Final = frozenset({DeviceKind.CAMERA, DeviceKind.DOORBELL})
-"""The device kinds :func:`declares_battery` and :func:`reached_on_demand` read a battery
-from the settings of: the eufy app's rule is the camera card's. A sensor, lock or keypad
-declares its battery differently, and a station model's battery is not this rule's.
+"""The device kinds :func:`reached_on_demand` reads the battery-device flag of: a sensor,
+lock, safe or station declares that flag too, with another meaning.
 """
 _PRODUCT_CODE: Final = re.compile(r"[A-Za-z0-9]{1,32}")
 _SN_SLOTS: Final = frozenset({"$device_sn", "$station_sn"})
@@ -1529,15 +1529,14 @@ def product_code_of(device_new_pn: object, serial: str) -> str | None:
 
 
 def declares_battery(serial: str, settings: Iterable[Setting]) -> bool | None:
-    """Whether the camera or doorbell ``serial`` runs on a battery, as the eufy app
-    decides whether to show one **[declared]**: True when ``settings`` (its settings
-    list) has :data:`BATTERY_PROPERTY`, False when the list is not empty and lacks it.
+    """Whether the device ``serial`` has a battery level, as the eufy app decides whether
+    to show one **[declared]**, for every kind: True when ``settings`` (its settings list)
+    has :data:`BATTERY_PROPERTY`, False when the list is not empty and lacks it.
 
-    None when ``serial`` is of another kind or no catalogued model
-    (:data:`BATTERY_KINDS`), and when ``settings`` is empty (unknown).
+    None when ``serial`` is of no catalogued model, and when ``settings`` is empty
+    (unknown). A low-battery flag (a sensor's or siren's) is not this.
     """
-    model = model_for_serial(serial)
-    if model is None or model.kind not in BATTERY_KINDS:
+    if model_for_serial(serial) is None:
         return None
     keys = {setting.key for setting in settings}
     return (BATTERY_PROPERTY in keys) if keys else None
@@ -1663,22 +1662,31 @@ class BatteryRead:
 
 
 DEFAULT_BATTERY_READS: Final = (BatteryRead(PARAM_BATTERY),)
-"""The battery read of a model whose file names none: param 1101 as reported."""
+"""The battery read of a model without a file, or whose file declares a level and names
+no read: param 1101 as reported."""
 
 
 def battery_reads(product_code: str | None) -> tuple[BatteryRead, ...]:
     """The parameters a device of ``product_code`` reports its battery level in, first
-    one first; :data:`DEFAULT_BATTERY_READS` without a code, a file or a ``battery`` in
-    it. Reads like :func:`settings_of` (same memo) and raises like it."""
+    one first: ``()`` when its file declares no :data:`BATTERY_PROPERTY` (no level, as
+    the eufy app shows none), else the file's ``battery``; :data:`DEFAULT_BATTERY_READS`
+    without a code, a file or a ``battery`` in it. Reads like :func:`settings_of` (same
+    memo) and raises like it."""
     if product_code is None or not _PRODUCT_CODE.fullmatch(product_code):
         return DEFAULT_BATTERY_READS
-    return _load(product_code.upper()).battery or DEFAULT_BATTERY_READS
+    model = _load(product_code.upper())
+    if not model.entries:
+        return DEFAULT_BATTERY_READS
+    if BATTERY_PROPERTY not in model.entries:
+        return ()
+    return model.battery or DEFAULT_BATTERY_READS
 
 
 def battery_level(product_code: str | None, params: Mapping[int, str | None]) -> int | None:
     """The battery level of a device of ``product_code`` from its reported ``params``,
     as the eufy app reads it: the first of :func:`battery_reads` the device reports,
-    through its levels. None when it reports none, or no level."""
+    through its levels. None when it reports none, or no level, and for a model whose
+    file declares no :data:`BATTERY_PROPERTY`."""
     for read in battery_reads(product_code):
         raw = params.get(read.param)
         if raw is not None:

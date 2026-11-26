@@ -2542,7 +2542,7 @@ async def test_on_demand_station_discover_and_start(sn: str) -> None:
         ("T84A1P0000000000", False, False),  # wired wall light: the flag declared False
         ("T8203P0000000000", False, True),  # a doorbell listing a battery, without the flag
         ("T8191P0000000000", False, None),  # a camera without settings: unknown
-        ("T8030P0000000000", False, None),  # a HomeBase: not a camera or doorbell
+        ("T8030P0000000000", False, False),  # a HomeBase: declares no battery level
     ],
 )
 async def test_a_station_is_reached_on_demand_by_the_app_list_or_the_battery_device_flag(
