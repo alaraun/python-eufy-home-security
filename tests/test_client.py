@@ -2330,6 +2330,24 @@ async def test_an_e2e_recording_key_is_the_owners_cipher_rsa_key(
         assert not [e for e in events if isinstance(e, CloudProblem)]
 
 
+async def test_a_failed_e2e_recording_key_fetch_raises_and_is_a_cloud_problem() -> None:
+    cloud = FakeCloud(
+        owner_ids={SYNTHETIC.station_sn: OWNER_ID}, cipher_records={7: {"private_key": "PEM-7"}}
+    )
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        events: list[Event] = []
+        eufy.subscribe(events.append)
+        await eufy.async_login()
+        await eufy.cloud.async_get_station_owner_id(SYNTHETIC.station_sn)
+        cloud.call_errors = [CloudApiError(10000, "server error")]
+        with pytest.raises(CloudApiError):
+            await eufy._e2e_key_provider(SYNTHETIC.station_sn)(7)
+        problems = [e for e in events if isinstance(e, CloudProblem)]
+        assert [type(p.error) for p in problems] == [CloudApiError]
+        assert problems[0].station_sn == SYNTHETIC.station_sn
+
+
 async def test_keys_optional_credentials_for_a_keyless_record_carry_the_owner_only() -> None:
     """A ``get_ciphers`` record for the cipher that carries no key: with ``keys_optional``
     the owner's credentials without keys, asked once per back-off; without it a

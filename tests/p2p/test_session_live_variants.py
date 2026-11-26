@@ -834,3 +834,22 @@ async def test_after_the_hold_overflows_nothing_more_is_held(
     # The last held P-frame goes too: the record lost after it may be its rest.
     assert video == [*range(MEDIA_GOP - 1), *after_key]
     assert audio == [*range(MEDIA_GOP), *after_key]
+
+
+async def test_a_held_record_that_fails_the_stream_ends_the_replay(e2e_hb2: FakeStation) -> None:
+    """A record of the PIN key among the held ones fails the stream before its first
+    keyframe: the records held after it are not decoded, the reader gets the error."""
+    session = _session(e2e_hb2, _Keys(delay=0))
+    stream = _e2e_stream(session)
+    try:
+        stream._feed(FrameType.VIDEO_FRAME, _e2e_video(1), subheader=_e2e_sub())  # fetches
+        stream._feed(FrameType.VIDEO_FRAME, _e2e_video(2), subheader=_e2e_sub(10, version=4))
+        for n in range(MEDIA_GOP, MEDIA_GOP + 3):
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+        await _key_settled(stream)
+        assert not stream._frames
+        with pytest.raises(PinProtectedKeyError):
+            await anext(stream)
+    finally:
+        await stream.aclose()
+        await session.async_close()

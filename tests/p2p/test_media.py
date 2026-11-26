@@ -475,6 +475,15 @@ def test_e2e_audio_decrypts_under_the_key_of_the_latest_video_record() -> None:
     )
 
 
+def test_e2e_audio_decrypts_its_datalen_bytes_only() -> None:
+    """A record padded past its header's ``datalen`` decrypts the tag and ciphertext."""
+    decoder = _e2e_decoder(c7=_E2E_CIPHER)
+    decoder.decode(FrameType.VIDEO_FRAME, _e2e_video(_PICTURE), _E2E_SUB)
+    frame = decoder.decode(FrameType.AUDIO_FRAME, _e2e_audio(b"\xff\xf1AAC") + bytes(8), _E2E_SUB)
+    assert frame is not None
+    assert frame.data == b"\xff\xf1AAC"
+
+
 def test_e2e_audio_of_another_stream_type_is_not_delivered() -> None:
     decoder = _e2e_decoder(c7=_E2E_CIPHER)
     decoder.decode(FrameType.VIDEO_FRAME, _e2e_video(_PICTURE), _E2E_SUB)
