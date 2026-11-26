@@ -1296,8 +1296,8 @@ class CloudProblem:
     refresh hit it; None for the push listener and the MQTT certificate. The error is
     account-level, so it is delivered here only: the station's ``ConnectionChanged``
     carries just the cause (``CREDENTIALS_UNAVAILABLE``, ``error=None``). The library's
-    own cipher-refresh cooldown (:class:`~.exceptions.RefreshCooldownError`) is not a cloud problem and
-    stays on ``ConnectionChanged.error``.
+    own cipher-refresh cooldown (:class:`~.exceptions.RefreshCooldownError`) is not a cloud
+    problem and stays on ``ConnectionChanged.error``.
     """
 
     error: CloudError

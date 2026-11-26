@@ -1806,8 +1806,9 @@ or `unlocking` until its next report taken, at most 30 s (the app's state wait) 
 take, then its last report again (with a `LockStateChanged`; `unknown` when nothing was
 reported before). A refusing status report ends it at once. Meanwhile the next lock or
 unlock is always sent, as the reading is never the asked state; a call cancelled before
-the lock took it leaves the reading as it was. A command names the account's nickname as its sender, as the app does
-(`eufy.cloud.display_name`: the e-mail's local part only when the account has none).
+the lock took it leaves the reading as it was. A command names the account's nickname as
+its sender, as the app does (`eufy.cloud.display_name`: the e-mail's local part only when
+the account has none).
 Declared from the eufy app, not tested on hardware.
 
 `eufy.lock_state(device_sn)` gives the lock's one merged `LockReading`, whichever station
@@ -1817,9 +1818,9 @@ for a device not listed): `state`, a `LockState`, `source` (`p2p`, `notify`, `cl
 `push` or `lock`, the lock's own status report, or `command`: locking or unlocking while a
 command of this client the lock took is unconfirmed, below), `raw` (the parameter's value,
 or the status report's code) or `event_type` (the push's), and `observed_at` (epoch seconds
-the report or the take dates from; None for a cloud copy without an upload time). Each report the reading
-takes emits `LockStateChanged(device_sn, state, source, station_sn, raw, event_type,
-observed_at, changed)` on the client's stream, the first one included; `changed` is False
+the report or the take dates from; None for a cloud copy without an upload time). Each
+report the reading takes emits `LockStateChanged(device_sn, state, source, station_sn,
+raw, event_type, observed_at, changed)` on the client's stream, the first one included; `changed` is False
 when the state repeats the previous reading's (another source, raw value or time). A
 report the reading does not take (older, a repeated value) emits nothing, so the entity
 needs no merging of its own: write the state from the event, or read `lock_state` on it.
