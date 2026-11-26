@@ -1790,9 +1790,14 @@ cloud user id before the first login), `MqttAccountRequiredError` (an MQTT lock:
 (`err.code`; -151 is a refused sequence number), `LockNotMovedError` (`err.state`: jammed
 or stopped between positions) or `DeviceTimeoutError`. A lock whose reading (below: one
 merged reading of every source, never the MQTT reports alone) already is the asked state
-returns at once, sending nothing. The default wait is the app's 20 s for the answer (over MQTT after up to
-15 s for the broker to take the command) plus 30 s for the
-state, and `timeout` bounds the whole call; run it as a task and let `LockStateChanged`
+returns at once, sending nothing. Each wait is the app's: on the station path the connect,
+the lock's public key (a cloud call, on the 1961 and 1930 forms) and the station's result
+come first, with no bound of their own beyond the session's, then 20 s for the lock's
+answer; over MQTT up to 15 s for the broker to take the command (a connection that is not
+up gets 10 s of them), then 20 s for the answer; on both, then 30 s for the state.
+`timeout` caps the whole call, every step above included, and each wait keeps its own
+default within it: `timeout=75` still ends a lock that never answers after 20 s, and
+`timeout=5` ends any step after 5 s in all. Run it as a task and let `LockStateChanged`
 drive the entity. Once the lock took the command (its answer accepted it) the lock reads
 `locking` or `unlocking` (`source` `command`) until a report ends the wait. When the call
 then fails (a timeout, a lost connection) or is cancelled, the lock keeps reading `locking`

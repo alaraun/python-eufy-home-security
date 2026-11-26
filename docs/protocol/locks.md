@@ -215,9 +215,12 @@ While it lasts the next command is sent whatever the last report says, since the
 never an asked state.
 
 The waits are the app's: 20 s for the lock's answer (over MQTT counted from the broker's
-acknowledgement, which has 15 s), then 30 s for its state; a `timeout`
-bounds the whole command, the public-key query, the connect and the send included. Nothing
-within it raises `DeviceTimeoutError`, whose message names what was missing: the send
+acknowledgement, which has 15 s), then 30 s for its state. A `timeout` caps the whole
+command, the connect, the public-key query and the send included, and each of those waits
+keeps its own default within it (`phase_wait`: the default cut to what is left of the
+call): a lock that never answers ends after 20 s even with `timeout=75`. The steps before
+the answer have no default of their own beyond the session's. A wait that runs out raises
+`DeviceTimeoutError`, whose message names what was missing and the wait it had: the send
 ("not sent"), the station's result after the send went out ("no station result"), the
 lock's answer or its state.
 

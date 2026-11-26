@@ -32,6 +32,7 @@ from eufy_home_security.lock_commands import cm2, frames
 from eufy_home_security.lock_commands.actions import LockAction
 from eufy_home_security.lock_commands.control import LockPath
 from eufy_home_security.lock_commands.mqtt_trans import encode_trans
+from eufy_home_security.mqtt import locks as mqtt_locks_module
 from eufy_home_security.mqtt.account import EufyMqttAccount
 from eufy_home_security.mqtt.envelope import MqttMessage, parse_message
 from eufy_home_security.mqtt.locks import MqttLocks, mqtt_lock_control
@@ -458,18 +459,15 @@ class _Recording:
 
 
 @pytest.mark.parametrize(
-    ("timeout", "waits", "message"),
-    [
-        (None, (15.0, 20.0), "MQTT publish not acknowledged"),
-        (5.0, (None, 5.0), "T85D0***4321: no answer within 5 s"),
-    ],
+    ("timeout", "waits"),
+    [(None, (15.0, 20.0)), (75.0, (15.0, 20.0)), (5.0, (5.0, 5.0))],
 )
-async def test_an_mqtt_lock_command_waits_as_the_app_unless_bounded(
-    timeout: float | None, waits: tuple[object, object], message: str
+async def test_an_mqtt_lock_command_keeps_the_apps_waits_within_its_bound(
+    timeout: float | None, waits: tuple[float, float]
 ) -> None:
-    """Without a bound the publish has 15 s and the answer 20 s from the broker's
-    acknowledgement, the app's waits, and the request's timeout says which one ran out; a
-    bound covers the whole call."""
+    """The publish has 15 s and the answer 20 s from the broker's acknowledgement, the
+    app's waits, each cut to what is left of a ``timeout`` (which caps the call); the
+    request's error says which one ran out."""
     account = _Recording()
     locks = _listed_lock_commands(account)
     device = lock()
@@ -477,10 +475,51 @@ async def test_an_mqtt_lock_command_waits_as_the_app_unless_bounded(
         await locks.async_command(
             device, LockAction.LOCK, control=mqtt_lock_control(device), timeout=timeout
         )
-    assert str(raised.value) == message
+    assert str(raised.value) == "MQTT publish not acknowledged"
     ((publish_wait, answer_wait),) = account.waits
-    assert publish_wait == waits[0]
+    assert publish_wait == pytest.approx(waits[0], abs=0.5)
     assert answer_wait == pytest.approx(waits[1], abs=0.5)
+
+
+class _Silent:
+    """An MQTT account whose request never ends."""
+
+    def add_listener(self, _callback: object) -> Callable[[], None]:
+        return lambda: None
+
+    async def async_request(self, *_: object, **__: object) -> None:
+        await asyncio.Event().wait()
+
+
+async def test_an_mqtt_lock_commands_bound_caps_the_waits_together() -> None:
+    """The publish and answer waits run one after the other; the call's ``timeout`` ends
+    them both."""
+    locks = _listed_lock_commands(_Silent())
+    device = lock()
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    with pytest.raises(DeviceTimeoutError, match=r"no answer within 0\.3 s"):
+        await locks.async_command(
+            device, LockAction.LOCK, control=mqtt_lock_control(device), timeout=0.3
+        )
+    assert loop.time() - started < 2
+
+
+async def test_a_silent_mqtt_lock_ends_at_the_answer_wait_within_a_longer_bound(
+    rig: Rig, wifi_lock: FakeMqttLock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(mqtt_locks_module, "LOCK_ANSWER_TIMEOUT", 0.3)
+    wifi_lock.answer = False
+    account = await _served(rig)
+    loop = asyncio.get_running_loop()
+    try:
+        started = loop.time()
+        async with asyncio.timeout(5):
+            with pytest.raises(DeviceTimeoutError, match=r"within 0\.3 s"):
+                await rig.eufy.async_lock(LOCK_SN, timeout=75)
+        assert loop.time() - started < 3
+    finally:
+        await account.async_stop()
 
 
 async def test_a_lock_message_naming_no_text_serial_is_skipped() -> None:

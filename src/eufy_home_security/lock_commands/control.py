@@ -156,6 +156,14 @@ def check_control(control: LockControl, device_sn: str, path: LockPath) -> LockF
     return control.form
 
 
+def phase_wait(default: float, deadline: float | None, now: float) -> float:
+    """The bound of one wait of a command: its own ``default`` (the app's wait), cut to
+    what is left at ``now`` before the call's ``deadline`` (None: the call has none)."""
+    if deadline is None:
+        return default
+    return max(0.0, min(default, deadline - now))
+
+
 def ends_wait(reading_state: LockState, target: LockState) -> bool:
     """Whether a reading taken while a command waits ends the wait: the asked state, or a
     fault state (the command did not move the bolt)."""

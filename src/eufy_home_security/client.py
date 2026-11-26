@@ -1390,9 +1390,12 @@ class EufySecurity:
     async def async_lock(self, device_sn: str, *, timeout: float | None = None) -> LockState:
         """Lock ``device_sn`` over the path its route takes and return its state once the
         lock reports it locked (:meth:`~.station.Station.async_lock`: the waits, a lock
-        already locked, every error). An MQTT lock without :meth:`use_mqtt` raises
-        :class:`~.exceptions.MqttAccountRequiredError`; a lock on the station path whose
-        station this client does not run raises ``UnsupportedError``."""
+        already locked, a taken command's move, every error). Over MQTT the broker has the
+        eufy app's 15 s to take the command before the 20 s answer wait. ``timeout`` caps
+        the whole call; each wait keeps its own default within it. An MQTT lock without
+        :meth:`use_mqtt` raises :class:`~.exceptions.MqttAccountRequiredError`; a lock on
+        the station path whose station this client does not run raises
+        ``UnsupportedError``."""
         return await self._lock_command(device_sn, LockAction.LOCK, timeout)
 
     async def async_unlock(self, device_sn: str, *, timeout: float | None = None) -> LockState:

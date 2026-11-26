@@ -51,6 +51,7 @@ from ..lock_commands.control import (
     has_member_record,
     is_guest,
     lock_control,
+    phase_wait,
 )
 from ..lock_commands.mqtt_trans import decode_trans, encode_trans
 from ..lock_commands.sequence import LockSequences
@@ -273,25 +274,23 @@ class MqttLocks:
                     return False
                 return True
 
-            if deadline is None:  # the app's waits: the publish, then the answer from its ack
-                publish_wait: float | None = LOCK_PUBLISH_TIMEOUT
-                budget = LOCK_ANSWER_TIMEOUT
-            else:
-                publish_wait, budget = None, deadline - loop.time()
+            # The app's waits, the publish then the answer from its ack, each cut to the
+            # call's deadline, which also bounds both together.
             asking = loop.create_task(
                 self._account.async_request(
                     serial,
                     encode_trans(cm2.P2P_COMMAND, request.payload),
                     match=match,
-                    timeout=max(0.0, budget),
-                    publish_timeout=publish_wait,
+                    timeout=phase_wait(LOCK_ANSWER_TIMEOUT, deadline, loop.time()),
+                    publish_timeout=phase_wait(LOCK_PUBLISH_TIMEOUT, deadline, loop.time()),
                     account_id=user_id,
                     extra_fields=False,
                 )
             )
             ends: set[asyncio.Future[Any]] = {asking, state}
+            left = None if deadline is None else max(0.0, deadline - loop.time())
             try:
-                await asyncio.wait(ends, return_when=asyncio.FIRST_COMPLETED)
+                await asyncio.wait(ends, timeout=left, return_when=asyncio.FIRST_COMPLETED)
             finally:
                 if not asking.done():  # the state came first: the answer no longer counts
                     asking.cancel()
@@ -299,9 +298,9 @@ class MqttLocks:
                 if asking.done() and not asking.cancelled():
                     asking.exception()  # retrieved: the state may decide instead
             if not state.done():  # the state decides when it is in
-                if deadline is not None and isinstance(asking.exception(), DeviceTimeoutError):
+                if asking.cancelled():  # the call's deadline came first
                     raise DeviceTimeoutError(
-                        f"{redact_serial(serial)}: no answer within {budget:.0f} s",
+                        f"{redact_serial(serial)}: no answer within {timeout:g} s",
                         device_sn=serial,
                     )
                 asking.result()
@@ -313,11 +312,11 @@ class MqttLocks:
                         device_sn=serial,
                     )
                 taken_at = states.begin_move(serial, action)
-                budget = LOCK_CONFIRM_TIMEOUT if deadline is None else deadline - loop.time()
-                await asyncio.wait({state}, timeout=max(0.0, budget))
+                budget = phase_wait(LOCK_CONFIRM_TIMEOUT, deadline, loop.time())
+                await asyncio.wait({state}, timeout=budget)
                 if not state.done():
                     raise DeviceTimeoutError(
-                        f"{redact_serial(serial)}: no {target.value} state within {budget:.0f} s",
+                        f"{redact_serial(serial)}: no {target.value} state within {budget:g} s",
                         device_sn=serial,
                     )
             result = state.result()

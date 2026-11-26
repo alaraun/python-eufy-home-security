@@ -235,7 +235,8 @@ The app's thing-model screens of some locks build another form (`apiCommand` 194
 key order, an `account_id` of `""` inside `trans`); the library does not send it.
 
 The publish has 15 s for the broker's acknowledgement, then the lock 20 s to answer, then 30 s
-to report the asked state (a `timeout` bounds the whole call instead). The lock answers in a
+to report the asked state; a `timeout` caps the whole call and each wait keeps its own
+default within it. The lock answers in a
 device message (`cmd` 8) on its response topic: its through data `{"dev_sn", "lock_payload",
 "time"}` names the lock (the topic's lock when `dev_sn` is missing) and opens under the key
 its own `time` names; an answer to another request is skipped. The refusals, waits and

@@ -396,6 +396,36 @@ async def test_no_state_report_times_out(fake: FakeStation, lock_1940: FakeLock)
         await station.async_close()
 
 
+@pytest.mark.parametrize(
+    ("what", "constant"),
+    [("answer", "LOCK_ANSWER_TIMEOUT"), ("locked state", "LOCK_CONFIRM_TIMEOUT")],
+)
+async def test_a_bound_longer_than_a_wait_keeps_that_wait(
+    fake: FakeStation,
+    lock_1940: FakeLock,
+    monkeypatch: pytest.MonkeyPatch,
+    what: str,
+    constant: str,
+) -> None:
+    """``timeout`` caps the whole call, each wait keeps its own default within it: a lock
+    that never answers (or never reports) ends at the app's wait, not at the bound."""
+    monkeypatch.setattr(lock_control_module, constant, 0.3)
+    if what == "answer":
+        lock_1940.answer = False
+    else:
+        lock_1940.report = False
+    station = await _hub(fake, _lock(LOCK_1940), lock_1940)
+    loop = asyncio.get_running_loop()
+    try:
+        started = loop.time()
+        async with asyncio.timeout(5):
+            with pytest.raises(DeviceTimeoutError, match=rf"no {what} within 0\.3 s"):
+                await station.async_lock(LOCK_1940, timeout=75)
+        assert loop.time() - started < 3
+    finally:
+        await station.async_close()
+
+
 async def test_a_fault_state_raises_lock_not_moved(fake: FakeStation, lock_1940: FakeLock) -> None:
     lock_1940.move_to = 5
     station = await _hub(fake, _lock(LOCK_1940), lock_1940)

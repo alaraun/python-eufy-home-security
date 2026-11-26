@@ -56,6 +56,7 @@ from ..lock_commands.control import (
     has_member_record,
     is_guest,
     lock_control,
+    phase_wait,
 )
 from ..lock_commands.sequence import LockSequences, SharedSequence
 from ..models import FrameCipher
@@ -446,7 +447,7 @@ class StationLockControl:
             )
             if sent.read is None and applied:  # the station's result is the lock's answer
                 pending.answer.set_result(LockReply(0, LockResult.ACCEPTED))
-            budget = LOCK_ANSWER_TIMEOUT if deadline is None else deadline - loop.time()
+            budget = phase_wait(LOCK_ANSWER_TIMEOUT, deadline, loop.time())
             try:
                 done = await self._first(pending, budget, serial, "answer")
             except DeviceTimeoutError:
@@ -456,7 +457,7 @@ class StationLockControl:
                     pending.sent.command,
                     SEQUENCE_REFUSED,
                     f"{redact_serial(serial)}: sequence number refused, and no answer or "
-                    f"sequence report within {budget:.0f} s",
+                    f"sequence report within {budget:g} s",
                     device_sn=serial,
                 ) from None
             if done is pending.answer:
@@ -470,7 +471,7 @@ class StationLockControl:
                     )
                 if not pending.state.done():
                     taken_at = self._locks.begin_move(serial, action)
-                    budget = LOCK_CONFIRM_TIMEOUT if deadline is None else deadline - loop.time()
+                    budget = phase_wait(LOCK_CONFIRM_TIMEOUT, deadline, loop.time())
                     await self._first(pending, budget, serial, f"{target.value} state", state=True)
             state = pending.state.result()
             keep = False
@@ -531,7 +532,7 @@ class StationLockControl:
         done, _ = await asyncio.wait(waits, timeout=max(0.0, budget), return_when="FIRST_COMPLETED")
         if not done:
             raise DeviceTimeoutError(
-                f"{redact_serial(serial)}: no {what} within {budget:.0f} s", device_sn=serial
+                f"{redact_serial(serial)}: no {what} within {budget:g} s", device_sn=serial
             )
         first = pending.state if pending.state in done else next(iter(done))
         if (error := first.exception()) is not None:

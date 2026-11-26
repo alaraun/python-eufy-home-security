@@ -1345,17 +1345,22 @@ class Station:
         Sends the lock's P2P command form over this station's session and confirms by the
         lock's state, never by the station's or the lock's acknowledgement (see
         :class:`~.lock_control.StationLockControl`). Returns at once, sending nothing, when
-        the lock already reads locked. ``timeout`` bounds the whole call, public-key query,
-        connect and send included (default: the eufy app's 20 s for the lock's answer, then
-        30 s for its state, the steps before them unbounded). Once the lock took the
-        command it reads locking (unlocking) until a report ends the wait; a call that
-        fails or is cancelled after that keeps it so until the lock's next report, at most
-        ``LOCK_CONFIRM_TIMEOUT`` after the take, and the next command is sent meanwhile. Raises before sending:
-        ``UnsupportedError`` (no lock, no route, a route this library cannot send or one
-        served over MQTT: use :meth:`EufySecurity.async_lock`), ``GuestAccessError`` (a
-        guest account), ``DeviceBusyError`` (a command for this lock still waits). After:
-        ``CommandRejectedError`` (the station or the lock refused it, with its code),
-        ``LockNotMovedError`` (the lock reported a fault state), ``DeviceTimeoutError``.
+        the lock's merged reading already is locked. The waits are the eufy app's: 20 s for
+        the lock's answer, then 30 s for its state (the connect, public-key query and send
+        before them have no bound of their own beyond the session's). ``timeout`` caps the
+        whole call, those steps included, and each wait keeps its own default within it.
+
+        Once the lock took the command it reads locking (unlocking) until a report ends the
+        wait; a call that fails or is cancelled after that keeps it so until the lock's next
+        report, at most ``LOCK_CONFIRM_TIMEOUT`` after the take, and the next command is
+        sent meanwhile.
+
+        Raises before sending: ``UnsupportedError`` (no lock, no route, a route this library
+        cannot send or one served over MQTT: use :meth:`EufySecurity.async_lock`),
+        ``GuestAccessError`` (a guest account), ``DeviceBusyError`` (a command for this lock
+        still waits). After: ``CommandRejectedError`` (the station or the lock refused it,
+        with its code), ``LockNotMovedError`` (the lock reported a fault state),
+        ``DeviceTimeoutError``.
         """
         return await self._lock_control.async_command(device_sn, LockAction.LOCK, timeout=timeout)
 
