@@ -808,6 +808,40 @@ async def test_a_timed_out_mqtt_command_keeps_it_moving_until_the_locks_next_rep
     assert rig.eufy.lock_state(LOCK_SN).state is LockState.LOCKED  # type: ignore[union-attr]
 
 
+async def test_a_held_mqtt_move_ends_at_the_opposite_state_report(
+    rig: Rig, wifi_lock: FakeMqttLock
+) -> None:
+    """A timed-out lock command's hold ends at the lock's next report even when that
+    report is not the asked state."""
+    wifi_lock.report = False
+    account = await _served(rig)
+    try:
+        with pytest.raises(DeviceTimeoutError, match="locked state"):
+            await rig.eufy.async_lock(LOCK_SN, timeout=0.5)
+        assert rig.eufy.lock_state(LOCK_SN).state is LockState.LOCKING  # type: ignore[union-attr]
+        await wifi_lock.async_report(3)
+        await until(
+            lambda: rig.eufy.lock_state(LOCK_SN).source is LockStateSource.LOCK  # type: ignore[union-attr]
+        )
+    finally:
+        await account.async_stop()
+    assert rig.eufy.lock_state(LOCK_SN).state is LockState.UNLOCKED  # type: ignore[union-attr]
+
+
+async def test_a_held_mqtt_move_ends_at_a_jammed_push(rig: Rig, wifi_lock: FakeMqttLock) -> None:
+    wifi_lock.report = False
+    account = await _served(rig)
+    try:
+        with pytest.raises(DeviceTimeoutError, match="locked state"):
+            await rig.eufy.async_lock(LOCK_SN, timeout=0.5)
+        rig.eufy._deliver(_push(517, int(time.time() * 1000)))
+        reading = rig.eufy.lock_state(LOCK_SN)
+    finally:
+        await account.async_stop()
+    assert reading is not None
+    assert (reading.state, reading.source) == (LockState.JAMMED, LockStateSource.PUSH)
+
+
 VIDEO_LOCK_SN = "T8531P2000054323"
 
 

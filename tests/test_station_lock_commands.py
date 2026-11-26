@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import gc
+import time
 from collections.abc import AsyncIterator, Callable
 from types import MappingProxyType
 
@@ -16,7 +17,7 @@ from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.devices._lock_routes_data import LOCK_ROUTES
 from eufy_home_security.devices.lock_routes import LockForm
 from eufy_home_security.devices.locks import LockState, LockStateSource
-from eufy_home_security.events import Event, LockStateChanged
+from eufy_home_security.events import Event, EventSource, LockStateChanged, SecurityEvent
 from eufy_home_security.exceptions import (
     AccountRejectedError,
     CommandRejectedError,
@@ -521,6 +522,36 @@ async def test_a_timed_out_command_keeps_it_moving_until_the_locks_next_report(
         fake.send_param_dump()
         await _until(lambda: _state(station) is LockState.UNLOCKED)
         assert station.lock_state(LOCK_1940).source is LockStateSource.P2P  # type: ignore[union-attr]
+        assert station._locks._hold_expiry == {}
+    finally:
+        await station.async_close()
+
+
+@pytest.mark.parametrize(
+    ("event_type", "state"),
+    [(262, LockState.LOCKED), (517, LockState.JAMMED)],
+    ids=["opposite", "jammed"],
+)
+async def test_a_held_move_ends_at_any_report_not_only_the_asked_state(
+    fake: FakeStation, locked_1940: FakeLock, event_type: int, state: LockState
+) -> None:
+    """A timed-out unlock's hold ends at the lock's next report whatever it says: the
+    opposite state as well as a fault."""
+    station = await _hub(fake, _lock(LOCK_1940), locked_1940)
+    try:
+        with pytest.raises(DeviceTimeoutError, match="unlocked state"):
+            await station.async_unlock(LOCK_1940, timeout=0.3)
+        assert _state(station) is LockState.UNLOCKING
+        push = SecurityEvent(
+            source=EventSource.CLOUD,
+            device_sn=LOCK_1940,
+            event_type=event_type,
+            event_time_ms=int(time.time() * 1000),
+        )
+        assert station.note_lock_push(push) is True
+        reading = station.lock_state(LOCK_1940)
+        assert reading is not None
+        assert (reading.state, reading.source) == (state, LockStateSource.PUSH)
         assert station._locks._hold_expiry == {}
     finally:
         await station.async_close()
