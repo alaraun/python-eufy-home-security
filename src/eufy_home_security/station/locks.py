@@ -244,8 +244,6 @@ class LockStates:
         self._readings[device_sn] = reading
         for watcher in list(self._watchers.get(device_sn, ())):
             watcher(reading)
-        if old is not None and old.state is reading.state:
-            return
         self._bus.emit(
             LockStateChanged(
                 device_sn=device_sn,
@@ -254,6 +252,8 @@ class LockStates:
                 station_sn=self._station_sn,
                 raw=reading.raw,
                 event_type=reading.event_type,
+                observed_at=reading.observed_at,
+                changed=old is None or old.state is not reading.state,
             )
         )
 

@@ -109,12 +109,18 @@ async def test_a_lock_behind_a_station_reads_its_1912(hub: Station, fake: FakeSt
     )
     fake.params[1][1912] = "3"
     await hub.async_update()
-    fake.params[1][1912] = " 3 "  # another value of the same state: no event
+    fake.params[1][1912] = " 3 "  # another value of the same state: taken, not a change
     await hub.async_update()
+    taken_at = hub.session.param_time((1, 1912))
+    await hub.async_update()  # the same value again: not taken, no event
     assert _locks(events) == [
         (LockState.LOCKED, LockStateSource.P2P, "4"),
         (LockState.UNLOCKED, LockStateSource.P2P, "3"),
+        (LockState.UNLOCKED, LockStateSource.P2P, " 3 "),
     ]
+    changes = [e for e in events if isinstance(e, LockStateChanged)]
+    assert [e.changed for e in changes] == [True, True, False]
+    assert changes[-1].observed_at == taken_at
     first = next(e for e in events if isinstance(e, LockStateChanged))
     assert (first.device_sn, first.station_sn) == (LOCK_SN, SYNTHETIC.station_sn)
     assert hub.lock_state(LOCK_SN) == LockReading(
@@ -275,7 +281,7 @@ async def test_an_undated_cloud_copy_never_replaces_a_dated_reading(fake: FakeSt
     station.update_sub_devices([_copy(LOCK, 1912, "4", None)])
     undated = station.lock_state(LOCK_SN)
     assert undated == LockReading(state=LockState.LOCKED, source=LockStateSource.CLOUD, raw="4")
-    assert undated.observed_at is None  # type: ignore[union-attr]
+    assert undated.observed_at is None
     station.update_sub_devices([_copy(LOCK, 1912, "3", None)])  # undated over undated
     assert station.lock_state(LOCK_SN).state is LockState.UNLOCKED  # type: ignore[union-attr]
     assert station.note_lock_push(_push(264, _now_ms()))  # locked from the app

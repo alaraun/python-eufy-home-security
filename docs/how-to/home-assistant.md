@@ -1797,13 +1797,20 @@ drive the entity. A command names the account's nickname as its sender, as the a
 (`eufy.cloud.display_name`: the e-mail's local part only when the account has none).
 Declared from the eufy app, not tested on hardware.
 
-`station.lock_state(device_sn)` gives a `LockReading` (None before anything was reported,
-and for a device that is no lock): `state`, a `LockState`, `source` (`p2p`, `notify`,
-`cloud`, `push` or `lock`, the lock's own status report after a command), `raw` (the parameter's value) or `event_type` (the push's). Every change
-of `state` emits `LockStateChanged(device_sn, state, source, station_sn, raw, event_type)`
-on the client's stream, the first state included; read the state from the event or from
-`lock_state`. The state is the lock-state code as the eufy app's lock controls read the
-lock's `smart_lock_onoff_status`, or what a push about the lock sets:
+`eufy.lock_state(device_sn)` gives the lock's one merged `LockReading`, whichever station
+serves it or none (`station.lock_state(device_sn)` the same for a lock of that station;
+None before anything was reported, and for a device that is no lock; `UnsupportedError`
+for a device not listed): `state`, a `LockState`, `source` (`p2p`, `notify`, `cloud`,
+`push` or `lock`, the lock's own status report), `raw` (the parameter's value, or the
+status report's code) or `event_type` (the push's), and `observed_at` (epoch seconds the
+report dates from; None for a cloud copy without an upload time). Each report the reading
+takes emits `LockStateChanged(device_sn, state, source, station_sn, raw, event_type,
+observed_at, changed)` on the client's stream, the first one included; `changed` is False
+when the state repeats the previous reading's (another source, raw value or time). A
+report the reading does not take (older, a repeated value) emits nothing, so the entity
+needs no merging of its own: write the state from the event, or read `lock_state` on it.
+The state is the lock-state code as the eufy app's lock controls read the lock's
+`smart_lock_onoff_status`, or what a push about the lock sets:
 
 | `LockState` | lock-state code (param 1912 behind a station, 6000 for a lock that is its own station) | push `event_type` | suggested HA lock state (the library's suggestion) |
 |---|---|---|---|
@@ -1830,10 +1837,10 @@ replaces it, and `jammed`, which only a push reports, lasts until the lock's nex
 counts only when it is not older than the reading. Keep `state` (and `raw`) as attributes
 when the entity maps passage and privacy mode to unlocked and locked.
 A lock that no station of this client serves (a Wi-Fi lock without a P2P id is skipped,
-`SkippedDevice`) has no `station.lock_state`; the client keeps its reading from the device
-list's copy, pushes about it and, served through `use_mqtt`, its MQTT status reports, with
-`LockStateChanged.station_sn` None. A lock that is its own station takes its MQTT status
-reports into its station's reading.
+`SkippedDevice`) has no `station.lock_state`; the client keeps its reading
+(`eufy.lock_state`) from the device list's copy, pushes about it and, served through
+`use_mqtt`, its MQTT status reports, with `LockStateChanged.station_sn` None. A lock that
+is its own station takes its MQTT status reports into its station's reading.
 
 ### Garage doors
 

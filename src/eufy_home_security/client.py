@@ -28,7 +28,7 @@ from .cloud.api import CipherKeys, EufyCloudApi, HttpSession, PasswordSource
 from .cloud.const import CLOUD_STATE_REFRESH, FACES_BY_IDS_PATH, firmware_ota_type
 from .cloud.models import CloudDevice, CloudInvite, FirmwareUpdate
 from .cloud.status import CloudStatus, DeviceListSource
-from .devices.locks import LockState
+from .devices.locks import LockReading, LockState
 from .devices.model_settings import (
     Setting,
     bundled_codes,
@@ -1362,6 +1362,22 @@ class EufySecurity:
         if control.path is LockPath.STATION:
             control = LockControl(form=control.form, path=None, reason=_UNSERVED_LOCK)
         return None, listed, control
+
+    def lock_state(self, device_sn: str) -> LockReading | None:
+        """The lock state of ``device_sn``: its one merged reading of every source (its
+        station's reports, the device list's copy, pushes, its own status reports over its
+        station or the MQTT broker; the newest report wins, see
+        :class:`~.station.locks.LockStates`), whichever station serves it, or none. None
+        before anything was reported and for a device that is no lock. Each report taken
+        emits :class:`~.events.LockStateChanged`. Sync; raises ``UnsupportedError`` for a
+        device not listed.
+        """
+        states = self._lock_states(device_sn)
+        if states is None:
+            raise UnsupportedError(
+                f"{redact_serial(device_sn)} is not in the device list", device_sn=device_sn
+            )
+        return states.reading(device_sn)
 
     def lock_control(self, device_sn: str) -> LockControl:
         """Whether this client can lock and unlock ``device_sn``, over which path (its

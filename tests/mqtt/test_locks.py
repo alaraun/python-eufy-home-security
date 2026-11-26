@@ -635,12 +635,10 @@ async def test_a_status_report_before_any_command_is_the_locks_reading(
     account = await _served(rig)
     try:
         await wifi_lock.async_report(4)
-        states = rig.eufy._lock_states(LOCK_SN)
-        assert states is not None
-        await until(lambda: states.reading(LOCK_SN) is not None)
+        await until(lambda: rig.eufy.lock_state(LOCK_SN) is not None)
     finally:
         await account.async_stop()
-    reading = states.reading(LOCK_SN)
+    reading = rig.eufy.lock_state(LOCK_SN)
     assert reading is not None
     assert (reading.state, reading.source, reading.raw) == (
         LockState.LOCKED,
@@ -659,9 +657,7 @@ async def test_a_lock_command_is_sent_when_a_newer_push_says_otherwise_than_mqtt
         assert await rig.eufy.async_lock(LOCK_SN, timeout=5) is LockState.LOCKED
         wifi_lock.state_code = 3  # moved by hand; only the push says so
         rig.eufy._deliver(_push(258, int(time.time() * 1000) + 1))
-        states = rig.eufy._lock_states(LOCK_SN)
-        assert states is not None
-        assert states.reading(LOCK_SN).state is LockState.UNLOCKED  # type: ignore[union-attr]
+        assert rig.eufy.lock_state(LOCK_SN).state is LockState.UNLOCKED  # type: ignore[union-attr]
         assert await rig.eufy.async_lock(LOCK_SN, timeout=5) is LockState.LOCKED
     finally:
         await account.async_stop()
@@ -682,6 +678,40 @@ async def test_a_push_older_than_the_mqtt_report_keeps_the_mqtt_reading(
     finally:
         await account.async_stop()
     assert [a for a, _ in wifi_lock.received] == [LockAction.LOCK]
+
+
+async def test_each_report_taken_emits_one_event_and_sets_the_public_reading(
+    rig: Rig, wifi_lock: FakeMqttLock
+) -> None:
+    """``EufySecurity.lock_state`` is the merged reading; each report it takes emits one
+    ``LockStateChanged`` (``changed`` False when the state repeats), a report it drops
+    none."""
+    account = await _served(rig)
+    events = _events(rig)
+    try:
+        await wifi_lock.async_report(4)
+        await until(lambda: len(events) == 1)
+        first = rig.eufy.lock_state(LOCK_SN)
+        await wifi_lock.async_report(4)
+        await until(lambda: len(events) == 2)
+        again = rig.eufy.lock_state(LOCK_SN)
+        rig.eufy._deliver(_push(258, int(time.time() * 1000) - 60_000))  # older: dropped
+    finally:
+        await account.async_stop()
+    changes = [e for e in events if isinstance(e, LockStateChanged)]
+    assert [(e.state, e.source, e.changed) for e in changes] == [
+        (LockState.LOCKED, LockStateSource.LOCK, True),
+        (LockState.LOCKED, LockStateSource.LOCK, False),
+    ]
+    assert first is not None
+    assert again is not None
+    assert first.observed_at is not None
+    assert again.observed_at is not None
+    assert again.observed_at >= first.observed_at
+    assert changes[1].observed_at == again.observed_at
+    assert rig.eufy.lock_state(LOCK_SN) == again
+    with pytest.raises(UnsupportedError, match="device list"):
+        rig.eufy.lock_state(LOCK2_SN)
 
 
 VIDEO_LOCK_SN = "T8531P2000054323"

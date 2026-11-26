@@ -1521,15 +1521,19 @@ class ZoomChanged:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class LockStateChanged:
-    """A lock's state differs from the one the account last knew.
+    """A lock's reading was replaced: a report was taken into the lock's one merged
+    reading (``EufySecurity.lock_state``).
 
     Emitted by :class:`~.client.EufySecurity` for a device graded
-    :attr:`~.devices.capabilities.Capability.LOCK`, the first state included, from the
-    lock's one merged reading: its station's parameter dump or notify, the device list's
-    parameters, a cloud push about it, or its own status report over its station or the
-    MQTT broker (``source``); the state is already set when a subscriber receives it.
-    ``raw`` is the lock-state parameter's value of a parameter source (the code of the
-    lock's own report), ``event_type`` the push's (see :mod:`~.devices.locks`).
+    :attr:`~.devices.capabilities.Capability.LOCK`, once per report taken, the first one
+    included: its station's parameter dump or notify, the device list's parameters, a
+    cloud push about it, or its own status report over its station or the MQTT broker
+    (``source``). A report the reading does not take (older than it, a repeated value) emits
+    nothing. ``changed`` is False when the state repeats the previous reading's (a report
+    with another source, raw value or time); the reading is already set when a subscriber
+    receives it. ``raw`` is the lock-state parameter's value of a parameter source (the code
+    of the lock's own report), ``event_type`` the push's (see :mod:`~.devices.locks`),
+    ``observed_at`` the reading's report time (:class:`~.devices.locks.LockReading`).
     ``station_sn`` is the station the lock is paired to, or its own serial; None for a lock
     no station of the client serves.
     """
@@ -1540,6 +1544,8 @@ class LockStateChanged:
     station_sn: str | None = None
     raw: str | None = None
     event_type: int | None = None
+    observed_at: float | None = None
+    changed: bool = True
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
