@@ -270,6 +270,7 @@ async def test_a_failing_first_send_propagates_and_is_not_resent() -> None:
     with pytest.raises(OSError, match="gone"):
         await channel.send_data(b"cmd")
     await asyncio.sleep(0.03)
+    assert channel._acks == {}
     await channel.close()
     assert len(sent) == 1
 

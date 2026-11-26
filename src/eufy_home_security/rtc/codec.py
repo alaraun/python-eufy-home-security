@@ -312,7 +312,7 @@ def obfuscate(packet: bytes, *, rng: random.Random | None = None) -> bytes:
     u8 random | packet XOR key | pad random bytes``."""
     rand = rng or random.SystemRandom()
     key = bytes(rand.getrandbits(8) for _ in range(16)) if rng else os.urandom(16)
-    limit = _PAD_LIMIT - len(packet) if len(packet) + OBFUSCATION_HEADER_LEN < 1000 else 1
+    limit = _PAD_LIMIT - len(packet)
     pad = (rand.randrange(limit) if limit > 1 else 0) & 0xFF
     body = bytes(b ^ key[i & 15] for i, b in enumerate(packet))
     tail = bytes(rand.getrandbits(8) for _ in range(pad))

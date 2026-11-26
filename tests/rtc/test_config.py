@@ -11,6 +11,8 @@ from eufy_home_security.exceptions import ProtocolError
 from eufy_home_security.rtc.config import (
     KCP_TYPE_MULTI,
     KCP_TYPE_SINGLE,
+    QUICK_LOGIN_LIFETIME,
+    QuickLogin,
     RtcConfig,
     commands_encrypted,
     data_channel_kcp_type,
@@ -277,3 +279,13 @@ def test_commands_are_encrypted_per_model_and_firmware(
     model: str, firmware: int | None, encrypted: bool
 ) -> None:
     assert commands_encrypted(model, firmware) is encrypted
+
+
+def test_a_quick_login_record_lasts_23_hours() -> None:
+    record = QuickLogin("k" * 16, "c" * 32, "198.51.100.20", 1000.0)
+    assert record.usable(1000.0 + QUICK_LOGIN_LIFETIME)
+    assert not record.usable(1000.0 + QUICK_LOGIN_LIFETIME + 1)
+    assert QUICK_LOGIN_LIFETIME == 23 * 3600
+    assert not QuickLogin("k" * 15, "c" * 32, "s", 1000.0).usable(1000.0)
+    assert not QuickLogin("k" * 16, "c" * 31, "s", 1000.0).usable(1000.0)
+    assert "k" * 16 not in repr(record)

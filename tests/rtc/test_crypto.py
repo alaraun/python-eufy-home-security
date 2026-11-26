@@ -165,3 +165,8 @@ def test_seal_round_trips_through_the_class() -> None:
     crypto = RtcSignalingCrypto()
     sealed = crypto.seal(SESSION, 42, b"hello")
     assert crypto.open(SESSION, 42, sealed).startswith(b"hello")
+
+
+def test_a_short_secret_is_cut_at_its_first_nul() -> None:
+    # "ab" + 13 NULs + "7": the NUL cut drops the salt's digit as well.
+    assert derive_key("ab", 7) == b"ab" + bytes(14)

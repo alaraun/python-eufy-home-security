@@ -104,6 +104,10 @@ def test_a_corrupted_packet_fails_its_crc() -> None:
         (b"\x03\x00" * 10, "shorter"),
         (b"\x04" + bytes(59), "tag"),
         (bytes.fromhex(GOLDEN[2][2])[:-1], "declares"),
+        (
+            bytes.fromhex(GOLDEN[0][2])[:0x28] + b"\x00" + bytes.fromhex(GOLDEN[0][2])[0x29:],
+            "declares",
+        ),
     ],
 )
 def test_a_malformed_packet_is_refused(data: bytes, message: str) -> None:
@@ -133,8 +137,9 @@ def test_a_truncated_wrapper_is_refused() -> None:
 
 
 def test_a_long_packet_gets_no_padding() -> None:
-    packet = codec.encode_packet(GOLDEN[0][0], bytes(990))
-    assert codec.obfuscate(packet, rng=random.Random(3))[20] == 0
+    for size in (990, 0x3D3 - codec.HEADER_LEN - 1):  # the pad limit is 0x3d3 - length
+        packet = codec.encode_packet(GOLDEN[0][0], bytes(size))
+        assert codec.obfuscate(packet, rng=random.Random(3))[20] == 0
 
 
 def test_a_response_header_keeps_the_request_ids() -> None:
@@ -231,3 +236,21 @@ def test_the_stream_decoder_splits_back_to_back_packets() -> None:
 def test_the_stream_decoder_refuses_a_stream_out_of_step(data: bytes, message: str) -> None:
     with pytest.raises(ProtocolError, match=message):
         codec.StreamDecoder().feed(data)
+
+
+def test_a_body_at_the_limit_is_framed_and_streamed() -> None:
+    packet = codec.encode_packet(GOLDEN[0][0], bytes(codec.MAX_BODY_LEN), obfuscated=False)
+    assert codec.StreamDecoder().feed(packet) == [packet]
+    with pytest.raises(ValueError, match="exceeds"):
+        codec.encode_packet(GOLDEN[0][0], bytes(codec.MAX_BODY_LEN + 1))
+
+
+def test_a_header_only_datagram_is_not_taken_for_a_wrapper() -> None:
+    datagram = b"\x08\x00" + bytes(codec.OBFUSCATION_HEADER_LEN - 2)
+    assert not codec.is_obfuscated(datagram)
+    assert codec.is_obfuscated(datagram + b"\0")
+
+
+def test_the_discover_answer_keeps_the_current_server_for_an_empty_one() -> None:
+    for body in (b'{"server_addr": ""}', b"{}", b'{"server_addr": 5}'):
+        assert DiscoverAnswer.decode(body).login_address("203.0.113.1") == "203.0.113.1"

@@ -163,3 +163,8 @@ def test_decrypt_command_reply_rejects_a_bad_tag() -> None:
     wrapper[0] ^= 1
     with pytest.raises(ProtocolError, match="did not authenticate"):
         decrypt_command_reply(KEY, bytes(wrapper))
+
+
+def test_a_header_only_frame_can_be_sealed() -> None:
+    packet = encrypt_command(KEY, FRAME[:HEADER_LEN], 0, iv=IV)
+    assert is_sealed(packet[:HEADER_LEN])

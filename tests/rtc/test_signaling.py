@@ -83,6 +83,7 @@ def test_a_private_call_without_boot_action_leaves_it_out() -> None:
         config(), CallKind.PRIV1, channel=0, contact_id=CONTACT, now=NOW, token=b"t", sdp_info=SDP
     )
     assert value["eufy_p2p_type"] == "priv1"
+    assert base64.b64decode(value["token"]) == b"t"
     assert "boot_action" not in value
 
 

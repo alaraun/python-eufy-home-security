@@ -11,6 +11,7 @@ import pytest
 from eufy_home_security.exceptions import ProtocolError
 from eufy_home_security.rtc.media import (
     START_CODE,
+    AccessUnit,
     H264Depacketizer,
     H265Depacketizer,
     PayloadType,
@@ -292,3 +293,20 @@ def test_short_payloads_yield_nothing() -> None:
     assert H264Depacketizer().push(RtpPacket.parse(rtp(b"\x1c", marker=True))) == []
     h265 = H265Depacketizer()
     assert h265.push(RtpPacket.parse(rtp(b"\x62\x01", pt=PayloadType.H265, marker=True))) == []
+
+
+def test_h265_fragments_keep_the_layer_bit_of_the_payload_header() -> None:
+    nal = bytes([HIDR[0] | 1, 1]) + b"L" * 20  # LayerId's high bit set
+    fragments = _fu(nal, 8)
+    dep = H265Depacketizer()
+    out: list[AccessUnit] = []
+    for i, frag in enumerate(fragments):
+        last = i == len(fragments) - 1
+        out += dep.push(RtpPacket.parse(rtp(frag, pt=PayloadType.H265, seq=i, marker=last)))
+    assert out[0].data == START_CODE + nal
+
+
+def test_an_aggregate_stops_at_a_zero_length() -> None:
+    payload = _stap_a(SPS) + b"\x00\x00" + struct.pack("!H", 3) + b"\x68ab"
+    out = H264Depacketizer().push(RtpPacket.parse(rtp(payload, marker=True)))
+    assert [u.data for u in out] == [START_CODE + SPS]

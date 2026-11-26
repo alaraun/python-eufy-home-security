@@ -17,6 +17,7 @@ from eufy_home_security.exceptions import CommunicationError, ProtocolError
 from eufy_home_security.rtc import _ikcp
 from eufy_home_security.rtc.data_channel import (
     KCP_DOWNLOAD_CONV,
+    KCP_PREFIX_LEN,
     LINK_HEADER_LEN,
     LINK_HEADER_LEN_OLD,
     OUTER_HEAD_MAGIC,
@@ -325,10 +326,19 @@ async def test_a_bad_message_inside_kcp_is_dropped() -> None:
 async def test_the_old_layout_channel_sends_the_short_header() -> None:
     a2b: asyncio.Queue[bytes] = asyncio.Queue()
     b2a: asyncio.Queue[bytes] = asyncio.Queue()
-    left = KcpDataChannel(_Pipe(a2b, b2a), old_protocol=True)
+    sent: list[bytes] = []
+
+    class Recording(_Pipe):
+        async def send(self, data: bytes) -> None:
+            sent.append(data)
+            await super().send(data)
+
+    left = KcpDataChannel(Recording(a2b, b2a), old_protocol=True)
     right = KcpDataChannel(_Pipe(b2a, a2b))
     try:
         await left.send_message(b"p")
+        link = sent[0][KCP_PREFIX_LEN + 24 :]  # past the prefix and the KCP header
+        assert struct.unpack_from("<HH", link, 0) == (9, LINK_HEADER_LEN_OLD)
         await left.send_message(b"q")
         first = await asyncio.wait_for(right.recv_message(), 2)
         second = await asyncio.wait_for(right.recv_message(), 2)
