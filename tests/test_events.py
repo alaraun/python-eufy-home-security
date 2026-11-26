@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import dataclasses
+import os
+import time
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -240,6 +244,61 @@ def test_a_history_record_without_a_usable_offset_is_read_in_the_host_zone(
 ) -> None:
     started = HistoryRecord.from_row(_clip_row(time_zone=time_zone)).started_at
     assert started == datetime(2026, 10, 1, 7, 24, 14).astimezone()
+
+
+def test_a_history_record_read_near_a_time_takes_a_zone_only_where_it_has_no_offset() -> None:
+    plus2 = timezone(timedelta(hours=2))
+    near = datetime(2026, 10, 1, 5, 0, tzinfo=UTC)
+    own = HistoryRecord.from_row(_clip_row())
+    assert own.times_near(near, plus2) == (own.started_at, own.ended_at)  # its own +0300
+    bare = HistoryRecord.from_row(_clip_row(time_zone=""))
+    assert bare.times_near(near, plus2) == (
+        datetime(2026, 10, 1, 7, 24, 14, tzinfo=plus2),
+        datetime(2026, 10, 1, 7, 24, 20, tzinfo=plus2),
+    )
+    assert bare.times_near(near) == (bare.started_at, bare.ended_at)  # the host's zone
+
+
+@pytest.fixture
+def host_berlin() -> Iterator[None]:
+    """The host's zone is Europe/Berlin for the test."""
+    old = os.environ.get("TZ")
+    os.environ["TZ"] = "Europe/Berlin"
+    time.tzset()
+    try:
+        yield
+    finally:
+        if old is None:
+            del os.environ["TZ"]
+        else:
+            os.environ["TZ"] = old
+        time.tzset()
+
+
+@pytest.mark.parametrize("hour", [0, 1])
+@pytest.mark.parametrize("zone_of", ["station", "host"])
+def test_a_history_record_in_a_repeated_hour_is_read_nearest_the_time_given(
+    request: pytest.FixtureRequest, hour: int, zone_of: str
+) -> None:
+    """The half past two of the day Berlin's clock goes back happens twice, an hour
+    apart, in the station's zone or, without one, in the host's."""
+    berlin: ZoneInfo | None = ZoneInfo("Europe/Berlin")
+    if zone_of == "host":
+        request.getfixturevalue("host_berlin")
+        berlin = None
+    row = HistoryRecord.from_row(
+        _clip_row(
+            start_time="2026-10-25 02:30:00",  # hygiene: ok
+            end_time="2026-10-25 02:30:20",  # hygiene: ok
+            time_zone="",
+        )
+    )
+    near = datetime(2026, 10, 25, hour, 31, tzinfo=UTC)  # hygiene: ok
+    started, ended = row.times_near(near, berlin)
+    assert started == datetime(2026, 10, 25, hour, 30, tzinfo=UTC)  # hygiene: ok
+    assert ended == datetime(2026, 10, 25, hour, 30, 20, tzinfo=UTC)  # hygiene: ok
+    far = row.times_near(datetime(2026, 10, 25, 1 - hour, 59, tzinfo=UTC), berlin)  # hygiene: ok
+    assert far[0] == datetime(2026, 10, 25, 1 - hour, 30, tzinfo=UTC)  # hygiene: ok
 
 
 @pytest.mark.parametrize(

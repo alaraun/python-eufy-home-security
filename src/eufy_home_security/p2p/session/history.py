@@ -62,6 +62,7 @@ class HistoryQueries:
         before: int | None = None,
         before_day: date | None = None,
         keep: Callable[[HistoryRecord], bool] | None = None,
+        stop: Callable[[HistoryRecord], bool] | None = None,
         device_sn: str | None = None,
         page_size: int | None = None,
         timeout: float,
@@ -85,7 +86,7 @@ class HistoryQueries:
         seen: set[int] = set()
         day = last if cursor_day is None else min(last, cursor_day)
         while day >= first:
-            await self._history_day(
+            stopped = await self._history_day(
                 day,
                 records,
                 seen,
@@ -93,12 +94,15 @@ class HistoryQueries:
                 count=count,
                 start_id=before if day == cursor_day else None,
                 keep=keep,
+                stop=stop,
                 device_sn=native_device_sn,
                 page_size=page_size,
                 timeout=timeout,
             )
             if count is not None and len(records) >= count:
                 return records[:count]
+            if stopped:
+                break
             day -= timedelta(days=1)
         return records
 
@@ -171,15 +175,17 @@ class HistoryQueries:
         count: int | None,
         start_id: int | None = None,
         keep: Callable[[HistoryRecord], bool] | None = None,
+        stop: Callable[[HistoryRecord], bool] | None = None,
         device_sn: str | None = None,
         page_size: int,
         timeout: float,
-    ) -> None:
+    ) -> bool:
         """Add one day's records to ``records``, page by page, until the day or ``count``
         runs out; ``seen`` holds the ``record_id`` values already met. With
         ``start_id`` the day is paged from that row, which is left out (under
         ``DB_QUERY_LOCAL_EVENTS`` the day is paged from its newest row and the rows
-        from ``start_id`` up are left out); only rows ``keep`` accepts are added."""
+        from ``start_id`` up are left out); only rows ``keep`` accepts are added.
+        Returns True when a page held a row ``stop`` accepts (no older page is asked)."""
         cursor = start_id or 0
         if start_id:
             seen.add(start_id)  # the first page starts with the cursor row
@@ -204,24 +210,26 @@ class HistoryQueries:
             seen.update(r.record_id for r in fresh)
             kept = [r for r in fresh if keep is None or keep(r)]
             records.extend((day, self._with_ref(r, day, verb)) for r in kept)
-            stop: str | None = None
+            ending: str | None = None
             if count is not None and len(records) >= count:
-                stop = "enough rows"
+                ending = "enough rows"
+            elif stop is not None and any(stop(r) for r in page):
+                ending = "older rows not wanted"
             elif len(page) < page_size:
-                stop = "short page"
+                ending = "short page"
             elif local:
                 # The app's paging: the oldest start_time of the page, and a page that
                 # starts with the same row as the last one ends the day.
                 times = [r.start_time for r in page if r.start_time]
                 if page[0].record_id and page[0].record_id == first_id:
-                    stop = "first row repeats"
+                    ending = "first row repeats"
                 elif not times:
-                    stop = "no start_time to page from"
+                    ending = "no start_time to page from"
                 else:
                     first_id = page[0].record_id
                     time_cursor = history_cursor_time(min(times))
             elif not fresh or oldest is None or oldest == cursor:
-                stop = "no new cursor"
+                ending = "no new cursor"
             else:
                 cursor = oldest
             _LOGGER.debug(
@@ -232,16 +240,17 @@ class HistoryQueries:
                 len(page),
                 len(fresh),
                 len(kept),
-                f"last page ({stop})" if stop else "asking the next",
+                f"last page ({ending})" if ending else "asking the next",
             )
-            if stop:
-                return
+            if ending:
+                return ending == "older rows not wanted"
         _LOGGER.warning(
             "%s: history of %s still had rows after %d pages; the rest is left out",
             self._core._log_name,
             day.isoformat(),
             HISTORY_MAX_PAGES,
         )
+        return False
 
     async def _history_page(
         self,

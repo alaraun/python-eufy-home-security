@@ -199,7 +199,7 @@ if TYPE_CHECKING:
     from .p2p.session.stats import SessionStats
     from .p2p.station_config_codecs import Schedule, ScheduleSlot, Weekday
     from .p2p.storage_info import DiskInfo, EmmcInfo, MediumState, StorageInfo, StorageMedium
-    from .recordings import RecordingsPage
+    from .recordings import DetectionRecording, DetectionRecordingState, RecordingsPage
     from .station import RemoteStation, SettingsCoverage, Station, StationState, SubDeviceState
     from .station_config import (
         CrossCameraConfig,
@@ -426,7 +426,9 @@ _EXPORTS: dict[str, str] = {
     ),
     "InstallState": "install",
     **dict.fromkeys(("Reach", "StationChoice"), "inclusion"),
-    "RecordingsPage": "recordings",
+    **dict.fromkeys(
+        ("DetectionRecording", "DetectionRecordingState", "RecordingsPage"), "recordings"
+    ),
     **dict.fromkeys(("GUARD_MODE_LABELS", "FrameCipher", "GuardMode", "ValueSource"), "models"),
     **dict.fromkeys(("HostSource", "LanPath", "PathWarning", "suggest_local_ports"), "network"),
     **dict.fromkeys(
@@ -547,6 +549,8 @@ __all__ = [
     "DetectedEventsCounted",
     "DetectionDelivery",
     "DetectionDeliveryReport",
+    "DetectionRecording",
+    "DetectionRecordingState",
     "DetectionType",
     "DeviceAlarm",
     "DeviceAlarmChanged",

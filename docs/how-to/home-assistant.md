@@ -1955,7 +1955,8 @@ image.
 - **A standalone camera's detection** (cloud push only, no path or record):
   `async_event_image(event, THUMBNAIL)` wakes it, reads its newest still and returns it
   only when the still's time lies within `STANDALONE_STILL_WINDOW` (2 s before to 30 s
-  after) of the detection, read in the camera's own `timezone_set`. Otherwise
+  after) of the detection, read in the camera's own `timezone_set` (else its cloud
+  entry's `time_zone`, else the host's zone). Otherwise
   `StillNotWrittenError` when the newest still is older than the detection (retry once,
   about 20 s later; `offset` is the still's time minus the detection's), a plain
   `RecordNotFoundError` when a later detection's still replaced it or there is no dated
@@ -2402,7 +2403,8 @@ others again later; `ended_early` comes back the same on every try.
   query times out as well, so one page may take up to twice `timeout`. A single
   `async_history_record` lookup is not resent.
 - `HistoryRecord` carries what a media browser needs: `video_path` (the validated
-  `.zxvideo` path, else None), `started_at`/`ended_at` (aware, in the row's own UTC
+  recording path: a `/zx/…/….zxvideo` path, or a HomeBase 2 camera's `.dat` file; else
+  None), `started_at`/`ended_at` (aware, in the row's own UTC
   offset), `duration_s`, `frame_count`, `size_bytes`, `thumb_path`, `record_id`, `ref`.
 - **Finding a listed row again:** every row a listing or lookup returns carries `ref`,
   opaque text that names that row of that camera on that station (URL-path-safe, so it
@@ -2440,6 +2442,116 @@ others again later; `ended_early` comes back the same on every try.
   `LiveStreamLimitError` instead of queueing. The station session's commands, polls
   and trigger frames are never held up. `session.stats().recording_downloads` counts
   them.
+
+#### The recording of a detection that names none
+
+A HomeBase 2 sends its cameras' detections only by cloud push, and that push names no
+recording (no `record_id`, no `video_path`), so nothing in the event leads to the clip or
+its trigger frame. The library finds it:
+
+- `station.needs_recording_match(event)` says when: a camera detection
+  (`SecurityEvent.detection` in `events.DETECTION_KINDS`) of this station with a time,
+  naming no recording, of a paired device whose model has a camera
+  (`DeviceModel.has_camera`) or is unknown, whose station does not send its detections
+  over P2P (`local_detections_for(device_sn)` not verified). On a HomeBase 3 the
+  detection of a camera whose model the library knows never needs it: its P2P copy names
+  the recording (a model the library does not know counts as a camera whose detections
+  the station does not send, so its detections do). A standalone camera lists no
+  recordings, so it never does either.
+- `await station.async_wait_recording_for_detection(event, *, quiet=RECORDING_QUIET,
+  timeout=None)` returns the detection's `HistoryRecord` once it has settled
+  (`recording_settled`), or None when none was listed by `RECORDING_MATCH_GIVE_UP`
+  (180 s) after the event. It lists the camera's recordings around the event's time, every
+  `RECORDING_MATCH_RETRY` (15 s) while none is listed, and again when a running row's end
+  plus `quiet` has passed. A listing goes back only to the page that reaches 180 s before
+  the event (or before the camera's oldest detection still searched), so a busy day costs
+  one page per look, and the waits of one camera's detections share their listings (one
+  in flight, or one finished less than `RECORDING_MATCH_FRESH`, 5 s, ago). The wait is
+  the clip's length plus `quiet` (30 s) plus at most one re-list, never more than 180 s
+  after the event (the longest clip length the eufy app offers is 120 s). A row that
+  ended before the event (the camera's previous short clip) is taken only when no other
+  row matched by then: until 180 s after the event it answers `RECORDING`, since the
+  event's own row may still be listed. Run it as a background task per detection and
+  cancel it at unload; `timeout` bounds each history query.
+- The match: the row named by the event's `video_path` when it names one; else the
+  camera's row that started within `RECORDING_MATCH_WINDOW` (10 s before to 10 s after
+  the event's time, both included), a row that ended before the event's time after every
+  other, then the closest start, on a tie the one that began first, then the lower
+  `record_id`; else the camera's row that holds the event's time (it began earlier and
+  had not ended by then, or still runs), the latest start first. A row of another camera
+  never matches. So a second detection of the same camera inside one clip gets that
+  clip's row: key the copy and the frame by its `ref` and do it once. A row time written
+  without an offset (a HomeBase 2's) is read in the station's zone (its cloud entry's
+  `time_zone`), not the host's; in the hour a clock set back repeats, as the reading
+  nearer the event. An event that names a `record_id` with a day is looked up by it
+  instead. The window is inferred, not measured on a HomeBase 2: on a HomeBase 3 a
+  recording started in the second of its detection's time (one sample), and a cloud push
+  without the station's own time carries one about 3 s later. The eufy app itself opens a
+  push's clip only from the push's own recording fields.
+- `station.event_with_recording(event, record)` is the event naming that row (its
+  `video_path`, its `record_id`, its `thumb_path` when that is a valid still path): pass
+  it to `async_event_image(..., ImageSource.TRIGGER_FRAME)` for the trigger frame, and to
+  `THUMBNAIL` where the row's still path validates (a HomeBase 3's); otherwise `THUMBNAIL`
+  raises `UnsupportedError` there (a HomeBase 2's record ids carry no day to look the
+  still up by). Download the row itself with `async_download_recording`.
+- `await station.async_recording_for_detection(event, *, quiet=…, timeout=…)` is the
+  same look without waiting: a `DetectionRecording(state, record, retry_at, offset_s)`
+  whose `state` is `SETTLED`, `RECORDING` (the row is listed, its clip may still grow) or
+  `NOT_LISTED`, and `retry_at` when asking again can give another answer (None: it
+  cannot). A row settles only by a listing that began `quiet` or more after its end, so
+  a listing slower than `quiet` (many pages) settles no row that grew while it ran; its
+  answer is due again a `RECORDING_MATCH_RETRY` later. `offset_s` is the matched row's
+  start minus the event's time; for `NOT_LISTED` the camera's nearest listed
+  recording's, before or after the event (a whole number of hours off shows the
+  station's clock read in the wrong zone). For a scheduler of its own instead of a
+  waiting task, or to show the trigger frame before the clip is done: fetch the frame at
+  the first answer that has a `record` (on a HomeBase 3 the trigger frame of a clip
+  still recording was shown 5 s after the push; not tried on a HomeBase 2), fetch it
+  again if a later answer names another row (another `ref`: the first was the camera's
+  previous clip), and copy the clip at `SETTLED`. This loop raises what the look raises;
+  the waiting call is the one that rides out a `CommunicationError`.
+
+```python
+if station.needs_recording_match(event):
+    record = await station.async_wait_recording_for_detection(event)
+    if record is not None:
+        named = station.event_with_recording(event, record)
+        image = await station.async_event_image(named, ImageSource.TRIGGER_FRAME)
+        clip = await station.async_download_recording(record, write)
+```
+
+The same with the frame early (`async_recording_for_detection` as the loop body):
+
+```python
+shown = None
+while True:
+    found = await station.async_recording_for_detection(event)
+    if found.record is not None and found.record.ref != shown:
+        named = station.event_with_recording(event, found.record)
+        image = await station.async_event_image(named, ImageSource.TRIGGER_FRAME)
+        shown = found.record.ref
+    if found.state is DetectionRecordingState.SETTLED:
+        clip = await station.async_download_recording(found.record, write)
+        break
+    if found.retry_at is None:
+        break  # no settled row by the bound
+    await asyncio.sleep(max(0.0, (found.retry_at - datetime.now(UTC)).total_seconds()))
+```
+
+Errors: `UnsupportedError` before anything is sent for an event of another station, one
+naming no camera paired here, one without a time, and on a standalone device;
+`RecordNotFoundError` when an event's `record_id` names another camera's row; a
+`CommunicationError` (`DeviceTimeoutError` from a history query, see *Slow pages*,
+`StationUnreachableError`) from `async_recording_for_detection`. The waiting call rides
+out a `CommunicationError`: it logs it (once per 5 minutes) and asks again
+`RECORDING_MATCH_RETRY` later within the same 180 s; at the bound it returns None when
+some look was answered and raises the last error when none was (an event without a time
+has no bound: raised at once). The other errors it raises at once. In tests,
+`FakeStation.add_detection_recording(device_sn, started_at, seconds, listed_after=…)`
+adds a row in the station's own shapes that is listed from `listed_after` on and runs on
+the host's clock (its end grows until `seconds`), so a test sees it not listed, then
+running, then settled. The growing end time is the fake's assumption: how a station
+writes a running row's `end_time` is not measured.
 
 #### Playing a recording without downloading it first
 

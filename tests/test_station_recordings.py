@@ -4,35 +4,52 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-from collections.abc import AsyncIterator
-from datetime import UTC, date, datetime, timedelta, tzinfo
+import gc
+import logging
+import os
+import time
+from collections.abc import AsyncIterator, Iterator
+from datetime import UTC, date, datetime, timedelta, timezone, tzinfo
 from typing import Any
 
 import pytest
 
+import eufy_home_security.station as station_module
 import eufy_home_security.station.history as station_history
 from eufy_home_security.cloud.models import CloudDevice
-from eufy_home_security.events import HistoryRecord
+from eufy_home_security.devices.support import Support
+from eufy_home_security.devices.timezones import encode_zone
+from eufy_home_security.events import EventSource, HistoryRecord, SecurityEvent
 from eufy_home_security.exceptions import (
     DeviceTimeoutError,
     RecordingCursorError,
     RecordingRefError,
     RecordNotFoundError,
+    StationUnreachableError,
     UnsupportedError,
 )
+from eufy_home_security.images import ImageSource
 from eufy_home_security.p2p.clip import ClipWriter, MediaClip
 from eufy_home_security.p2p.did import static_key
 from eufy_home_security.p2p.messages import HISTORY_RECORD_COUNTER
 from eufy_home_security.p2p.mpegts import TS_PACKET_LEN
 from eufy_home_security.p2p.session import P2PCredentials, StationSession
 from eufy_home_security.recordings import (
+    DetectionRecording,
+    DetectionRecordingState,
     RecordingPosition,
     RecordingRef,
     RecordingsPage,
     encode_cursor,
     encode_ref,
 )
-from eufy_home_security.station import RECORDING_QUIET, Station
+from eufy_home_security.station import (
+    RECORDING_MATCH_GIVE_UP,
+    RECORDING_MATCH_RETRY,
+    RECORDING_MATCH_WINDOW,
+    RECORDING_QUIET,
+    Station,
+)
 from eufy_home_security.testing import SYNTHETIC
 from eufy_home_security.testing.station import FakeStation
 
@@ -51,6 +68,8 @@ CAMERA = CloudDevice(
     channel=0,
 )
 OTHER_SN = "T8160P2000099999"
+SAST = timezone(timedelta(hours=2))
+"""Africa/Johannesburg's offset (it keeps no daylight saving)."""
 FORMAT = "%Y-%m-%d %H:%M:%S"
 #: The tests' reference time; the station's clock is frozen to it (see ``today``).
 NOW = datetime(2026, 9, 16, 12, 0, tzinfo=UTC)  # hygiene: ok
@@ -88,7 +107,12 @@ class _AnyDatetime(type):
 def today(monkeypatch: pytest.MonkeyPatch) -> datetime:
     """:data:`NOW`, host-local, with the station's clock frozen to it: rows built from it
     and the window the station asks for fall on the same days at any hour."""
-    now = NOW.astimezone()
+    return _freeze(monkeypatch, NOW)
+
+
+def _freeze(monkeypatch: pytest.MonkeyPatch, moment: datetime) -> datetime:
+    """Freeze the station's clock to ``moment``; returns it host-local."""
+    now = moment.astimezone()
 
     class Frozen(datetime, metaclass=_AnyDatetime):
         @classmethod
@@ -852,3 +876,1281 @@ async def test_local_events_station_filters_camera(
     rows = await hb2.async_list_recordings(SYNTHETIC.camera_sn, days=1)
     assert [r.record_id for r in rows] == [47051]
     assert fake.history_queries[0]["device_info"] == [{"device_sn": SYNTHETIC.camera_sn}]
+
+
+# ── the recording of a detection ─────────────────────────────────────────────
+
+
+def _at(start: datetime, device_sn: str, record_id: int, **extra: object) -> dict[str, object]:
+    """A recording row that started at ``start`` (host-local whole seconds) and ran 20 s."""
+    local = start.astimezone()
+    return {
+        "record_id": record_id,
+        "device_sn": device_sn,
+        "start_time": local.strftime(FORMAT),
+        "end_time": (local + timedelta(seconds=20)).strftime(FORMAT),
+        "storage_path": f"/zx/hdd_data0/Camera00/{record_id}.zxvideo",
+        "frame_num": 6,
+        **extra,
+    }
+
+
+def _dayed(start: datetime, counter: int) -> int:
+    """A HomeBase 3 record id: the row's host-local day and a counter."""
+    return int(start.astimezone().strftime("%Y%m%d")) * HISTORY_RECORD_COUNTER + counter
+
+
+def _detection(at: datetime, **fields: Any) -> SecurityEvent:
+    """A cloud-push motion detection of the camera at ``at``, naming no recording."""
+    values: dict[str, Any] = {
+        "source": EventSource.CLOUD,
+        "device_sn": SYNTHETIC.camera_sn,
+        "msg_type": 1,
+        "event_type": 3101,
+        "event_time_ms": round(at.timestamp() * 1000),
+    }
+    values.update(fields)
+    return SecurityEvent(**values)
+
+
+def _whole(now: datetime, seconds_ago: float) -> datetime:
+    """``seconds_ago`` before ``now``, on a whole second (history rows keep no fractions)."""
+    return (now - timedelta(seconds=seconds_ago)).replace(microsecond=0)
+
+
+async def test_a_detection_finds_its_settled_recording_by_camera_and_start_time(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    started = _whole(today, 120)
+    fake.rows = [_at(started, SYNTHETIC.camera_sn, _dayed(started, 4))]
+    found = await station.async_recording_for_detection(_detection(started + timedelta(seconds=2)))
+    assert found == DetectionRecording(
+        state=DetectionRecordingState.SETTLED,
+        record=HistoryRecord.from_row(fake.rows[0]),
+        retry_at=None,
+        offset_s=-2.0,
+    )
+    assert found.record is not None
+    assert found.record.ref is not None
+
+
+async def test_a_detection_whose_recording_still_runs_says_when_it_settles(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    started = _whole(today, 30)  # ended 10 s ago: settles RECORDING_QUIET after its end
+    fake.rows = [_at(started, SYNTHETIC.camera_sn, _dayed(started, 4))]
+    found = await station.async_recording_for_detection(_detection(started))
+    assert found.state is DetectionRecordingState.RECORDING
+    assert found.record == HistoryRecord.from_row(fake.rows[0])
+    assert found.retry_at == started + timedelta(seconds=20 + RECORDING_QUIET)
+    shorter = await station.async_recording_for_detection(_detection(started), quiet=5.0)
+    assert shorter.state is DetectionRecordingState.SETTLED
+
+
+async def test_a_running_recording_without_an_end_time_is_asked_again_after_the_retry(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    started = _whole(today, 30)
+    fake.rows = [_at(started, SYNTHETIC.camera_sn, _dayed(started, 4), end_time="")]
+    found = await station.async_recording_for_detection(_detection(started))
+    assert found.state is DetectionRecordingState.RECORDING
+    assert found.retry_at == today + timedelta(seconds=RECORDING_MATCH_RETRY)
+
+
+@pytest.mark.parametrize(
+    ("seconds_ago", "retry_in"),
+    [
+        (20.0, RECORDING_MATCH_RETRY),  # asked again after the retry
+        (RECORDING_MATCH_GIVE_UP - 5.0, 5.0),  # no later than the give-up time
+        (RECORDING_MATCH_GIVE_UP, None),  # given up
+        (RECORDING_MATCH_GIVE_UP + 60.0, None),
+    ],
+)
+async def test_a_detection_with_no_recording_listed_yet_is_asked_again_until_its_bound(
+    station: Station, fake: FakeStation, today: datetime, seconds_ago: float, retry_in: float | None
+) -> None:
+    fake.rows = []
+    found = await station.async_recording_for_detection(
+        _detection(today - timedelta(seconds=seconds_ago))
+    )
+    assert found.state is DetectionRecordingState.NOT_LISTED
+    assert (found.record, found.offset_s) == (None, None)
+    expected = None if retry_in is None else today + timedelta(seconds=retry_in)
+    assert found.retry_at == expected
+
+
+@pytest.mark.usefixtures("no_reuse")
+async def test_of_two_recordings_in_the_window_the_closest_start_wins_and_a_tie_the_earlier(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    event = _whole(today, 300)
+    before, after, closest = (event + timedelta(seconds=s) for s in (-4, 4, 2))
+    fake.rows = [
+        _at(closest, SYNTHETIC.camera_sn, _dayed(closest, 3)),
+        _at(after, SYNTHETIC.camera_sn, _dayed(after, 2)),
+        _at(before, SYNTHETIC.camera_sn, _dayed(before, 1)),
+    ]
+    found = await station.async_recording_for_detection(_detection(event))
+    assert found.record is not None
+    assert (found.record.record_id, found.offset_s) == (_dayed(closest, 3), 2.0)
+    fake.rows = fake.rows[1:]  # 4 s before and 4 s after: the one that began first
+    tie = await station.async_recording_for_detection(_detection(event))
+    assert tie.record is not None
+    assert (tie.record.record_id, tie.offset_s) == (_dayed(before, 1), -4.0)
+    fake.rows = [_at(event, SYNTHETIC.camera_sn, _dayed(event, n)) for n in (8, 9)]
+    same = await station.async_recording_for_detection(_detection(event))  # one start second
+    assert same.record is not None
+    assert same.record.record_id == _dayed(event, 8)  # the lower record id
+
+
+@pytest.mark.usefixtures("no_reuse")
+async def test_a_recording_of_another_camera_is_never_a_detections(
+    two_cameras: Station, fake: FakeStation, today: datetime
+) -> None:
+    event = _whole(today, 300)
+    own = event + timedelta(seconds=6)
+    fake.rows = [
+        _at(event, OTHER_SN, _dayed(event, 2)),  # the closest start, but another camera's
+        _at(own, SYNTHETIC.camera_sn, _dayed(own, 1)),
+    ]
+    found = await two_cameras.async_recording_for_detection(_detection(event))
+    assert found.record is not None
+    assert found.record.device_sn == SYNTHETIC.camera_sn
+    fake.rows = fake.rows[:1]
+    none = await two_cameras.async_recording_for_detection(_detection(event))
+    assert none.state is DetectionRecordingState.NOT_LISTED
+
+
+@pytest.mark.parametrize(("ends_after", "held"), [(0, True), (-1, False)])
+async def test_a_detection_inside_a_running_clip_gets_that_clips_row(
+    station: Station, fake: FakeStation, today: datetime, ends_after: int, held: bool
+) -> None:
+    """No row starts near a second detection inside one clip: the row that holds the
+    detection's time (it ended at or after it) is the detection's."""
+    early, _late = RECORDING_MATCH_WINDOW
+    event = _whole(today, 300)
+    older = event + timedelta(seconds=early - 40)
+    clip = event + timedelta(seconds=early - 20)
+    end = (event + timedelta(seconds=ends_after)).astimezone()
+    fake.rows = [
+        _at(clip, SYNTHETIC.camera_sn, _dayed(clip, 2), end_time=end.strftime(FORMAT)),
+        _at(older, SYNTHETIC.camera_sn, _dayed(older, 1), end_time=""),
+    ]
+    found = await station.async_recording_for_detection(_detection(event))
+    assert found.record is not None
+    if held:
+        assert found.record.record_id == _dayed(clip, 2)  # the latest start of those holding it
+        assert found.offset_s == early - 20
+    else:
+        assert found.record.record_id == _dayed(older, 1)  # still running: it holds the event
+
+
+async def test_a_detection_with_no_holding_or_near_row_is_not_listed(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    event = _whole(today, 300)
+    before = event - timedelta(seconds=60)
+    end = (event - timedelta(seconds=1)).astimezone()
+    fake.rows = [_at(before, SYNTHETIC.camera_sn, _dayed(before, 1), end_time=end.strftime(FORMAT))]
+    found = await station.async_recording_for_detection(_detection(event))
+    assert found.state is DetectionRecordingState.NOT_LISTED
+
+
+@pytest.mark.parametrize("bound", ["early", "late"])
+@pytest.mark.parametrize("beyond", [0, 1])
+async def test_a_recording_matches_only_within_the_window_bounds_included(
+    station: Station, fake: FakeStation, today: datetime, bound: str, beyond: int
+) -> None:
+    early, late = RECORDING_MATCH_WINDOW
+    event = _whole(today, 300)
+    offset = early - beyond if bound == "early" else late + beyond
+    start = event + timedelta(seconds=offset)
+    end = (start + timedelta(seconds=5)).astimezone()  # over before the event
+    fake.rows = [_at(start, SYNTHETIC.camera_sn, _dayed(start, 1), end_time=end.strftime(FORMAT))]
+    found = await station.async_recording_for_detection(_detection(event))
+    if beyond:
+        assert found.state is DetectionRecordingState.NOT_LISTED
+    else:
+        assert found.state is DetectionRecordingState.SETTLED
+        assert found.offset_s == offset
+
+
+async def test_a_homebase_2_detection_finds_its_recording_through_paged_history(
+    hb2: Station, fake: FakeStation, today: datetime
+) -> None:
+    """Ids without a day, paged by start time: newer recordings of the camera fill more
+    than one page before the detection's own."""
+    event = _whole(today, 600)
+    newer = [
+        _at(event + timedelta(seconds=60 + 10 * n), SYNTHETIC.camera_sn, 100 + n) for n in range(25)
+    ]
+    path = "/media/mmcblk0p1/Camera00/20260916120000.dat"  # hygiene: ok
+    own = _at(event + timedelta(seconds=1), SYNTHETIC.camera_sn, 99, storage_path=path)
+    fake.rows = [*newer, own, _at(event, OTHER_SN, 98)]
+    found = await hb2.async_recording_for_detection(_detection(event, station_sn=HB2_SN))
+    assert found.state is DetectionRecordingState.SETTLED
+    assert found.record is not None
+    assert (found.record.record_id, found.record.video_path) == (99, path)
+    assert len(fake.history_queries) > 1
+    assert all(
+        q["device_info"] == [{"device_sn": SYNTHETIC.camera_sn}] for q in fake.history_queries
+    )
+
+
+async def test_a_detection_naming_its_record_id_is_looked_up_by_it(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    started = _whole(today, 120)
+    fake.rows = [_at(started, SYNTHETIC.camera_sn, _dayed(started, 4))]
+    event = _detection(started, record_id=_dayed(started, 4), event_time_ms=None)
+    found = await station.async_recording_for_detection(event)
+    assert found.state is DetectionRecordingState.SETTLED
+    assert found.record == HistoryRecord.from_row(fake.rows[0])
+    assert found.offset_s is None
+    assert [q["start_id"] for q in fake.history_queries] == [_dayed(started, 4)]
+
+
+async def test_a_detection_naming_a_record_not_written_yet_is_asked_again(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    started = _whole(today, 10)
+    fake.rows = []
+    found = await station.async_recording_for_detection(
+        _detection(started, record_id=_dayed(started, 4))
+    )
+    assert found.state is DetectionRecordingState.NOT_LISTED
+    assert found.retry_at == today + timedelta(seconds=RECORDING_MATCH_RETRY)
+
+
+async def test_a_detection_whose_record_id_names_another_cameras_row_raises(
+    two_cameras: Station, fake: FakeStation, today: datetime
+) -> None:
+    started = _whole(today, 120)
+    fake.rows = [_at(started, OTHER_SN, _dayed(started, 4))]
+    with pytest.raises(RecordNotFoundError, match="another camera"):
+        await two_cameras.async_recording_for_detection(
+            _detection(started, record_id=_dayed(started, 4))
+        )
+
+
+async def test_a_detection_naming_its_recording_path_takes_that_row_in_the_window(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    event = _whole(today, 300)
+    named, closer = event + timedelta(seconds=-5), event
+    fake.rows = [
+        _at(closer, SYNTHETIC.camera_sn, _dayed(closer, 2)),
+        _at(named, SYNTHETIC.camera_sn, _dayed(named, 1)),
+    ]
+    path = str(fake.rows[1]["storage_path"])
+    found = await station.async_recording_for_detection(_detection(event, video_path=path))
+    assert found.record is not None
+    assert found.record.video_path == path
+
+
+async def test_a_detection_that_cannot_be_matched_is_refused_before_sending(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    with pytest.raises(UnsupportedError, match="no time"):
+        await station.async_recording_for_detection(_detection(today, event_time_ms=None))
+    with pytest.raises(UnsupportedError, match="belongs to"):
+        await station.async_recording_for_detection(_detection(today, station_sn=HB2_SN))
+    with pytest.raises(UnsupportedError, match="no camera"):
+        await station.async_recording_for_detection(
+            _detection(today, device_sn="T8160P2000011111", channel=None)
+        )
+    assert fake.history_queries == []
+
+
+async def test_a_standalone_device_refuses_to_match_a_detection() -> None:
+    """A standalone camera lists no history, whatever its local-detection grade (a T8170
+    has none recorded)."""
+    solo_sn = "T8170P0000000000"
+    device = CloudDevice(
+        device_sn=solo_sn,
+        station_sn=solo_sn,
+        p2p_did=SYNTHETIC.did,
+        device_type=48,
+        channel=0,
+        name="standalone",
+    )
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        raise AssertionError("nothing connects")
+
+    session = StationSession(solo_sn, credentials, host="127.0.0.1", port=9)
+    standalone = Station(device, session)
+    event = _detection(NOW, device_sn=solo_sn)
+    try:
+        assert standalone.local_detections_for(solo_sn).support is not Support.VERIFIED
+        with pytest.raises(UnsupportedError, match="standalone"):
+            await standalone.async_recording_for_detection(event)
+        assert not standalone.needs_recording_match(event)
+    finally:
+        await standalone.async_close()
+
+
+async def test_a_detection_match_bounds_each_history_query_by_its_timeout(
+    station: Station, fake: FakeStation, today: datetime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    send = station.session._send_secure
+    asked: list[bytes] = []
+
+    def drop_history(plaintext: bytes, **kwargs: Any) -> int:
+        if b"start_id" not in plaintext:
+            return send(plaintext, **kwargs)
+        asked.append(plaintext)
+        return 1
+
+    monkeypatch.setattr(station.session, "_send_secure", drop_history)
+    async with asyncio.timeout(3.0):  # the default would wait 15 s per query
+        with pytest.raises(DeviceTimeoutError):
+            await station.async_recording_for_detection(_detection(today), timeout=0.2)
+    assert len(asked) == 2  # the page asked once more, then the error
+
+
+async def test_only_a_station_without_local_detections_needs_a_recording_match(
+    station: Station, hb2: Station, today: datetime
+) -> None:
+    """The HomeBase 3 sends each detection with its recording over P2P; the HomeBase 2
+    does not (its grade is not verified), so its cloud detections need the match."""
+    pushed = _detection(today, station_sn=HB2_SN)
+    assert hb2.needs_recording_match(pushed)
+    assert not station.needs_recording_match(_detection(today))
+    for named in (
+        {"video_path": "/zx/hdd_data0/Camera00/1.zxvideo"},
+        {"record_id": 7},
+        {"event_time_ms": None},
+        {"msg_type": 9, "event_type": None},  # an arming push: no detection
+        {"device_sn": "T8160P2000011111", "channel": None},  # not paired here
+        {"station_sn": SYNTHETIC.station_sn},  # another station's
+    ):
+        assert not hb2.needs_recording_match(dataclasses.replace(pushed, **named)), named
+
+
+async def test_a_detection_of_a_device_without_a_camera_needs_no_recording_match(
+    fake: FakeStation,
+) -> None:
+    sensor_sn = "T8910P2000054321"
+    hb2 = Station(
+        dataclasses.replace(STATION, device_sn=HB2_SN),
+        StationSession(HB2_SN, _no_credentials, host="127.0.0.1", port=9),
+        sub_devices=[
+            dataclasses.replace(CAMERA, station_sn=HB2_SN),
+            dataclasses.replace(
+                CAMERA, device_sn=sensor_sn, station_sn=HB2_SN, channel=2, device_type=10
+            ),
+        ],
+    )
+    try:
+        motion = _detection(NOW, station_sn=HB2_SN, device_sn=sensor_sn, msg_type=14)
+        assert not hb2.needs_recording_match(motion)
+        assert hb2.needs_recording_match(dataclasses.replace(motion, device_sn=CAMERA.device_sn))
+    finally:
+        await hb2.async_close()
+
+
+async def _no_credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    raise AssertionError("nothing connects")
+
+
+@pytest.fixture
+def short_match(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Re-list every 0.2 s and give up 5 s after a detection."""
+    monkeypatch.setattr(station_module, "RECORDING_MATCH_RETRY", 0.2)
+    monkeypatch.setattr(station_module, "RECORDING_MATCH_GIVE_UP", 5.0)
+
+
+def _states(station: Station, monkeypatch: pytest.MonkeyPatch) -> list[DetectionRecordingState]:
+    """The state of every answer the waiting call reads."""
+    states: list[DetectionRecordingState] = []
+    ask = station.async_recording_for_detection
+
+    async def spy(event: SecurityEvent, **kwargs: Any) -> DetectionRecording:
+        found = await ask(event, **kwargs)
+        states.append(found.state)
+        return found
+
+    monkeypatch.setattr(station, "async_recording_for_detection", spy)
+    return states
+
+
+@pytest.mark.usefixtures("short_match")
+async def test_a_homebase_2_detection_waits_for_its_running_recording_then_its_trigger_frame(
+    hb2: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # the next whole second: rows keep whole seconds, so a running row's end lags the
+    # clock by up to 1 s and ``quiet`` must exceed that
+    started = datetime.now(UTC).replace(microsecond=0) + timedelta(seconds=1)
+    record_id = fake.add_detection_recording(SYNTHETIC.camera_sn, started, 1.0, listed_after=0.5)
+    event = _detection(started, station_sn=HB2_SN)
+    assert hb2.needs_recording_match(event)
+    states = _states(hb2, monkeypatch)
+    async with asyncio.timeout(6.0):
+        row = await hb2.async_wait_recording_for_detection(event, quiet=1.1)
+    assert row is not None
+    assert (row.record_id, row.device_sn) == (record_id, SYNTHETIC.camera_sn)
+    assert Station.recording_settled(row, quiet=1.1)
+    assert states[0] is DetectionRecordingState.NOT_LISTED
+    assert DetectionRecordingState.RECORDING in states
+    assert states[-1] is DetectionRecordingState.SETTLED
+    named = hb2.event_with_recording(event, row)
+    assert (named.video_path, named.record_id) == (row.video_path, record_id)
+    assert not hb2.needs_recording_match(named)
+    image = await hb2.async_event_image(named, ImageSource.TRIGGER_FRAME)
+    assert (image.device_sn, image.record_id) == (SYNTHETIC.camera_sn, record_id)
+    assert image.data
+
+
+@pytest.mark.usefixtures("short_match")
+async def test_waiting_for_a_detection_without_its_recording_gives_none_at_the_bound(
+    hb2: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started = datetime.now(UTC).replace(microsecond=0)
+    fake.add_detection_recording(OTHER_SN, started, 1.0)  # another camera's
+    fake.add_detection_recording(
+        SYNTHETIC.camera_sn, started - timedelta(seconds=60), 10.0
+    )  # over long before
+    monkeypatch.setattr(station_module, "RECORDING_MATCH_GIVE_UP", 1.5)
+    states = _states(hb2, monkeypatch)
+    event = _detection(started, station_sn=HB2_SN)
+    async with asyncio.timeout(4.0):
+        assert await hb2.async_wait_recording_for_detection(event) is None
+    assert set(states) == {DetectionRecordingState.NOT_LISTED}
+    assert len(states) > 2  # listed again until the bound
+    assert datetime.now(UTC) >= started + timedelta(seconds=1.5)
+
+
+async def test_a_settled_homebase_3_recording_names_its_thumbnail_for_the_event_image(
+    station: Station, fake: FakeStation
+) -> None:
+    started = datetime.now(UTC).replace(microsecond=0) - timedelta(seconds=120)
+    record_id = fake.add_detection_recording(SYNTHETIC.camera_sn, started, 20.0)
+    event = _detection(started)
+    row = await station.async_wait_recording_for_detection(event)
+    assert row is not None
+    assert row.record_id == record_id
+    named = station.event_with_recording(event, row)
+    assert named.thumb_path == row.thumb_path
+    jpeg = b"\xff\xd8\xff\xe0" + bytes(16) + b"\xff\xd9"
+    fake.images[str(row.thumb_path)] = jpeg
+    image = await station.async_event_image(named, ImageSource.THUMBNAIL)
+    assert (image.data, image.record_id) == (jpeg, record_id)
+
+
+async def test_a_record_of_another_camera_or_without_a_clip_names_no_recording(
+    two_cameras: Station, today: datetime
+) -> None:
+    event = _detection(today)
+    other = HistoryRecord.from_row(_at(today, OTHER_SN, 1))
+    with pytest.raises(ValueError, match="another camera"):
+        two_cameras.event_with_recording(event, other)
+    bare = HistoryRecord.from_row(_at(today, SYNTHETIC.camera_sn, 1, storage_path=""))
+    with pytest.raises(ValueError, match="no recording"):
+        two_cameras.event_with_recording(event, bare)
+    unlisted = HistoryRecord.from_row(_at(today, SYNTHETIC.camera_sn, 0, thumb_path="/media/x.jpg"))
+    named = two_cameras.event_with_recording(event, unlisted)
+    assert (named.record_id, named.thumb_path) == (None, None)  # no id, no valid still path
+
+
+# ── one look per camera ──────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def no_reuse(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A finished listing answers no later look (only one in flight is shared)."""
+    monkeypatch.setattr(station_module, "RECORDING_MATCH_FRESH", 0.0)
+
+
+def _busy_day(
+    event: datetime, *, hb2: bool, step: float, first: float, count: int = 100
+) -> list[dict[str, object]]:
+    """``count`` recordings of the camera ``first`` s, ``first + step`` s ... before
+    ``event``, newest first, on the event's host-local day only."""
+    day = event.astimezone().date()
+    starts = [event - timedelta(seconds=first + step * n) for n in range(count)]
+    return [
+        _at(start, SYNTHETIC.camera_sn, 1999 - n if hb2 else _dayed(start, 1000 - n))
+        for n, start in enumerate(starts)
+        if start.astimezone().date() == day
+    ]
+
+
+@pytest.fixture(params=["homebase_3", "homebase_2"])
+async def homebase(request: pytest.FixtureRequest, fake: FakeStation) -> AsyncIterator[Station]:
+    """A HomeBase 3 (:data:`STATION`), then a HomeBase 2 (:data:`HB2_SN`), with :data:`CAMERA`."""
+    serial = SYNTHETIC.station_sn if request.param == "homebase_3" else HB2_SN
+    fake.serial = serial
+    fake.static_key = static_key(serial, fake.did)
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
+
+    session = StationSession(serial, credentials, host="127.0.0.1", port=fake.discovery_port)
+    st = Station(
+        dataclasses.replace(STATION, device_sn=serial),
+        session,
+        sub_devices=[dataclasses.replace(CAMERA, station_sn=serial)],
+    )
+    yield st
+    await st.async_close()
+
+
+async def test_a_look_at_a_busy_day_stops_at_the_page_that_reaches_its_bound(
+    homebase: Station, fake: FakeStation, today: datetime
+) -> None:
+    """A camera day of 101 recordings: one look asks only the page that reaches back past
+    :data:`RECORDING_MATCH_GIVE_UP` before the detection, not the rest of the day."""
+    st = homebase
+    hb2 = st.serial == HB2_SN
+    event = _whole(today, 30)
+    own_id = 3000 if hb2 else _dayed(event, 2000)
+    fake.rows = [
+        _at(event, SYNTHETIC.camera_sn, own_id),
+        *_busy_day(event, hb2=hb2, step=60, first=300),
+    ]
+    found = await st.async_recording_for_detection(_detection(event, station_sn=st.serial))
+    assert found.record is not None
+    assert found.record.record_id == own_id
+    assert len(fake.history_queries) == 1
+
+
+@pytest.mark.usefixtures("no_reuse")
+async def test_concurrent_looks_at_one_camera_share_one_listing(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    event = _whole(today, 120)
+    fake.rows = [_at(event, SYNTHETIC.camera_sn, _dayed(event, 4))]
+    detection = _detection(event)
+    first, second = await asyncio.gather(
+        station.async_recording_for_detection(detection),
+        station.async_recording_for_detection(_detection(event + timedelta(seconds=1))),
+    )
+    assert first.record == second.record
+    assert len(fake.history_queries) == 1
+    await station.async_recording_for_detection(detection)  # the listing is over: a new one
+    assert len(fake.history_queries) == 2
+
+
+async def test_a_look_soon_after_another_of_the_camera_reuses_its_listing(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    """A listing finished less than :data:`RECORDING_MATCH_FRESH` ago answers the next look
+    of the camera; with ``quiet`` 0 no listing is fresh."""
+    event = _whole(today, 120)
+    fake.rows = [_at(event, SYNTHETIC.camera_sn, _dayed(event, 4))]
+    await station.async_recording_for_detection(_detection(event))
+    await station.async_recording_for_detection(_detection(event + timedelta(seconds=5)))
+    assert len(fake.history_queries) == 1
+    await station.async_recording_for_detection(_detection(event), quiet=0.0)
+    assert len(fake.history_queries) == 2
+
+
+@pytest.mark.usefixtures("no_reuse")
+@pytest.mark.parametrize(("older_ago", "pages"), [(150, 2), (190, 1)])
+async def test_a_look_lists_back_to_the_oldest_detection_of_the_camera_still_searched(
+    hb2: Station, fake: FakeStation, today: datetime, older_ago: int, pages: int
+) -> None:
+    """A newer detection's listing reaches the bound of an older one still within its
+    give-up time (so the older one's next look can share it), not of one past it."""
+    newer = _whole(today, 20)
+    fake.rows = [
+        _at(newer, SYNTHETIC.camera_sn, 3000),
+        *_busy_day(newer, hb2=True, step=10, first=10),
+    ]
+    older = _detection(_whole(today, older_ago), station_sn=HB2_SN)
+    await hb2.async_recording_for_detection(older)
+    assert len(fake.history_queries) == 2  # its bound lies on the second page
+    fake.history_queries.clear()
+    await hb2.async_recording_for_detection(_detection(newer, station_sn=HB2_SN))
+    assert len(fake.history_queries) == pages
+
+
+@pytest.mark.usefixtures("short_match")
+async def test_a_burst_of_detections_of_one_camera_shares_the_listings_of_their_waits(
+    hb2: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(station_module, "RECORDING_MATCH_GIVE_UP", 10.0)
+    started = datetime.now(UTC).replace(microsecond=0) - timedelta(seconds=3)
+    record_id = fake.add_detection_recording(SYNTHETIC.camera_sn, started, 5.0)
+    events = [_detection(started + timedelta(seconds=s), station_sn=HB2_SN) for s in (3, 0, 2, 1)]
+    states = _states(hb2, monkeypatch)
+    async with asyncio.timeout(6.0):
+        rows = await asyncio.gather(
+            *(hb2.async_wait_recording_for_detection(e, quiet=1.1) for e in events)
+        )
+    assert {None if r is None else r.record_id for r in rows} == {record_id}
+    assert len(fake.history_queries) * 3 <= len(states)
+
+
+async def test_a_failed_listing_fails_the_looks_sharing_it_and_answers_no_later_look(
+    station: Station, fake: FakeStation, today: datetime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The looks waiting on a listing get its error (one query); a look cancelled meanwhile
+    leaves nothing for the loop's exception handler; the next look lists again."""
+    event = _whole(today, 120)
+    fake.rows = [_at(event, SYNTHETIC.camera_sn, _dayed(event, 4))]
+    real = station.session.async_list_history
+    release = asyncio.Event()
+    calls = 0
+
+    async def fail_first(*args: Any, **kwargs: Any) -> list[HistoryRecord]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            await release.wait()
+            raise StationUnreachableError("no route")
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(station.session, "async_list_history", fail_first)
+    loop = asyncio.get_running_loop()
+    seen: list[dict[str, Any]] = []
+    loop.set_exception_handler(lambda _loop, context: seen.append(context))
+    try:
+        looks = [
+            asyncio.create_task(
+                station.async_recording_for_detection(_detection(event + timedelta(seconds=s)))
+            )
+            for s in (0, 1, 2)
+        ]
+        for _ in range(5):
+            await asyncio.sleep(0)
+        looks[2].cancel()
+        release.set()
+        results = await asyncio.gather(*looks, return_exceptions=True)
+        assert [type(r) for r in results] == [
+            StationUnreachableError,
+            StationUnreachableError,
+            asyncio.CancelledError,
+        ]
+        assert calls == 1
+        found = await station.async_recording_for_detection(_detection(event))
+        assert (found.state, calls) == (DetectionRecordingState.SETTLED, 2)
+        await asyncio.sleep(0)
+        gc.collect()
+        assert seen == []
+    finally:
+        loop.set_exception_handler(None)
+
+
+# ── a wait that rides out a failed listing ───────────────────────────────────
+
+
+def _failing_lists(
+    station: Station, monkeypatch: pytest.MonkeyPatch, failures: int | None
+) -> list[int]:
+    """Make the first ``failures`` history listings (None: every one) raise
+    :class:`StationUnreachableError`; returns the running count of listings."""
+    real = station.session.async_list_history
+    calls = [0]
+
+    async def listing(*args: Any, **kwargs: Any) -> list[HistoryRecord]:
+        calls[0] += 1
+        if failures is None or calls[0] <= failures:
+            raise StationUnreachableError(f"no route {calls[0]}")
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(station.session, "async_list_history", listing)
+    return calls
+
+
+@pytest.mark.usefixtures("short_match")
+async def test_a_wait_asks_again_after_a_failed_listing(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started = datetime.now(UTC).replace(microsecond=0) - timedelta(seconds=3)
+    record_id = fake.add_detection_recording(SYNTHETIC.camera_sn, started, 1.0)
+    calls = _failing_lists(station, monkeypatch, 1)
+    async with asyncio.timeout(3.0):
+        row = await station.async_wait_recording_for_detection(_detection(started), quiet=1.1)
+    assert row is not None
+    assert row.record_id == record_id
+    assert calls[0] == 2
+
+
+@pytest.mark.usefixtures("short_match")
+async def test_a_wait_whose_every_listing_fails_raises_the_last_error_at_its_bound(
+    station: Station, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No look ever answered: the bound ends the wait with the last listing's error,
+    logged once."""
+    monkeypatch.setattr(station_module, "RECORDING_MATCH_GIVE_UP", 1.0)
+    calls = _failing_lists(station, monkeypatch, None)
+    event = _detection(datetime.now(UTC))
+    with caplog.at_level(logging.INFO, logger="eufy_home_security.station"):
+        async with asyncio.timeout(3.0):
+            with pytest.raises(StationUnreachableError) as raised:
+                await station.async_wait_recording_for_detection(event)
+    assert calls[0] > 2
+    assert str(raised.value) == f"no route {calls[0]}"
+    assert datetime.now(UTC) >= _from_ms(event.event_time_ms) + timedelta(seconds=1.0)
+    failed = [r for r in caplog.records if "listing failed" in r.getMessage()]
+    assert len(failed) == 1
+
+
+@pytest.mark.usefixtures("short_match")
+async def test_a_wait_that_listed_once_gives_none_at_its_bound_whatever_fails_after(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(station_module, "RECORDING_MATCH_GIVE_UP", 1.0)
+    real = station.session.async_list_history
+    calls = 0
+
+    async def fail_after_first(*args: Any, **kwargs: Any) -> list[HistoryRecord]:
+        nonlocal calls
+        calls += 1
+        if calls > 1:
+            raise DeviceTimeoutError("no reply")
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(station.session, "async_list_history", fail_after_first)
+    async with asyncio.timeout(3.0):
+        assert (
+            await station.async_wait_recording_for_detection(_detection(datetime.now(UTC))) is None
+        )
+    assert calls > 2
+
+
+async def test_a_wait_raises_at_once_what_no_retry_can_change(
+    two_cameras: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Another camera's row named by ``record_id``, and an event without a time whose
+    lookup fails: raised by the first look."""
+    started = datetime.now(UTC).replace(microsecond=0) - timedelta(seconds=30)
+    fake.rows = [_at(started, OTHER_SN, _dayed(started, 4))]
+    async with asyncio.timeout(3.0):
+        with pytest.raises(RecordNotFoundError):
+            await two_cameras.async_wait_recording_for_detection(
+                _detection(started, record_id=_dayed(started, 4))
+            )
+        lookups = len(fake.history_queries)
+
+        async def unreachable(*args: Any, **kwargs: Any) -> HistoryRecord | None:
+            raise StationUnreachableError("no route")
+
+        monkeypatch.setattr(two_cameras.session, "async_history_record", unreachable)
+        with pytest.raises(StationUnreachableError):
+            await two_cameras.async_wait_recording_for_detection(
+                _detection(started, record_id=_dayed(started, 5), event_time_ms=None)
+            )
+    assert len(fake.history_queries) == lookups
+
+
+def _from_ms(value: int | None) -> datetime:
+    assert value is not None
+    return datetime.fromtimestamp(value / 1000, UTC)
+
+
+# ── rows written without an offset ───────────────────────────────────────────
+
+
+@pytest.fixture
+def host_utc() -> Iterator[None]:
+    """The host's zone is UTC for the test."""
+    old = os.environ.get("TZ")
+    os.environ["TZ"] = "UTC"
+    time.tzset()
+    try:
+        yield
+    finally:
+        if old is None:
+            del os.environ["TZ"]
+        else:
+            os.environ["TZ"] = old
+        time.tzset()
+
+
+def _zoneless(
+    start: datetime, zone: tzinfo, record_id: int, seconds: int = 20
+) -> dict[str, object]:
+    """A recording row written in ``zone``'s local time, with no ``time_zone`` beside it."""
+    local = start.astimezone(zone)
+    return {
+        "record_id": record_id,
+        "device_sn": SYNTHETIC.camera_sn,
+        "start_time": local.strftime(FORMAT),
+        "end_time": (local + timedelta(seconds=seconds)).strftime(FORMAT),
+        "storage_path": f"/zx/hdd_data0/Camera00/{record_id}.zxvideo",
+        "frame_num": 6,
+    }
+
+
+def _in_zone(station: Station, zone: str) -> None:
+    """Give ``station`` the cloud entry of a station set to ``zone``."""
+    station.apply_cloud_device(dataclasses.replace(STATION, raw={"time_zone": encode_zone(zone)}))
+
+
+async def test_a_row_without_an_offset_is_read_in_the_stations_zone(
+    host_utc: None, station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The host keeps UTC, the station runs two hours ahead and writes its local time:
+    its row matches the detection, and settles by the station's clock."""
+    now = _freeze(monkeypatch, NOW)
+    _in_zone(station, "Africa/Johannesburg")  # UTC+2, no daylight saving
+    event = _whole(now, 120)
+    started = event - timedelta(seconds=2)
+    record_id = int(started.astimezone(SAST).strftime("%Y%m%d")) * HISTORY_RECORD_COUNTER + 4
+    fake.rows = [_zoneless(started, SAST, record_id)]
+    found = await station.async_recording_for_detection(_detection(event))
+    assert (found.state, found.offset_s) == (DetectionRecordingState.SETTLED, -2.0)
+    assert found.record is not None
+    assert found.record.record_id == record_id
+
+
+async def test_a_row_without_an_offset_in_a_repeated_hour_is_read_nearest_the_detection(
+    host_utc: None, station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """02:30 happens twice when the station's clock goes back from summer time: a row
+    written at 02:30 is read as the pass nearer the detection, so it matches a detection
+    in either pass."""
+    _in_zone(station, "Europe/Berlin")
+    second_pass = datetime(2026, 10, 25, 1, 30, 2, tzinfo=UTC)  # winter time  # hygiene: ok
+    _freeze(monkeypatch, second_pass + timedelta(seconds=120))
+    naive_row = {**_zoneless(second_pass, UTC, 2026102500004), "time_zone": ""}  # hygiene: ok
+    naive_row["start_time"] = "2026-10-25 02:30:00"  # hygiene: ok
+    naive_row["end_time"] = "2026-10-25 02:30:20"  # hygiene: ok
+    fake.rows = [naive_row]
+    found = await station.async_recording_for_detection(_detection(second_pass))
+    assert (found.state, found.offset_s) == (DetectionRecordingState.SETTLED, -2.0)
+    first_pass = second_pass - timedelta(hours=1)  # the same wall time in summer time
+    _freeze(monkeypatch, first_pass + timedelta(seconds=120))
+    found = await station.async_recording_for_detection(_detection(first_pass))
+    assert (found.state, found.offset_s) == (DetectionRecordingState.SETTLED, -2.0)
+
+
+@pytest.mark.usefixtures("no_reuse")
+async def test_no_row_listed_names_the_offset_of_the_nearest_recording(
+    host_utc: None,
+    station: Station,
+    fake: FakeStation,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A station two hours ahead whose zone is unknown here: nothing matches, and the
+    answer and its log line carry how far the nearest recording of the camera lies."""
+    now = _freeze(monkeypatch, NOW)
+    event = _whole(now, 120)
+    started = event - timedelta(seconds=2)
+    record_id = int(started.astimezone(SAST).strftime("%Y%m%d")) * HISTORY_RECORD_COUNTER + 4
+    far = event - timedelta(seconds=100)
+    fake.rows = [
+        _zoneless(started, SAST, record_id),
+        _at(far, SYNTHETIC.camera_sn, _dayed(far, 3)),  # over before the detection
+        _at(event, OTHER_SN, _dayed(event, 5)),
+    ]
+    with caplog.at_level(logging.DEBUG, logger="eufy_home_security.station"):
+        found = await station.async_recording_for_detection(_detection(event))
+    assert found.state is DetectionRecordingState.NOT_LISTED
+    assert (found.record, found.offset_s) == (None, -100.0)
+    assert any("not_listed, row None, offset -100s" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.parametrize("hours", [2, -2])
+async def test_no_row_listed_names_a_station_clock_hours_ahead_or_behind(
+    host_utc: None,
+    station: Station,
+    fake: FakeStation,
+    monkeypatch: pytest.MonkeyPatch,
+    hours: int,
+) -> None:
+    """A station whose zone is unknown here writes its local time ``hours`` off the
+    host's: its row is read that far from the detection, after it or before its bound,
+    and the answer names that offset."""
+    now = _freeze(monkeypatch, NOW)
+    event = _whole(now, 60)
+    clock = timezone(timedelta(hours=hours))
+    record_id = int(event.astimezone(clock).strftime("%Y%m%d")) * HISTORY_RECORD_COUNTER + 4
+    fake.rows = [_zoneless(event, clock, record_id)]
+    found = await station.async_recording_for_detection(_detection(event))
+    assert (found.state, found.offset_s) == (DetectionRecordingState.NOT_LISTED, hours * 3600.0)
+
+
+@pytest.mark.usefixtures("no_reuse")
+async def test_a_row_before_a_detections_own_bound_never_holds_it(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    """The camera's listing reaches back to an older detection still searched; a row that
+    started before the newer detection's own bound (still running) is not the newer's."""
+    older_event = _whole(today, 150)
+    newer_event = _whole(today, 10)
+    stuck = newer_event - timedelta(seconds=RECORDING_MATCH_GIVE_UP + 20)
+    fake.rows = [_at(stuck, SYNTHETIC.camera_sn, _dayed(stuck, 1), end_time="")]
+    older = await station.async_recording_for_detection(_detection(older_event))
+    assert older.record is not None  # it holds the older detection
+    newer = await station.async_recording_for_detection(_detection(newer_event))
+    assert newer.state is DetectionRecordingState.NOT_LISTED
+
+
+async def test_a_running_row_that_started_at_a_detections_bound_holds_it(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    """The bound is included: a row still running that started exactly
+    :data:`RECORDING_MATCH_GIVE_UP` before the detection is its recording."""
+    event = _whole(today, 10)
+    started = event - timedelta(seconds=RECORDING_MATCH_GIVE_UP)
+    fake.rows = [_at(started, SYNTHETIC.camera_sn, _dayed(started, 1), end_time="")]
+    found = await station.async_recording_for_detection(_detection(event))
+    assert (found.state, found.offset_s) == (
+        DetectionRecordingState.RECORDING,
+        -RECORDING_MATCH_GIVE_UP,
+    )
+
+
+# ── a clip that ended before the detection ───────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("looked_after", "settled"), [(60, False), (RECORDING_MATCH_GIVE_UP, True)]
+)
+async def test_a_clip_that_ended_before_the_detection_is_its_recording_only_at_the_bound(
+    station: Station,
+    fake: FakeStation,
+    monkeypatch: pytest.MonkeyPatch,
+    looked_after: int,
+    settled: bool,
+) -> None:
+    """The camera's previous short clip lies in the window but ended before the
+    detection: the detection's own row may still come, so the clip is the answer only
+    once the search's bound has passed."""
+    event = NOW.replace(microsecond=0) - timedelta(seconds=looked_after)
+    now = _freeze(monkeypatch, NOW)
+    previous = event - timedelta(seconds=8)
+    end = (event - timedelta(seconds=3)).astimezone()
+    fake.rows = [
+        _at(previous, SYNTHETIC.camera_sn, _dayed(previous, 1), end_time=end.strftime(FORMAT))
+    ]
+    found = await station.async_recording_for_detection(_detection(event))
+    assert found.record is not None
+    assert (found.record.record_id, found.offset_s) == (_dayed(previous, 1), -8.0)
+    if settled:
+        assert (found.state, found.retry_at) == (DetectionRecordingState.SETTLED, None)
+    else:
+        assert found.state is DetectionRecordingState.RECORDING
+        assert found.retry_at == now + timedelta(seconds=RECORDING_MATCH_RETRY)
+
+
+@pytest.mark.usefixtures("no_reuse")
+async def test_in_the_window_a_row_that_ended_before_the_detection_ranks_last(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    event = _whole(today, 120)
+    previous = event - timedelta(seconds=4)  # nearer, but over a second before
+    own = event + timedelta(seconds=6)
+    end = (event - timedelta(seconds=1)).astimezone()
+    fake.rows = [
+        _at(own, SYNTHETIC.camera_sn, _dayed(own, 2)),
+        _at(previous, SYNTHETIC.camera_sn, _dayed(previous, 1), end_time=end.strftime(FORMAT)),
+    ]
+    found = await station.async_recording_for_detection(_detection(event))
+    assert found.record is not None
+    assert (found.state, found.record.record_id) == (
+        DetectionRecordingState.SETTLED,
+        _dayed(own, 2),
+    )
+    fake.rows[1]["end_time"] = (end + timedelta(seconds=1)).strftime(FORMAT)  # ends at the event
+    found = await station.async_recording_for_detection(_detection(event))
+    assert found.record is not None
+    assert found.record.record_id == _dayed(previous, 1)  # the closer start wins again
+
+
+@pytest.mark.usefixtures("short_match")
+async def test_a_wait_takes_the_detections_own_row_over_the_clip_before_it(
+    hb2: Station, fake: FakeStation
+) -> None:
+    started = datetime.now(UTC).replace(microsecond=0)
+    fake.add_detection_recording(SYNTHETIC.camera_sn, started - timedelta(seconds=4), 1.0)
+    own = fake.add_detection_recording(SYNTHETIC.camera_sn, started, 1.0, listed_after=1.0)
+    async with asyncio.timeout(6.0):
+        row = await hb2.async_wait_recording_for_detection(
+            _detection(started, station_sn=HB2_SN), quiet=1.1
+        )
+    assert row is not None
+    assert row.record_id == own
+
+
+# ── the answer's clock and the predicate's edges ─────────────────────────────
+
+
+def _ticking(monkeypatch: pytest.MonkeyPatch) -> list[datetime]:
+    """Set the station's clock to :data:`NOW`, moved on by assigning the returned list's
+    only item."""
+    clock = [NOW]
+
+    class Ticking(datetime, metaclass=_AnyDatetime):
+        @classmethod
+        def now(cls, tz: tzinfo | None = None) -> datetime:  # type: ignore[override]
+            return clock[0].astimezone(tz)
+
+    monkeypatch.setattr(station_history, "datetime", Ticking)
+    return clock
+
+
+async def test_retry_at_counts_from_the_end_of_the_look(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A listing that takes 3 s: the next look is due the retry after it ended."""
+    clock = _ticking(monkeypatch)
+    real = station.session.async_list_history
+
+    async def slow(*args: Any, **kwargs: Any) -> list[HistoryRecord]:
+        rows = await real(*args, **kwargs)
+        clock[0] += timedelta(seconds=3)
+        return rows
+
+    monkeypatch.setattr(station.session, "async_list_history", slow)
+    fake.rows = []
+    found = await station.async_recording_for_detection(_detection(NOW - timedelta(seconds=20)))
+    assert found.state is DetectionRecordingState.NOT_LISTED
+    assert found.retry_at == NOW + timedelta(seconds=3 + RECORDING_MATCH_RETRY)
+
+
+async def test_a_slow_listing_settles_a_row_by_when_it_began(
+    host_utc: None, station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A two-page listing whose pages take half of ``quiet`` each, of a row whose end
+    grows with the clock: the row's end is read as of the listing's start, so neither its
+    own look nor a look sharing it (in flight, or just done) settles the row; each is due
+    again a retry after the listing ended."""
+    clock = _ticking(monkeypatch)
+    event = _whole(NOW, 60)
+    own = _at(event, SYNTHETIC.camera_sn, _dayed(event, 2000))
+    busy = [event - timedelta(seconds=n) for n in range(1, 61)]  # a 50-row page, then 11
+    fake.rows = [
+        own,
+        *(_at(s, SYNTHETIC.camera_sn, _dayed(s, 1000 - n)) for n, s in enumerate(busy)),
+    ]
+    answer = fake._answer_history
+
+    def growing(inner: dict[str, Any]) -> None:
+        own["end_time"] = clock[0].astimezone().strftime(FORMAT)
+        answer(inner)
+        clock[0] += timedelta(seconds=RECORDING_QUIET / 2)
+
+    monkeypatch.setattr(fake, "_answer_history", growing)
+    real = station.session.async_list_history
+    listed, joined = asyncio.Event(), asyncio.Event()
+
+    async def held(*args: Any, **kwargs: Any) -> list[HistoryRecord]:
+        rows = await real(*args, **kwargs)
+        listed.set()
+        await joined.wait()
+        return rows
+
+    monkeypatch.setattr(station.session, "async_list_history", held)
+    holder = asyncio.create_task(station.async_recording_for_detection(_detection(event)))
+    async with asyncio.timeout(5.0):
+        await listed.wait()
+    sharing = asyncio.create_task(
+        station.async_recording_for_detection(_detection(event + timedelta(seconds=1)))
+    )
+    for _ in range(5):
+        await asyncio.sleep(0)
+    joined.set()
+    answers = [*await asyncio.gather(holder, sharing)]
+    answers.append(await station.async_recording_for_detection(_detection(event)))
+    assert len(fake.history_queries) == 2
+    due = NOW + timedelta(seconds=RECORDING_QUIET + RECORDING_MATCH_RETRY)
+    assert [(a.state, a.retry_at) for a in answers] == [
+        (DetectionRecordingState.RECORDING, due)
+    ] * 3
+
+
+async def test_a_slow_lookup_by_id_settles_a_row_by_when_it_began(
+    host_utc: None, station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A row looked up by the event's ``record_id`` in a query that takes ``quiet``: its
+    end, read as of the query's start, does not settle it."""
+    clock = _ticking(monkeypatch)
+    started = _whole(NOW, 60)
+    record_id = _dayed(started, 4)
+    end = NOW.astimezone().strftime(FORMAT)
+    fake.rows = [_at(started, SYNTHETIC.camera_sn, record_id, end_time=end)]
+    real = station.session.async_history_record
+
+    async def slow(*args: Any, **kwargs: Any) -> HistoryRecord | None:
+        row = await real(*args, **kwargs)
+        clock[0] += timedelta(seconds=RECORDING_QUIET)
+        return row
+
+    monkeypatch.setattr(station.session, "async_history_record", slow)
+    found = await station.async_recording_for_detection(_detection(started, record_id=record_id))
+    due = NOW + timedelta(seconds=RECORDING_QUIET + RECORDING_MATCH_RETRY)
+    assert (found.state, found.retry_at) == (DetectionRecordingState.RECORDING, due)
+
+
+async def test_a_detection_just_after_midnight_lists_the_day_before_too(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The clip that holds a detection 30 s into the day began on the day before."""
+    midnight = datetime.combine(NOW.astimezone().date(), datetime.min.time()).astimezone()
+    _freeze(monkeypatch, midnight + timedelta(seconds=90))
+    event = midnight + timedelta(seconds=30)
+    clip = midnight - timedelta(seconds=10)
+    fake.rows = [_at(clip, SYNTHETIC.camera_sn, _dayed(clip, 7), end_time="")]
+    found = await station.async_recording_for_detection(_detection(event))
+    assert found.record is not None
+    assert (found.record.record_id, found.offset_s) == (_dayed(clip, 7), -40.0)
+    assert [q["start_date"] for q in fake.history_queries] == [
+        midnight.strftime("%Y%m%d"),
+        clip.astimezone().strftime("%Y%m%d"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("started_ago", "retry_in"), [(30, RECORDING_MATCH_RETRY), (170, 10.0), (200, None)]
+)
+async def test_a_running_row_named_by_an_event_without_a_time_is_bounded_from_its_start(
+    station: Station, fake: FakeStation, today: datetime, started_ago: int, retry_in: float | None
+) -> None:
+    started = _whole(today, started_ago)
+    fake.rows = [_at(started, SYNTHETIC.camera_sn, _dayed(started, 4), end_time="")]
+    event = _detection(started, record_id=_dayed(started, 4), event_time_ms=None)
+    found = await station.async_recording_for_detection(event)
+    assert found.state is DetectionRecordingState.RECORDING
+    assert found.retry_at == (None if retry_in is None else today + timedelta(seconds=retry_in))
+
+
+async def test_a_detection_of_an_uncatalogued_model_needs_a_recording_match(
+    hb2: Station, today: datetime
+) -> None:
+    """A model the library does not know counts as a camera whose detections the station
+    does not send over P2P."""
+    unknown = "T9Z99P2000012345"
+    hb2.update_sub_devices(
+        [
+            *(d for d in hb2.devices),
+            dataclasses.replace(CAMERA, device_sn=unknown, station_sn=HB2_SN, channel=3),
+        ]
+    )
+    assert hb2.needs_recording_match(_detection(today, station_sn=HB2_SN, device_sn=unknown))
+
+
+async def test_a_detection_naming_its_recording_path_gives_that_rows_offset(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    """Only a row looked up by the event's ``record_id`` has no offset; one named by its
+    ``video_path`` is listed by time and carries it."""
+    event = _whole(today, 300)
+    named = event - timedelta(seconds=5)
+    fake.rows = [_at(named, SYNTHETIC.camera_sn, _dayed(named, 1))]
+    path = str(fake.rows[0]["storage_path"])
+    found = await station.async_recording_for_detection(_detection(event, video_path=path))
+    assert (found.state, found.offset_s) == (DetectionRecordingState.SETTLED, -5.0)
+
+
+async def test_a_look_waiting_on_a_listing_whose_holder_is_cancelled_lists_itself(
+    station: Station, fake: FakeStation, today: datetime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    event = _whole(today, 120)
+    fake.rows = [_at(event, SYNTHETIC.camera_sn, _dayed(event, 4))]
+    real = station.session.async_list_history
+    held = asyncio.Event()
+    calls = 0
+
+    async def hold_first(*args: Any, **kwargs: Any) -> list[HistoryRecord]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            await held.wait()
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(station.session, "async_list_history", hold_first)
+    holder = asyncio.create_task(station.async_recording_for_detection(_detection(event)))
+    for _ in range(5):
+        await asyncio.sleep(0)
+    waiter = asyncio.create_task(station.async_recording_for_detection(_detection(event)))
+    for _ in range(5):
+        await asyncio.sleep(0)
+    holder.cancel()
+    async with asyncio.timeout(3.0):
+        found = await waiter
+    assert (found.state, calls) == (DetectionRecordingState.SETTLED, 2)
+    with pytest.raises(asyncio.CancelledError):
+        await holder
+
+
+async def test_a_failed_listing_no_other_look_shares_leaves_nothing_for_the_loop(
+    station: Station, fake: FakeStation, today: datetime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _failing_lists(station, monkeypatch, None)
+    loop = asyncio.get_running_loop()
+    seen: list[dict[str, Any]] = []
+    loop.set_exception_handler(lambda _loop, context: seen.append(context))
+    try:
+        with pytest.raises(StationUnreachableError):
+            await station.async_recording_for_detection(_detection(_whole(today, 60)))
+        station._history._searches.clear()  # drop the failed listing
+        await asyncio.sleep(0)
+        gc.collect()
+        assert seen == []
+    finally:
+        loop.set_exception_handler(None)
+
+
+async def test_a_listing_that_does_not_reach_back_far_enough_is_not_shared(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    """A fresh listing for a newer detection does not answer an older one (whose search
+    is over, so the newer one's listing did not reach its bound)."""
+    older = _whole(today, 400)
+    fake.rows = [_at(older, SYNTHETIC.camera_sn, _dayed(older, 4))]
+    await station.async_recording_for_detection(_detection(_whole(today, 10)))
+    found = await station.async_recording_for_detection(_detection(older))
+    assert found.record is not None
+    assert len(fake.history_queries) == 2
+
+
+@pytest.mark.parametrize("busy", [False, True])
+async def test_the_days_asked_are_the_stations(
+    host_utc: None,
+    station: Station,
+    fake: FakeStation,
+    monkeypatch: pytest.MonkeyPatch,
+    busy: bool,
+) -> None:
+    """Half past midnight on the station two hours ahead is still the day before in
+    UTC: only the station's own day is asked, a busy one only down to the bound."""
+    _in_zone(station, "Africa/Johannesburg")
+    midnight = datetime.combine(NOW.date() + timedelta(days=1), datetime.min.time(), SAST)
+    now = _freeze(monkeypatch, midnight + timedelta(minutes=30))
+    event = _whole(now, 20)
+    day = int(event.astimezone(SAST).strftime("%Y%m%d")) * HISTORY_RECORD_COUNTER
+    older = [event - timedelta(seconds=60 + 10 * n) for n in range(100)]
+    fake.rows = [_zoneless(event, SAST, day + 500)]
+    if busy:
+        fake.rows += [
+            _zoneless(s, SAST, day + 400 - n) for n, s in enumerate(older) if s >= midnight
+        ]
+    found = await station.async_recording_for_detection(_detection(event))
+    assert found.record is not None
+    assert found.record.record_id == day + 500
+    assert [q["start_date"] for q in fake.history_queries] == [midnight.strftime("%Y%m%d")]
+
+
+async def test_a_row_looked_up_by_id_settles_by_the_stations_clock(
+    host_utc: None, station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    now = _freeze(monkeypatch, NOW)
+    _in_zone(station, "Africa/Johannesburg")
+    started = _whole(now, 120)
+    record_id = int(started.astimezone(SAST).strftime("%Y%m%d")) * HISTORY_RECORD_COUNTER + 4
+    fake.rows = [_zoneless(started, SAST, record_id)]
+    found = await station.async_recording_for_detection(
+        _detection(started, record_id=record_id, event_time_ms=None)
+    )
+    assert found.state is DetectionRecordingState.SETTLED
+
+
+@pytest.mark.usefixtures("short_match")
+async def test_a_failed_look_is_asked_again_no_later_than_the_bound(
+    station: Station, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A retry longer than what is left of the search: the wait ends at the bound."""
+    monkeypatch.setattr(station_module, "RECORDING_MATCH_RETRY", 3.0)
+    monkeypatch.setattr(station_module, "RECORDING_MATCH_GIVE_UP", 0.5)
+    _failing_lists(station, monkeypatch, None)
+    started = time.monotonic()
+    async with asyncio.timeout(5.0):
+        with pytest.raises(StationUnreachableError):
+            await station.async_wait_recording_for_detection(_detection(datetime.now(UTC)))
+    assert time.monotonic() - started < 2.0

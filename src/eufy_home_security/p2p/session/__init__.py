@@ -2147,6 +2147,7 @@ class StationSession:
         before: int | None = None,
         before_day: date | None = None,
         keep: Callable[[HistoryRecord], bool] | None = None,
+        stop: Callable[[HistoryRecord], bool] | None = None,
         device_sn: str | None = None,
         page_size: int | None = None,
         timeout: float | None = None,
@@ -2160,7 +2161,9 @@ class StationSession:
         ``before_day`` (the station day it was listed under, as
         :meth:`async_list_history_by_day` gives it). ``keep`` filters the rows as they
         arrive, and ``count`` then counts the kept ones, so paging stops as soon as
-        enough rows pass the filter.
+        enough rows pass the filter. ``stop`` ends the walk: rows come newest first, so
+        once a page holds a row ``stop`` accepts (one older than wanted), that page is
+        the last one asked, of its day and of the window.
 
         ``device_sn`` (a camera) filters a ``DB_QUERY_LOCAL_EVENTS`` (10017) query at
         the station with ``device_info``, as the eufy app does **[declared: app]**,
@@ -2196,6 +2199,7 @@ class StationSession:
             before=before,
             before_day=before_day,
             keep=keep,
+            stop=stop,
             device_sn=device_sn,
             page_size=page_size,
             timeout=timeout,
@@ -2211,6 +2215,7 @@ class StationSession:
         before: int | None = None,
         before_day: date | None = None,
         keep: Callable[[HistoryRecord], bool] | None = None,
+        stop: Callable[[HistoryRecord], bool] | None = None,
         device_sn: str | None = None,
         page_size: int | None = None,
         timeout: float | None = None,
@@ -2224,6 +2229,7 @@ class StationSession:
             before=before,
             before_day=before_day,
             keep=keep,
+            stop=stop,
             device_sn=device_sn,
             page_size=page_size,
             timeout=_or(timeout, HISTORY_QUERY_TIMEOUT),

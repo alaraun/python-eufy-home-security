@@ -18,6 +18,7 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
+from enum import StrEnum
 from typing import TYPE_CHECKING, Final
 
 from .exceptions import RecordingCursorError, RecordingRefError
@@ -27,6 +28,8 @@ if TYPE_CHECKING:
     from .events import HistoryRecord
 
 __all__ = [
+    "DetectionRecording",
+    "DetectionRecordingState",
     "RecordingPosition",
     "RecordingRef",
     "RecordingsPage",
@@ -62,6 +65,40 @@ class RecordingsPage:
 
     rows: tuple[HistoryRecord, ...]
     next_cursor: str | None
+
+
+class DetectionRecordingState(StrEnum):
+    """Where the recording of a detection stands (:class:`DetectionRecording`)."""
+
+    SETTLED = "settled"
+    """The row is listed and its clip is finished: download it, take its trigger frame."""
+    RECORDING = "recording"
+    """The row is listed but its clip may still grow, or it ended before the detection and
+    the detection's own row may still be listed: ask again at ``retry_at``."""
+    NOT_LISTED = "not_listed"
+    """No row of the detection is listed: ask again at ``retry_at``, or none comes."""
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class DetectionRecording:
+    """The recording of one detection, as
+    :meth:`~.station.Station.async_recording_for_detection` found it.
+
+    ``record`` is the history row (None when ``NOT_LISTED``); ``retry_at`` (aware) is
+    when asking again can give another answer, None when it cannot (``SETTLED``, or
+    past the bound for a row that never came or never ends); ``offset_s`` is the row's
+    start minus the detection's time in seconds, None when the detection's ``record_id``
+    named its row (looked up by it; a row named by ``video_path`` is listed by time and
+    carries its offset).
+    ``NOT_LISTED`` gives the offset of the camera's nearest listed recording instead,
+    before or after the detection (None when none is listed): a recording that lies a
+    whole number of hours off shows a clock read in the wrong zone.
+    """
+
+    state: DetectionRecordingState
+    record: HistoryRecord | None = None
+    retry_at: datetime | None = None
+    offset_s: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
