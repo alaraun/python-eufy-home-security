@@ -855,10 +855,12 @@ the **key id**, and the record names one of two key types (`E2EKeyType`):
   that queue behind them: the queue takes 250 frames more than the replayed frames the
   reader has not reached yet, so a reader that keeps up with the station loses none,
   and the queue never holds more than the replayed records plus 250 frames. It holds up
-  to 32 MiB: from the first record that does not fit, nothing more is held until the key
-  arrives, and video resumes at the first keyframe after it. A cipher without an RSA key, a key that
-  does not parse, a failed fetch or one still running when the recording's first-frame
-  wait (10 s) runs out ends the stream with `EndToEndEncryptedError` (an
+  to 32 MiB, the frames still queued when the fetch starts included, so the holds of
+  several ciphers do not stack up in an unread queue: from the first record that does not
+  fit, nothing more is held until the key arrives, and video resumes at the first
+  keyframe after it. A cipher without an RSA key, a key that does not parse, a failed
+  fetch or one still running when the recording's first-frame wait (10 s) runs out ends
+  the stream with `EndToEndEncryptedError` (an
   `UnsupportedError`) naming the cipher; a cloud failure is also reported as a
   `CloudProblem`. On a stream that already delivered video, a further cipher whose key
   cannot be had is not fetched again: its records are dropped (one warning) and video

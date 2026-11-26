@@ -1048,3 +1048,33 @@ async def test_a_second_fetch_during_the_replay_keeps_the_first_holds_overflow(
     video = [_counter(f) for f in frames if f.kind is MediaKind.VIDEO]
     # The last held P-frame goes too: the record lost after it may be its rest.
     assert video == [0, 1, 2, 2 * MEDIA_GOP, 2 * MEDIA_GOP + 1]
+
+
+async def test_a_hold_counts_the_frames_still_queued_against_its_cap(
+    e2e_hb2: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A second cipher's hold starts while the first replay sits unread in the queue: the
+    queued frames' bytes count against the hold's cap, so holds cannot stack up."""
+    keys = _GatedKeys()
+    session = _session(e2e_hb2, keys)
+    stream = _e2e_stream(session)
+    try:
+        await _started_on_cipher_7(stream, keys)
+        for n in range(2, 2 * MEDIA_GOP):
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+        queued = sum(len(f.data) for f in stream._frames)
+        second = _e2e_video(2 * MEDIA_GOP)
+        monkeypatch.setattr(media_stream_module, "MEDIA_KEY_WAIT_BYTES", queued + len(second))
+        stream._feed(FrameType.VIDEO_FRAME, second, subheader=_e2e_sub(8))  # fits exactly
+        for n in range(2 * MEDIA_GOP + 1, 3 * MEDIA_GOP + 2):  # the rest does not
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub(8))
+        keys.gate(8).set()
+        await _key_settled(stream)
+        stream._end()
+        async with asyncio.timeout(2):
+            frames = [frame async for frame in stream]
+    finally:
+        await stream.aclose()
+        await session.async_close()
+    video = [_counter(f) for f in frames if f.kind is MediaKind.VIDEO]
+    assert video == [*range(2 * MEDIA_GOP + 1)]

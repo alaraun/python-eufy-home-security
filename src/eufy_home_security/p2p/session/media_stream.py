@@ -67,8 +67,9 @@ _HeldRecord = tuple[int, bytes, int | None, bytes | None]
 
 MEDIA_KEY_WAIT_BYTES = 32 * 1024 * 1024
 """Media bytes a recording holds while the cloud cipher key of its end-to-end encrypted
-records is fetched (a station sends a short recording whole meanwhile); past it, records
-are dropped and video resumes at a keyframe."""
+records is fetched (a station sends a short recording whole meanwhile), the frames still
+queued when the fetch starts included; past it, records are dropped and video resumes at
+a keyframe."""
 
 
 def wrapped_key(payload: bytes) -> bytes | None:
@@ -792,8 +793,8 @@ class MediaStream:
         self, frame_type: int, payload: bytes, camera: int | None, subheader: bytes | None
     ) -> None:
         """Keep a record until the end-to-end key arrives; past
-        :data:`MEDIA_KEY_WAIT_BYTES`, drop it and every later one until the key arrives,
-        then resume video at a keyframe."""
+        :data:`MEDIA_KEY_WAIT_BYTES` (the frames queued when the fetch started included),
+        drop it and every later one until the key arrives, then resume video at a keyframe."""
         held = self._key_wait
         if held is None or (held and held[-1] is None):
             return
@@ -822,7 +823,9 @@ class MediaStream:
             self.channel,
             key_id,
         )
-        self._key_wait, self._key_wait_bytes = [], 0
+        # The frames still queued count against the cap: holds cannot stack up unread.
+        self._key_wait = []
+        self._key_wait_bytes = sum(len(frame.data) for frame in self._frames)
         self._key_fetch_id = key_id
         self._key_task = asyncio.get_running_loop().create_task(
             self._session._e2e_cipher_key(key_id)
