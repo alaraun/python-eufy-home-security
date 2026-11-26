@@ -17,7 +17,7 @@
 | [reference/source-of-truth.md](reference/source-of-truth.md) | Which source answers which question: cloud vs the live dump, why entities come from the model's settings and not from reported parameters, grades and freshness |
 | [reference/hardware-verification.md](reference/hardware-verification.md) | What has been proven on real hardware |
 | **Protocol** | |
-| [protocol/README.md](protocol/README.md) | The wire formats: cloud, P2P transport, session crypto, commands, events, media, MQTT |
+| [protocol/README.md](protocol/README.md) | The wire formats: cloud, P2P transport, session crypto, commands, events, media, MQTT, the WebRTC protocol layers |
 
 Scope: the eufy HomeBase 3 (T8030) and the cameras paired to it, over local P2P,
 with the eufy cloud used only for login, keys and push. Models and capabilities are
