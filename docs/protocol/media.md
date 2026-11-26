@@ -856,7 +856,9 @@ the **key id**, and the record names one of two key types (`E2EKeyType`):
   does not parse, a failed fetch or one still running when the recording's first-frame
   wait (10 s) runs out ends the stream with `EndToEndEncryptedError` (an
   `UnsupportedError`) naming the cipher; a cloud failure is also reported as a
-  `CloudProblem`. A record of the PIN key ends it with
+  `CloudProblem`. On a stream that already delivered video, a further cipher whose key
+  cannot be had is not fetched again: its records are dropped (one warning) and video
+  resumes at a keyframe the stream decodes. A record of the PIN key ends it with
   `PinProtectedKeyError`: the key needs the user's PIN, which the library neither asks
   for nor stores. A live stream decodes no end-to-end record, as the app plays them only
   from recordings.

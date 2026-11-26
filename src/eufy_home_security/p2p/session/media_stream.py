@@ -62,6 +62,9 @@ MEDIA_QUEUE_FRAMES = 250
 MEDIA_OTHER_CAMERA_FRAMES = 25
 """A live stream fails when this many frames of another camera arrive before its own."""
 
+_HeldRecord = tuple[int, bytes, int | None, bytes | None]
+"""A media record held for an end-to-end key: frame type, payload, camera, subheader."""
+
 MEDIA_KEY_WAIT_BYTES = 32 * 1024 * 1024
 """Media bytes a recording holds while the cloud cipher key of its end-to-end encrypted
 records is fetched (a station sends a short recording whole meanwhile); past it, records
@@ -186,10 +189,12 @@ class MediaStream:
         """What the stream did with the previous video record (diagnostics)."""
         self._last_key_ms: int | None = None
         """The header time of the latest keyframe that decoded."""
-        self._key_wait: list[tuple[int, bytes, int | None, bytes | None]] | None = None
-        """Records held while an end-to-end key is fetched (None: no fetch running)."""
+        self._key_wait: list[_HeldRecord | None] | None = None
+        """Records held while an end-to-end key is fetched, None where the hold overflowed
+        and records were dropped (the list None: no fetch running)."""
         self._key_wait_bytes = 0
-        self._key_wait_overflow = False
+        self._e2e_failed: dict[int, EndToEndEncryptedError] = {}
+        """The ciphers whose key could not be had, and why: their records are dropped."""
         self._end_after_key = False
         """The station ended the recording while its key was fetched."""
         self._key_task: asyncio.Task[rsa.RSAPrivateKey] | None = None
@@ -405,6 +410,12 @@ class MediaStream:
             refusal = self._decoder.e2e_refusal(subheader)
             if isinstance(refusal, PinProtectedKeyError):
                 self._refuse_video(refusal, variant)
+                return "undecodable"
+            failed = None if refusal is None else self._e2e_failed.get(refusal.key_id)
+            if failed is not None:
+                self._need_keyframe = True  # the frames after it may reference it
+                self._drop_held_pframe()
+                self._refuse_video(failed, variant)
                 return "undecodable"
             if refusal is not None:
                 self._fetch_e2e_key(refusal.key_id)
@@ -769,13 +780,23 @@ class MediaStream:
         """Keep a record until the end-to-end key arrives; past
         :data:`MEDIA_KEY_WAIT_BYTES`, drop it and every later one until the key arrives,
         then resume video at a keyframe."""
-        if self._key_wait is None:
+        held = self._key_wait
+        if held is None or (held and held[-1] is None):
             return
-        if self._key_wait_overflow or self._key_wait_bytes + len(payload) > MEDIA_KEY_WAIT_BYTES:
-            self._key_wait_overflow = True
+        if self._key_wait_bytes + len(payload) > MEDIA_KEY_WAIT_BYTES:
+            held.append(None)
             return
         self._key_wait_bytes += len(payload)
-        self._key_wait.append((frame_type, payload, camera, subheader))
+        held.append((frame_type, payload, camera, subheader))
+
+    def _records_lost(self) -> None:
+        """The hold dropped records here: while another key is fetched hold nothing more,
+        else resume video at a keyframe."""
+        if self._key_wait is not None:
+            self._key_wait.append(None)
+            return
+        self._need_keyframe = True
+        self._drop_held_pframe()
 
     def _fetch_e2e_key(self, key_id: int) -> None:
         """Fetch the cloud cipher ``key_id`` for the recording's end-to-end encrypted
@@ -787,7 +808,7 @@ class MediaStream:
             self.channel,
             key_id,
         )
-        self._key_wait, self._key_wait_bytes, self._key_wait_overflow = [], 0, False
+        self._key_wait, self._key_wait_bytes = [], 0
         self._key_fetch_id = key_id
         self._key_task = asyncio.get_running_loop().create_task(
             self._session._e2e_cipher_key(key_id)
@@ -795,7 +816,9 @@ class MediaStream:
         self._key_task.add_done_callback(lambda task: self._key_fetched(key_id, task))
 
     def _key_fetched(self, key_id: int, task: asyncio.Task[rsa.RSAPrivateKey]) -> None:
-        """Take the fetched key and replay the held records, or fail the stream."""
+        """Take the fetched key and replay the held records. A key that cannot be had
+        fails a stream before its first keyframe; after it, the cipher's records are
+        dropped and the others replayed."""
         self._key_task = None
         held, self._key_wait = self._key_wait, None
         if task.cancelled():
@@ -812,22 +835,25 @@ class MediaStream:
                     key_id=key_id,
                 )
                 error.__cause__ = task.exception()
-            self._refuse_video(error, VideoVariant.E2E)
-            return
-        self._decoder.add_e2e_key(key_id, task.result())
+            self._e2e_failed[key_id] = error
+            if not self._started:
+                self._refuse_video(error, VideoVariant.E2E)
+                return
+        else:
+            self._decoder.add_e2e_key(key_id, task.result())
         self._replaying = True  # nothing read them while they were held
         try:
             for record in held:
                 if self.closed:  # a held record can fail the stream
                     return
-                self._take(*record)
+                if record is None:
+                    self._records_lost()
+                else:
+                    self._take(*record)
         finally:
             self._replaying = False
         if self._key_pending:
             return  # a held record named another cipher: its fetch runs now
-        if self._key_wait_overflow:
-            self._need_keyframe = True
-            self._drop_held_pframe()
         if self._end_after_key:
             self._finish()
 

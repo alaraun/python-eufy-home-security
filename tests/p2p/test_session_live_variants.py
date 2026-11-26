@@ -884,3 +884,124 @@ async def test_a_key_fetch_past_the_first_frame_wait_ends_the_stream_naming_the_
         await stream.aclose()
         await session.async_close()
     assert (err.value.key_type, err.value.key_id) == (E2EKeyType.CIPHER, 7)
+
+
+class _GatedKeys(_Keys):
+    """Answers each key id once its gate is set; ``failing`` ids raise."""
+
+    def __init__(self, failing: tuple[int, ...] = ()) -> None:
+        super().__init__(delay=0)
+        self.gates: dict[int, asyncio.Event] = {}
+        self.failing = failing
+
+    def gate(self, key_id: int) -> asyncio.Event:
+        return self.gates.setdefault(key_id, asyncio.Event())
+
+    async def __call__(self, key_id: int) -> str | None:
+        self.asked.append(key_id)
+        await self.gate(key_id).wait()
+        if key_id in self.failing:
+            raise CloudApiError(500, "boom")
+        return self.answer
+
+
+async def _started_on_cipher_7(stream: MediaStream, keys: _GatedKeys) -> None:
+    keys.gate(7).set()
+    for n in range(2):
+        stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+    await _key_settled(stream)
+    assert stream._started
+
+
+async def test_a_second_cipher_that_fails_on_a_started_stream_still_ends_it_on_time(
+    e2e_hb2: FakeStation,
+) -> None:
+    """The station ends the recording while the key of a second cipher is fetched; the
+    fetch fails: the stream ends then, not after its idle wait."""
+    keys = _GatedKeys(failing=(8,))
+    session = _session(e2e_hb2, keys)
+    stream = _e2e_stream(session)
+    try:
+        await _started_on_cipher_7(stream, keys)
+        stream._feed(FrameType.VIDEO_FRAME, _e2e_video(2), subheader=_e2e_sub(8))
+        stream._end()
+        keys.gate(8).set()
+        async with asyncio.timeout(2):  # the idle wait is 5 s
+            frames = [frame async for frame in stream]
+    finally:
+        await stream.aclose()
+        await session.async_close()
+    assert stream.ended
+    assert [_counter(f) for f in frames if f.kind is MediaKind.VIDEO] == [0]
+
+
+async def test_a_cipher_whose_key_failed_is_not_fetched_again_per_record(
+    e2e_hb2: FakeStation,
+) -> None:
+    """Its later records are dropped, video resumes at a keyframe of a cipher it holds."""
+    keys = _GatedKeys(failing=(8,))
+    keys.gate(8).set()
+    session = _session(e2e_hb2, keys)
+    stream = _e2e_stream(session)
+    try:
+        await _started_on_cipher_7(stream, keys)
+        for n in range(2, MEDIA_GOP + 2):
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub(8))
+            await _key_settled(stream)
+        for n in range(MEDIA_GOP + 2, 2 * MEDIA_GOP + 2):
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+        stream._end()
+        async with asyncio.timeout(2):
+            frames = [frame async for frame in stream]
+    finally:
+        await stream.aclose()
+        await session.async_close()
+    assert keys.asked == [7, 8]
+    video = [_counter(f) for f in frames if f.kind is MediaKind.VIDEO]
+    assert video == [0, *range(2 * MEDIA_GOP, 2 * MEDIA_GOP + 2)]
+
+
+async def test_a_second_fetch_during_the_replay_keeps_the_first_holds_overflow(
+    e2e_hb2: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The first hold overflowed; a held record names another cipher, whose fetch runs
+    while records keep arriving: none of those is held, and video resumes at the first
+    keyframe after both keys."""
+    first = [
+        (_e2e_video(0), _e2e_sub()),
+        (_e2e_video(1), _e2e_sub()),
+        (_e2e_video(2), _e2e_sub(8)),
+        (_e2e_video(3), _e2e_sub()),
+    ]
+    big = 4000  # the keyframe at MEDIA_GOP does not fit, the P-frames after it would
+    monkeypatch.setattr(
+        media_stream_module,
+        "MEDIA_KEY_WAIT_BYTES",
+        sum(len(r) for r, _ in first) + 3 * len(_e2e_video(1)),
+    )
+    keys = _GatedKeys()
+    session = _session(e2e_hb2, keys)
+    stream = _e2e_stream(session)
+    try:
+        for record, sub in first:
+            stream._feed(FrameType.VIDEO_FRAME, record, subheader=sub)
+        stream._feed(FrameType.VIDEO_FRAME, _e2e_video(MEDIA_GOP, size=big), subheader=_e2e_sub())
+        keys.gate(7).set()
+        async with asyncio.timeout(5):
+            while keys.asked != [7, 8]:
+                await asyncio.sleep(0.01)
+        for n in range(MEDIA_GOP + 1, 2 * MEDIA_GOP):  # during the second fetch
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+        keys.gate(8).set()
+        await _key_settled(stream)
+        for n in range(2 * MEDIA_GOP, 2 * MEDIA_GOP + 2):  # after both keys
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+        stream._end()
+        async with asyncio.timeout(2):
+            frames = [frame async for frame in stream]
+    finally:
+        await stream.aclose()
+        await session.async_close()
+    video = [_counter(f) for f in frames if f.kind is MediaKind.VIDEO]
+    # The last held P-frame goes too: the record lost after it may be its rest.
+    assert video == [0, 1, 2, 2 * MEDIA_GOP, 2 * MEDIA_GOP + 1]
