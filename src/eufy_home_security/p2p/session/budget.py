@@ -19,13 +19,14 @@ from ...exceptions import (
 )
 from ..clip import ClipWriter, MediaClip, mux_frames
 from ..media import MediaKeyType, MediaKind
-from ..messages import DB_QUERY_LOCAL_EVENTS, history_query_verb
 from ..pacing import FramePacer
+from .media_slot import recording_is_native
 from .media_stream import MediaStream
 from .stats import HealthCounters, MediaCounters
 from .wake import WakeBackoff
 
 if TYPE_CHECKING:
+    from ...models import E2EKey
     from .media_slot import MediaSlot
 
 _LOGGER = logging.getLogger(__name__)
@@ -243,18 +244,21 @@ class SessionBudget:
         *,
         first_frame_timeout: float,
         wait: bool = True,
+        e2e_key: E2EKey | None = None,
     ) -> MediaClip:
         """See :meth:`StationSession.async_download_recording`."""
         if self._session.standalone:
             raise UnsupportedError("a standalone device lists no recordings to download")
+        native = recording_is_native(self._session.serial, path)
         self._session._raise_if_closed()
+        await self._session._e2e_ready(e2e_key)
         async with self.download_lock:
             return await self._recording_on_extra(
                 path,
                 channel,
                 write,
                 play=False,
-                download=history_query_verb(self._session.serial) == DB_QUERY_LOCAL_EVENTS,
+                download=native,
                 first_frame_timeout=first_frame_timeout,
                 wait=wait,
             )
@@ -268,11 +272,14 @@ class SessionBudget:
         first_frame_timeout: float,
         wait: bool = True,
         realtime: bool = True,
+        e2e_key: E2EKey | None = None,
     ) -> MediaClip:
         """See :meth:`StationSession.async_play_recording`."""
         if self._session.standalone:
             raise UnsupportedError("a standalone device lists no recordings to play")
+        recording_is_native(self._session.serial, path)
         self._session._raise_if_closed()
+        await self._session._e2e_ready(e2e_key)
         return await self._recording_on_extra(
             path,
             channel,
@@ -361,6 +368,8 @@ class BudgetOwner(Protocol):
     def standalone(self) -> bool: ...
 
     def _raise_if_closed(self) -> None: ...
+
+    async def _e2e_ready(self, key: E2EKey | None) -> None: ...
 
     def _short_lived_session(self) -> BudgetOwner: ...
 

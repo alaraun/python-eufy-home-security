@@ -9,23 +9,59 @@ and a bare 1004 carrying the channel.
 from __future__ import annotations
 
 import asyncio
+import gc
+import logging
 import struct
+import time
 from collections.abc import AsyncIterator
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 from eufy_home_security.devices.live_open import LiveOpen, LiveStop
 from eufy_home_security.devices.live_view import Lens, LensView, live_view
 from eufy_home_security.exceptions import (
+    CloudApiError,
     CommandNotAppliedError,
     CommandRejectedError,
+    CommunicationError,
+    EndToEndEncryptedError,
+    PinProtectedKeyError,
+    StationUnreachableError,
     UnsupportedError,
 )
-from eufy_home_security.p2p.media import MediaFrame, MediaKeyType, MediaKind, VideoVariant
-from eufy_home_security.p2p.session import P2PCredentials, StationSession
+from eufy_home_security.models import E2EKey, E2EKeyType
+from eufy_home_security.p2p.media import (
+    MediaDecoder,
+    MediaFrame,
+    MediaKeyType,
+    MediaKind,
+    VideoVariant,
+    generate_media_rsa_key,
+)
+from eufy_home_security.p2p.messages import (
+    CMD_RECORD_VIEW,
+    DB_QUERY_HISTORY,
+    history_query_verb,
+)
+from eufy_home_security.p2p.session import E2EKeyProvider, P2PCredentials, StationSession
+from eufy_home_security.p2p.session import media_stream as media_stream_module
 from eufy_home_security.p2p.session.media_stream import MediaStream
+from eufy_home_security.p2p.xzyh import FrameType
 from eufy_home_security.testing import SYNTHETIC
-from eufy_home_security.testing.station import MEDIA_KEYFRAME, FakeStation
+from eufy_home_security.testing.station import (
+    MEDIA_AUDIO,
+    MEDIA_GOP,
+    MEDIA_KEYFRAME,
+    MEDIA_RECORDING_PFRAME,
+    E2EMediaKey,
+    FakeStation,
+    audio_record,
+    e2e_audio_record,
+    e2e_video_record,
+    video_record,
+)
 
 HB2_SN = "T8010P2000054321"
 """A synthetic HomeBase 2 serial."""
@@ -48,11 +84,17 @@ async def hb3() -> AsyncIterator[FakeStation]:
     fake.stop()
 
 
-def _session(station: FakeStation) -> StationSession:
+def _session(station: FakeStation, e2e_keys: E2EKeyProvider | None = None) -> StationSession:
     async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
 
-    return StationSession(station.serial, provider, host="127.0.0.1", port=station.discovery_port)
+    return StationSession(
+        station.serial,
+        provider,
+        host="127.0.0.1",
+        port=station.discovery_port,
+        e2e_keys=e2e_keys,
+    )
 
 
 async def _frames(stream: MediaStream, keyframes: int = 2) -> list[MediaFrame]:
@@ -447,3 +489,930 @@ async def test_audio_of_media_version_0_is_not_delivered_as_the_app_drops_it(
         await stream.aclose()
     finally:
         await session.async_close()
+
+
+# ── end-to-end encrypted recordings ─────────────────────────────────────────
+
+NATIVE_CLIP = "/media/mmcblk0p1/Camera05/20310203112233.dat"
+E2E_CIPHER = rsa.generate_private_key(65537, 1024)  # noqa: S505 (protocol)
+E2E_CIPHER_TEXT = E2E_CIPHER.private_bytes(
+    serialization.Encoding.PEM,
+    serialization.PrivateFormat.PKCS8,
+    serialization.NoEncryption(),
+).decode()
+
+
+@pytest.fixture
+async def e2e_hb2() -> AsyncIterator[FakeStation]:
+    """A HomeBase 2 whose recordings are end-to-end encrypted under the owner's cloud
+    cipher 7 (subheader version 5, key id 7)."""
+    fake = FakeStation(serial=SYNTHETIC.homebase2_station_sn)
+    fake.video_variant = VideoVariant.E2E
+    fake.e2e_cipher_key = E2E_CIPHER
+    fake.e2e_media_version, fake.e2e_key_id = 5, 7
+    fake.recording_frames = 12
+    await fake.start()
+    yield fake
+    fake.stop()
+
+
+class _Keys:
+    """An :class:`E2EKeyProvider` recording the key ids asked, answering after ``delay``."""
+
+    def __init__(
+        self,
+        answer: str | None = E2E_CIPHER_TEXT,
+        delay: float = 0.2,
+        error: Exception | None = None,
+    ) -> None:
+        self.answer = answer
+        self.delay = delay
+        self.asked: list[int] = []
+        self.error = error
+
+    async def __call__(self, key_id: int) -> str | None:
+        self.asked.append(key_id)
+        await asyncio.sleep(self.delay)
+        if self.error is not None:
+            raise self.error
+        return self.answer
+
+
+async def _recording_frames(session: StationSession) -> list[MediaFrame]:
+    await session.async_connect()
+    stream = await session.async_open_recording(NATIVE_CLIP, CAMERA)
+    out: list[MediaFrame] = []
+    async with asyncio.timeout(8), stream:
+        out.extend([frame async for frame in stream])
+    return out
+
+
+async def test_an_e2e_recording_decodes_under_the_owners_cloud_cipher_fetched_once(
+    e2e_hb2: FakeStation,
+) -> None:
+    """Records arriving while the key is fetched are held, then decoded in order."""
+    keys = _Keys()
+    session = _session(e2e_hb2, keys)
+    try:
+        started = asyncio.get_running_loop().time()
+        frames = await _recording_frames(session)
+        took = asyncio.get_running_loop().time() - started
+    finally:
+        await session.async_close()
+    assert took < 2.0, "the station's end, taken during the fetch, ends it after the replay"
+    video = [f for f in frames if f.kind is MediaKind.VIDEO]
+    assert video[0].is_keyframe
+    assert video[0].data == MEDIA_KEYFRAME
+    assert len(video) == e2e_hb2.recording_frames, "nothing lost while the key was fetched"
+    assert any(f.kind is MediaKind.AUDIO for f in frames)
+    assert keys.asked == [7]
+
+
+async def test_an_e2e_download_ends_on_the_stations_end_after_the_held_records(
+    e2e_hb2: FakeStation,
+) -> None:
+    keys = _Keys()
+    session = _session(e2e_hb2, keys)
+
+    async def write(_chunk: bytes) -> None:
+        return None
+
+    try:
+        await session.async_connect()
+        async with asyncio.timeout(10):
+            clip = await session.async_download_recording(NATIVE_CLIP, CAMERA, write)
+    finally:
+        await session.async_close()
+    assert clip.video_frames == e2e_hb2.recording_frames
+    assert keys.asked == [7]
+
+
+async def test_records_past_the_key_wait_resume_video_at_a_keyframe(
+    e2e_hb2: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The first records are held, those past the cap dropped, and the records arriving
+    after the key resume at their next keyframe, not at a P-frame missing its reference."""
+    monkeypatch.setattr(media_stream_module, "MEDIA_KEY_WAIT_BYTES", 1200)
+    e2e_hb2.recording_frames = 16
+    e2e_hb2.recording_pause = (9, 0.6)  # frames 9-15 after the key; keyframes every 4th
+    session = _session(e2e_hb2, _Keys(delay=0.3))
+    try:
+        frames = await _recording_frames(session)
+    finally:
+        await session.async_close()
+    video = [f for f in frames if f.kind is MediaKind.VIDEO]
+    assert video[0].is_keyframe
+    held = next(i for i, f in enumerate(video) if i and f.is_keyframe)
+    assert held < 4, "only the records under the cap were held"
+    assert len(video) == held + 4, "after the key: from the keyframe at 12, not P-frame 9"
+
+
+async def test_an_e2e_recording_of_the_users_pin_key_is_refused_without_a_fetch(
+    e2e_hb2: FakeStation,
+) -> None:
+    e2e_hb2.e2e_media_version, e2e_hb2.e2e_key_id = 4, 10
+    keys = _Keys()
+    session = _session(e2e_hb2, keys)
+    try:
+        with pytest.raises(PinProtectedKeyError, match="PIN-protected key") as err:
+            await _recording_frames(session)
+    finally:
+        await session.async_close()
+    assert (err.value.key_type, err.value.key_id) == (E2EKeyType.PIN, 10)
+    assert keys.asked == []
+
+
+@pytest.mark.parametrize(
+    ("keys", "message"),
+    [
+        (None, "cannot fetch cipher keys"),
+        (_Keys(answer=None), "serves no RSA key"),
+        (_Keys(answer="not a key"), "does not parse"),
+        (_Keys(error=RuntimeError("provider bug")), "could not be fetched: provider bug"),
+    ],
+)
+async def test_an_e2e_recording_whose_key_is_not_to_be_had_fails_naming_the_cipher(
+    e2e_hb2: FakeStation, keys: _Keys | None, message: str
+) -> None:
+    session = _session(e2e_hb2, keys)
+    try:
+        with pytest.raises(EndToEndEncryptedError, match=message) as err:
+            await _recording_frames(session)
+    finally:
+        await session.async_close()
+    assert not isinstance(err.value, PinProtectedKeyError)
+    assert (err.value.key_type, err.value.key_id) == (E2EKeyType.CIPHER, 7)
+    assert str(err.value).count("cipher 7") == 1
+
+
+async def test_live_e2e_media_is_refused_as_the_app_plays_it_only_from_recordings(
+    e2e_hb2: FakeStation,
+) -> None:
+    keys = _Keys()
+    session = _session(e2e_hb2, keys)
+    try:
+        stream = await session.async_open_live(CAMERA)
+        with pytest.raises(UnsupportedError, match="only from a recording") as err:
+            await _frames(stream, 1)
+    finally:
+        await session.async_close()
+    assert not isinstance(err.value, EndToEndEncryptedError)
+    assert keys.asked == []
+
+
+async def test_a_recording_opened_with_its_cloud_cipher_key_has_the_key_before_the_open(
+    e2e_hb2: FakeStation,
+) -> None:
+    """With ``e2e_key`` (the history row's) the key is fetched before the open goes out,
+    so no record waits for it; a later recording on the session reuses it."""
+    session: StationSession
+    open_at_fetch: list[bool] = []
+
+    class Keys(_Keys):
+        async def __call__(self, key_id: int) -> str | None:
+            open_at_fetch.append(session._media_slot.stream is not None)
+            return await super().__call__(key_id)
+
+    keys = Keys()
+    session = _session(e2e_hb2, keys)
+    key = E2EKey(E2EKeyType.CIPHER, 7)
+    try:
+        counts = []
+        for _ in range(2):
+            stream = await session.async_open_recording(NATIVE_CLIP, CAMERA, e2e_key=key)
+            async with asyncio.timeout(8), stream:
+                frames = [frame async for frame in stream]
+            assert "key_pending" not in {shape.outcome for shape in stream._shapes}
+            counts.append(len([f for f in frames if f.kind is MediaKind.VIDEO]))
+    finally:
+        await session.async_close()
+    assert open_at_fetch == [False]
+    assert keys.asked == [7]
+    assert counts == [e2e_hb2.recording_frames] * 2
+
+
+async def test_a_recording_named_under_the_pin_key_is_refused_before_connecting(
+    e2e_hb2: FakeStation,
+) -> None:
+    keys = _Keys()
+    session = _session(e2e_hb2, keys)
+    try:
+        with pytest.raises(PinProtectedKeyError, match=r"key id 10\)"):
+            await session.async_open_recording(
+                NATIVE_CLIP, CAMERA, e2e_key=E2EKey(E2EKeyType.PIN, 10)
+            )
+    finally:
+        await session.async_close()
+    assert e2e_hb2.sessions == 0
+    assert keys.asked == []
+
+
+@pytest.mark.parametrize(
+    ("refusal", "call", "error"),
+    [
+        ("closed", "async_open_recording", StationUnreachableError),
+        ("closed", "async_download_recording", StationUnreachableError),
+        ("closed", "async_play_recording", StationUnreachableError),
+        ("standalone", "async_download_recording", UnsupportedError),
+        ("standalone", "async_play_recording", UnsupportedError),
+        ("path", "async_open_recording", UnsupportedError),
+        ("path", "async_download_recording", UnsupportedError),
+        ("path", "async_play_recording", UnsupportedError),
+        ("dat", "async_open_recording", UnsupportedError),
+        ("dat", "async_download_recording", UnsupportedError),
+        ("dat", "async_play_recording", UnsupportedError),
+    ],
+)
+async def test_a_recording_refused_before_its_open_fetches_no_cloud_key(
+    e2e_hb2: FakeStation, refusal: str, call: str, error: type[Exception]
+) -> None:
+    """A closed session's recording, a standalone device's transfer, a path that is not a
+    recording's and a native ``.dat`` path on a 10011 station are refused before the cloud
+    is asked for the cipher key their history row names, and before any session opens."""
+    keys = _Keys(delay=0)
+    session = _session(e2e_hb2, keys)
+    if refusal in ("standalone", "dat"):
+        serial = SYNTHETIC.camera_sn if refusal == "standalone" else SYNTHETIC.station_sn
+        assert (history_query_verb(serial) == DB_QUERY_HISTORY) is (refusal == "dat")
+        session = StationSession(
+            serial,
+            session._credentials,
+            host="127.0.0.1",
+            port=e2e_hb2.discovery_port,
+            e2e_keys=keys,
+        )
+    elif refusal == "closed":
+        await session.async_close()
+    path = "/tmp/clip.mp4" if refusal == "path" else NATIVE_CLIP  # noqa: S108 (not opened)
+
+    async def write(_chunk: bytes) -> None:
+        raise AssertionError("nothing is written")
+
+    args: tuple[object, ...] = (path, CAMERA) if "open" in call else (path, CAMERA, write)
+    try:
+        with pytest.raises(error) as err:
+            await getattr(session, call)(*args, e2e_key=E2EKey(E2EKeyType.CIPHER, 7))
+    finally:
+        await session.async_close()
+    assert not isinstance(err.value, EndToEndEncryptedError)
+    assert keys.asked == []
+    assert e2e_hb2.sessions == 0
+
+
+@pytest.mark.parametrize(
+    ("call", "by_row"),
+    [
+        ("async_open_recording", True),
+        ("async_download_recording", True),
+        ("async_open_recording", False),
+    ],
+)
+async def test_a_cloud_failure_fetching_a_cipher_key_is_a_communication_error_to_retry(
+    e2e_hb2: FakeStation, call: str, by_row: bool
+) -> None:
+    """The provider fails while a cloud cipher's key is fetched, before the open (the row
+    names the cipher; nothing is sent) or while a recording opened by path alone holds its
+    records: the call raises a :class:`CommunicationError` naming the cipher once (the
+    cloud's error chained), not the recording's refusal, and the next call fetches again."""
+    keys = _Keys(delay=0)
+    keys.error = CloudApiError(500, "boom")
+    session = _session(e2e_hb2, keys)
+    key = E2EKey(E2EKeyType.CIPHER, 7) if by_row else None
+
+    async def write(_chunk: bytes) -> None:
+        return None
+
+    args: tuple[object, ...] = (
+        (NATIVE_CLIP, CAMERA) if "open" in call else (NATIVE_CLIP, CAMERA, write)
+    )
+
+    async def video_frames() -> int:
+        async with asyncio.timeout(10):
+            result = await getattr(session, call)(*args, e2e_key=key)
+            if isinstance(result, MediaStream):
+                async with result:
+                    frames = [frame async for frame in result]
+                return len([f for f in frames if f.kind is MediaKind.VIDEO])
+            return int(result.video_frames)
+
+    try:
+        with pytest.raises(CommunicationError, match="cipher 7") as err:
+            await video_frames()
+        if by_row:
+            assert e2e_hb2.sessions == 0
+        keys.error = None
+        assert await video_frames() == e2e_hb2.recording_frames
+    finally:
+        await session.async_close()
+    assert not isinstance(err.value, UnsupportedError)
+    assert str(err.value).count("cipher 7") == 1
+    assert isinstance(err.value.__cause__, CloudApiError)
+    assert keys.asked == [7, 7]
+
+
+async def test_every_record_held_during_a_slow_key_fetch_is_delivered(
+    e2e_hb2: FakeStation,
+) -> None:
+    """More records than the media queue holds arrive while the key is fetched (the whole
+    recording and its end): all of them are delivered, none dropped."""
+    e2e_hb2.recording_frames = media_stream_module.MEDIA_QUEUE_FRAMES + 50
+
+    class Keys(_Keys):
+        async def __call__(self, key_id: int) -> str | None:
+            while e2e_hb2.media_frames_sent < e2e_hb2.recording_frames:
+                await asyncio.sleep(0.02)
+            await asyncio.sleep(0.2)  # the end of playback too
+            return await super().__call__(key_id)
+
+    session = _session(e2e_hb2, Keys(delay=0))
+    try:
+        await session.async_connect()
+        stream = await session.async_open_recording(NATIVE_CLIP, CAMERA)
+        async with asyncio.timeout(10), stream:
+            frames = [frame async for frame in stream]
+    finally:
+        await session.async_close()
+    video = [f for f in frames if f.kind is MediaKind.VIDEO]
+    assert len(video) == e2e_hb2.recording_frames
+    assert len(frames) - len(video) == e2e_hb2.recording_frames  # one audio record each
+    assert (stream.dropped, stream.skipped) == (0, 0)
+    assert stream.end_frame
+
+
+@pytest.mark.parametrize("pause", [0, 0.001])
+async def test_records_after_the_replay_queue_behind_its_backlog_for_a_reader_keeping_up(
+    e2e_hb2: FakeStation, pause: float
+) -> None:
+    """The key arrives halfway through a recording opened by path: the records arriving
+    while the reader works through the replayed backlog are queued behind it, not dropped
+    as if the reader were slow."""
+    e2e_hb2.recording_frames = 800
+
+    class Keys(_Keys):
+        async def __call__(self, key_id: int) -> str | None:
+            while e2e_hb2.media_frames_sent < 400:
+                await asyncio.sleep(0.005)
+            return await super().__call__(key_id)
+
+    session = _session(e2e_hb2, Keys(delay=0))
+    frames: list[MediaFrame] = []
+    try:
+        await session.async_connect()
+        stream = await session.async_open_recording(NATIVE_CLIP, CAMERA)
+        async with asyncio.timeout(20), stream:
+            async for frame in stream:
+                frames.append(frame)
+                await asyncio.sleep(pause)
+    finally:
+        await session.async_close()
+    assert len([f for f in frames if f.kind is MediaKind.VIDEO]) == e2e_hb2.recording_frames
+    assert (stream.dropped, stream.skipped) == (0, 0)
+
+
+# A recording stream driven record by record (no station): the hold and its replay.
+
+_E2E_RECORD_KEY = E2EMediaKey.for_cipher(E2E_CIPHER.public_key())
+
+
+def _e2e_sub(key_id: int = 7, version: int = 5) -> bytes:
+    return bytes([version, 0, CAMERA, key_id, 1, 0])
+
+
+def _e2e_video(n: int, *, size: int = 0) -> bytes:
+    """Video record ``n`` of a recording sealed for cipher 7: a keyframe every
+    :data:`MEDIA_GOP`, ``size`` padding bytes added to the picture."""
+    keyframe = n % MEDIA_GOP == 0
+    body = (MEDIA_KEYFRAME if keyframe else MEDIA_RECORDING_PFRAME) + bytes(size)
+    clear = video_record(body, keyframe=keyframe, counter=n, timestamp_ms=1000 + 40 * n)
+    return e2e_video_record(clear, _E2E_RECORD_KEY)
+
+
+def _e2e_audio(n: int) -> bytes:
+    clear = audio_record(MEDIA_AUDIO, counter=n, timestamp_ms=1000 + 40 * n)
+    return e2e_audio_record(clear, _E2E_RECORD_KEY)
+
+
+def _e2e_stream(session: StationSession, first_frame_timeout: float = 5.0) -> MediaStream:
+    return MediaStream(
+        session,
+        command=CMD_RECORD_VIEW,
+        channel=CAMERA,
+        decoder=MediaDecoder(generate_media_rsa_key()[1], e2e_keys={}),
+        stop_body=None,
+        first_frame_timeout=first_frame_timeout,
+        idle_timeout=5.0,
+    )
+
+
+async def _key_settled(stream: MediaStream) -> None:
+    async with asyncio.timeout(5):
+        while stream._key_task is not None:
+            await asyncio.sleep(0.01)
+
+
+async def test_the_media_queue_takes_its_bound_behind_the_replayed_backlog(
+    e2e_hb2: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The held records go into the queue whole; records arriving after the replay find
+    room for the queue's bound behind them, then are dropped for the slow reader. The
+    extra room shrinks as the reader works through the backlog."""
+    monkeypatch.setattr(media_stream_module, "MEDIA_QUEUE_FRAMES", 4)
+    session = _session(e2e_hb2, _Keys(delay=0))
+    stream = _e2e_stream(session)
+    try:
+        for n in range(6):
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+        await _key_settled(stream)
+        assert len(stream._frames) == 5  # the sixth frame is held for a continuation
+        queued = 0
+        for n in range(6, 40):
+            queued = len(stream._frames)
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+            if stream.dropped:
+                break
+        assert queued == 5 + 4, "the bound's 4 frames behind the 5 replayed"
+        assert len(stream._frames) == queued
+        now = time.monotonic()
+        assert stream._expired(now), "full at its bound and dropping: unread"
+        await anext(stream)
+        assert not stream._expired(now), "under its bound: read"
+        for _ in range(5):
+            await anext(stream)
+        assert len(stream._frames) == 3
+        assert stream._queue_bound == 4 + 3, "as many replayed frames as are left at most"
+    finally:
+        await stream.aclose()
+        await session.async_close()
+
+
+async def test_a_second_replay_adds_to_the_unread_backlog_of_the_first(
+    e2e_hb2: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cipher 7's replay sits unread when cipher 8's records are held and replayed: records
+    arriving after both find room for the queue's bound behind both replays."""
+    monkeypatch.setattr(media_stream_module, "MEDIA_QUEUE_FRAMES", 4)
+    keys = _GatedKeys()
+    session = _session(e2e_hb2, keys)
+    stream = _e2e_stream(session)
+    try:
+        for n in range(6):
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+        keys.gate(7).set()
+        await _key_settled(stream)
+        first = len(stream._frames)
+        assert first > 4, "the first replay alone fills the plain bound"
+        for n in range(6, 2 * MEDIA_GOP + 4):
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub(8))
+        keys.gate(8).set()
+        await _key_settled(stream)
+        assert keys.asked == [7, 8]
+        replayed = len(stream._frames)
+        assert replayed - first > 4, "the second replay alone fills the plain bound"
+        assert stream.dropped == 0
+        queued = 0
+        for n in range(2 * MEDIA_GOP + 4, 10 * MEDIA_GOP):
+            queued = len(stream._frames)
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+            if stream.dropped:
+                break
+        assert stream.dropped, "the queue reached its bound"
+        assert queued == replayed + 4, "the bound's 4 frames behind both replays"
+        assert len(stream._frames) == queued
+    finally:
+        await stream.aclose()
+        await session.async_close()
+
+
+def _counter(frame: MediaFrame) -> int:
+    return (frame.timestamp_ms - 1000) // 40
+
+
+async def test_after_the_hold_overflows_nothing_more_is_held(
+    e2e_hb2: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Records keep arriving during the fetch after one did not fit: none of them is held,
+    smaller ones included, and video resumes at the first keyframe after the key."""
+    held = [_e2e_video(0), _e2e_audio(0)]
+    for n in range(1, MEDIA_GOP):
+        held += [_e2e_video(n), _e2e_audio(n)]
+    big = 4000  # the keyframe at MEDIA_GOP does not fit; two P-frames and audio after it would
+    cap = sum(map(len, held)) + 2 * (len(_e2e_video(1)) + len(_e2e_audio(1)))
+    assert len(_e2e_video(MEDIA_GOP, size=big)) > cap - sum(map(len, held))
+    monkeypatch.setattr(media_stream_module, "MEDIA_KEY_WAIT_BYTES", cap)
+    gate = asyncio.Event()
+
+    class Keys(_Keys):
+        async def __call__(self, key_id: int) -> str | None:
+            await gate.wait()
+            return await super().__call__(key_id)
+
+    session = _session(e2e_hb2, Keys(delay=0))
+    stream = _e2e_stream(session)
+    try:
+        for n in range(2 * MEDIA_GOP):  # the hold overflows at MEDIA_GOP
+            record = _e2e_video(n, size=big if n == MEDIA_GOP else 0)
+            stream._feed(FrameType.VIDEO_FRAME, record, subheader=_e2e_sub())
+            stream._feed(FrameType.AUDIO_FRAME, _e2e_audio(n), subheader=_e2e_sub())
+        gate.set()
+        await _key_settled(stream)
+        for n in range(2 * MEDIA_GOP, 2 * MEDIA_GOP + 2):  # after the key
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+            stream._feed(FrameType.AUDIO_FRAME, _e2e_audio(n), subheader=_e2e_sub())
+        stream._end()
+        async with asyncio.timeout(5):
+            frames = [frame async for frame in stream]
+    finally:
+        await stream.aclose()
+        await session.async_close()
+    after_key = [2 * MEDIA_GOP, 2 * MEDIA_GOP + 1]
+    video = [_counter(f) for f in frames if f.kind is MediaKind.VIDEO]
+    audio = [_counter(f) for f in frames if f.kind is MediaKind.AUDIO]
+    # The last held P-frame goes too: the record lost after it may be its rest.
+    assert video == [*range(MEDIA_GOP - 1), *after_key]
+    assert audio == [*range(MEDIA_GOP), *after_key]
+
+
+async def test_a_held_record_that_fails_the_stream_ends_the_replay(e2e_hb2: FakeStation) -> None:
+    """A record of the PIN key among the held ones fails the stream before its first
+    keyframe: the records held after it are not decoded, the reader gets the error."""
+    session = _session(e2e_hb2, _Keys(delay=0))
+    stream = _e2e_stream(session)
+    try:
+        stream._feed(FrameType.VIDEO_FRAME, _e2e_video(1), subheader=_e2e_sub())  # fetches
+        stream._feed(FrameType.VIDEO_FRAME, _e2e_video(2), subheader=_e2e_sub(10, version=4))
+        for n in range(MEDIA_GOP, MEDIA_GOP + 3):
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+        await _key_settled(stream)
+        assert not stream._frames
+        with pytest.raises(PinProtectedKeyError):
+            await anext(stream)
+    finally:
+        await stream.aclose()
+        await session.async_close()
+
+
+async def test_a_key_fetch_past_the_first_frame_wait_ends_the_stream_naming_the_cipher(
+    e2e_hb2: FakeStation,
+) -> None:
+    """The first-frame wait runs out while the cipher key is still being fetched: the
+    stream fails with the typed error naming the cipher, not as a stream that decoded
+    nothing."""
+    cancelled = asyncio.Event()
+
+    class Keys(_Keys):
+        async def __call__(self, key_id: int) -> str | None:
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+            return None
+
+    session = _session(e2e_hb2, Keys(delay=0))
+    stream = _e2e_stream(session, first_frame_timeout=0.3)
+    try:
+        stream._feed(FrameType.VIDEO_FRAME, _e2e_video(0), subheader=_e2e_sub())
+        async with asyncio.timeout(5):
+            with pytest.raises(EndToEndEncryptedError, match=r"cipher 7 .* within 0\.3s") as err:
+                await anext(stream)
+            await cancelled.wait()  # the fetch ends with the stream
+    finally:
+        await stream.aclose()
+        await session.async_close()
+    assert (err.value.key_type, err.value.key_id) == (E2EKeyType.CIPHER, 7)
+
+
+class _GatedKeys(_Keys):
+    """Answers each key id once its gate is set; ``failing`` ids raise."""
+
+    def __init__(self, failing: tuple[int, ...] = ()) -> None:
+        super().__init__(delay=0)
+        self.gates: dict[int, asyncio.Event] = {}
+        self.failing = failing
+
+    def gate(self, key_id: int) -> asyncio.Event:
+        return self.gates.setdefault(key_id, asyncio.Event())
+
+    async def __call__(self, key_id: int) -> str | None:
+        self.asked.append(key_id)
+        await self.gate(key_id).wait()
+        if key_id in self.failing:
+            raise CloudApiError(500, "boom")
+        return self.answer
+
+
+async def _started_on_cipher_7(stream: MediaStream, keys: _GatedKeys) -> None:
+    keys.gate(7).set()
+    for n in range(2):
+        stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+    await _key_settled(stream)
+    assert stream._started
+
+
+async def test_a_second_cipher_that_fails_on_a_started_stream_still_ends_it_on_time(
+    e2e_hb2: FakeStation,
+) -> None:
+    """The station ends the recording while the key of a second cipher is fetched; the
+    fetch fails: the stream ends then, not after its idle wait."""
+    keys = _GatedKeys(failing=(8,))
+    session = _session(e2e_hb2, keys)
+    stream = _e2e_stream(session)
+    try:
+        await _started_on_cipher_7(stream, keys)
+        stream._feed(FrameType.VIDEO_FRAME, _e2e_video(2), subheader=_e2e_sub(8))
+        stream._end()
+        keys.gate(8).set()
+        async with asyncio.timeout(2):  # the idle wait is 5 s
+            frames = [frame async for frame in stream]
+    finally:
+        await stream.aclose()
+        await session.async_close()
+    assert stream.ended
+    assert [_counter(f) for f in frames if f.kind is MediaKind.VIDEO] == [0]
+
+
+async def test_a_cipher_whose_key_failed_is_not_fetched_again_per_record(
+    e2e_hb2: FakeStation, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Its later records are dropped with one warning, video resumes at a keyframe of a
+    cipher it holds."""
+    caplog.set_level(logging.WARNING, logger=media_stream_module.__name__)
+    keys = _GatedKeys(failing=(8,))
+    keys.gate(8).set()
+    session = _session(e2e_hb2, keys)
+    stream = _e2e_stream(session)
+    try:
+        await _started_on_cipher_7(stream, keys)
+        for n in range(2, MEDIA_GOP + 2):
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub(8))
+            await _key_settled(stream)
+        for n in range(MEDIA_GOP + 2, 2 * MEDIA_GOP + 2):
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+        stream._end()
+        async with asyncio.timeout(2):
+            frames = [frame async for frame in stream]
+    finally:
+        await stream.aclose()
+        await session.async_close()
+    assert keys.asked == [7, 8]
+    video = [_counter(f) for f in frames if f.kind is MediaKind.VIDEO]
+    assert video == [0, *range(2 * MEDIA_GOP, 2 * MEDIA_GOP + 2)]
+    warnings = [
+        r.getMessage()
+        for r in caplog.records
+        if r.name == media_stream_module.__name__ and r.levelno == logging.WARNING
+    ]
+    assert len(warnings) == 1
+    assert "cipher 8" in warnings[0]
+
+
+async def test_a_second_fetch_during_the_replay_keeps_the_first_holds_overflow(
+    e2e_hb2: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The first hold overflowed; a held record names another cipher, whose fetch runs
+    while records keep arriving: none of those is held, and video resumes at the first
+    keyframe after both keys."""
+    first = [
+        (_e2e_video(0), _e2e_sub()),
+        (_e2e_video(1), _e2e_sub()),
+        (_e2e_video(2), _e2e_sub(8)),
+        (_e2e_video(3), _e2e_sub()),
+    ]
+    big = 4000  # the keyframe at MEDIA_GOP does not fit, the P-frames after it would
+    monkeypatch.setattr(
+        media_stream_module,
+        "MEDIA_KEY_WAIT_BYTES",
+        sum(len(r) for r, _ in first) + 3 * len(_e2e_video(1)),
+    )
+    keys = _GatedKeys()
+    session = _session(e2e_hb2, keys)
+    stream = _e2e_stream(session)
+    try:
+        for record, sub in first:
+            stream._feed(FrameType.VIDEO_FRAME, record, subheader=sub)
+        stream._feed(FrameType.VIDEO_FRAME, _e2e_video(MEDIA_GOP, size=big), subheader=_e2e_sub())
+        keys.gate(7).set()
+        async with asyncio.timeout(5):
+            while keys.asked != [7, 8]:
+                await asyncio.sleep(0.01)
+        for n in range(MEDIA_GOP + 1, 2 * MEDIA_GOP):  # during the second fetch
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+        keys.gate(8).set()
+        await _key_settled(stream)
+        for n in range(2 * MEDIA_GOP, 2 * MEDIA_GOP + 2):  # after both keys
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+        stream._end()
+        async with asyncio.timeout(2):
+            frames = [frame async for frame in stream]
+    finally:
+        await stream.aclose()
+        await session.async_close()
+    video = [_counter(f) for f in frames if f.kind is MediaKind.VIDEO]
+    # The last held P-frame goes too: the record lost after it may be its rest.
+    assert video == [0, 1, 2, 2 * MEDIA_GOP, 2 * MEDIA_GOP + 1]
+
+
+async def test_a_hold_counts_the_frames_still_queued_against_its_cap(
+    e2e_hb2: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A second cipher's hold starts while the first replay sits unread in the queue: the
+    queued frames' bytes count against the hold's cap, so holds cannot stack up."""
+    keys = _GatedKeys()
+    session = _session(e2e_hb2, keys)
+    stream = _e2e_stream(session)
+    try:
+        await _started_on_cipher_7(stream, keys)
+        for n in range(2, 2 * MEDIA_GOP):
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub())
+        queued = sum(len(f.data) for f in stream._frames)
+        second = _e2e_video(2 * MEDIA_GOP)
+        monkeypatch.setattr(media_stream_module, "MEDIA_KEY_WAIT_BYTES", queued + len(second))
+        stream._feed(FrameType.VIDEO_FRAME, second, subheader=_e2e_sub(8))  # fits exactly
+        for n in range(2 * MEDIA_GOP + 1, 3 * MEDIA_GOP + 2):  # the rest does not
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub(8))
+        keys.gate(8).set()
+        await _key_settled(stream)
+        stream._end()
+        async with asyncio.timeout(2):
+            frames = [frame async for frame in stream]
+    finally:
+        await stream.aclose()
+        await session.async_close()
+    video = [_counter(f) for f in frames if f.kind is MediaKind.VIDEO]
+    assert video == [*range(2 * MEDIA_GOP + 1)]
+
+
+async def test_a_second_ciphers_hold_gets_the_whole_cap_once_the_first_was_read(
+    e2e_hb2: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The first hold filled the cap and the reader took its replay: the next cipher's
+    hold starts from nothing and keeps as many bytes again."""
+    records = [_e2e_video(n) for n in range(MEDIA_GOP)]
+    monkeypatch.setattr(media_stream_module, "MEDIA_KEY_WAIT_BYTES", sum(map(len, records)))
+    keys = _GatedKeys()
+    session = _session(e2e_hb2, keys)
+    stream = _e2e_stream(session)
+    try:
+        for record in records:
+            stream._feed(FrameType.VIDEO_FRAME, record, subheader=_e2e_sub())
+        keys.gate(7).set()
+        await _key_settled(stream)
+        read = [await anext(stream) for _ in range(MEDIA_GOP - 1)]  # the last one is held
+        for n in range(MEDIA_GOP, 2 * MEDIA_GOP):
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub(8))
+        keys.gate(8).set()
+        await _key_settled(stream)
+        stream._end()
+        async with asyncio.timeout(2):
+            read += [frame async for frame in stream]
+    finally:
+        await stream.aclose()
+        await session.async_close()
+    assert [_counter(f) for f in read if f.kind is MediaKind.VIDEO] == [*range(2 * MEDIA_GOP)]
+
+
+async def test_a_key_an_extra_session_fetched_serves_the_stations_later_recordings(
+    e2e_hb2: FakeStation,
+) -> None:
+    """Each download runs on its own extra session and fetches the cipher's key there;
+    the key reaches the station's session, so the second download asks for none."""
+    keys = _Keys(delay=0)
+    session = _session(e2e_hb2, keys)
+
+    async def write(_chunk: bytes) -> None:
+        return None
+
+    try:
+        await session.async_connect()
+        for _ in range(2):
+            async with asyncio.timeout(10):
+                await session.async_download_recording(NATIVE_CLIP, CAMERA, write)
+    finally:
+        await session.async_close()
+    assert keys.asked == [7]
+    assert 7 in session._e2e_cipher_keys
+
+
+def _both_holding(session: StationSession) -> bool:
+    """Whether two extra sessions carry a stream holding records for a key."""
+    streams = [extra._media_slot.stream for extra in session._budget.extra_live]
+    return len(streams) == 2 and all(s is not None and s._key_pending for s in streams)
+
+
+@pytest.mark.parametrize("from_row", [True, False])
+async def test_concurrent_recordings_of_one_cipher_share_its_key_fetch(
+    e2e_hb2: FakeStation, from_row: bool
+) -> None:
+    """A download and a play of one cipher start together, with the row's key (fetched
+    before each open) or by path (held on each extra session): one fetch serves both."""
+    keys = _GatedKeys()
+    session = _session(e2e_hb2, keys)
+    key = E2EKey(E2EKeyType.CIPHER, 7) if from_row else None
+
+    async def write(_chunk: bytes) -> None:
+        return None
+
+    try:
+        await session.async_connect()
+        transfers = [
+            asyncio.create_task(getattr(session, call)(NATIVE_CLIP, CAMERA, write, e2e_key=key))
+            for call in ("async_download_recording", "async_play_recording")
+        ]
+        async with asyncio.timeout(5):
+            while not keys.asked:
+                await asyncio.sleep(0.01)
+            while not from_row and not _both_holding(session):
+                await asyncio.sleep(0.01)
+            await asyncio.sleep(0.05)
+        keys.gate(7).set()
+        async with asyncio.timeout(10):
+            clips = await asyncio.gather(*transfers)
+    finally:
+        await session.async_close()
+    assert keys.asked == [7]
+    assert [clip.video_frames for clip in clips] == [e2e_hb2.recording_frames] * 2
+
+
+async def test_a_shared_key_fetch_outlives_a_cancelled_waiter_and_ends_with_the_last(
+    e2e_hb2: FakeStation,
+) -> None:
+    """One of two waiters on a cipher's fetch is cancelled: the fetch goes on for the
+    other. When the only waiter left is cancelled, the provider's call is cancelled too,
+    and the next request fetches afresh."""
+    provider_cancelled = asyncio.Event()
+
+    class Keys(_GatedKeys):
+        async def __call__(self, key_id: int) -> str | None:
+            try:
+                return await super().__call__(key_id)
+            except asyncio.CancelledError:
+                provider_cancelled.set()
+                raise
+
+    keys = Keys()
+    session = _session(e2e_hb2, keys)
+    seen: list[dict[str, object]] = []
+    loop = asyncio.get_running_loop()
+    loop.set_exception_handler(lambda _loop, context: seen.append(context))
+    try:
+        first, second = (asyncio.create_task(session._e2e_cipher_key(7)) for _ in range(2))
+        async with asyncio.timeout(5):
+            while not keys.asked:
+                await asyncio.sleep(0.01)
+            first.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await first
+            await asyncio.sleep(0.01)
+            assert not provider_cancelled.is_set()
+            keys.gate(7).set()
+            assert isinstance(await second, rsa.RSAPrivateKey)
+        session._e2e_cipher_keys.clear()
+        keys.gate(7).clear()
+        last = asyncio.create_task(session._e2e_cipher_key(7))
+        async with asyncio.timeout(5):
+            while len(keys.asked) < 2:
+                await asyncio.sleep(0.01)
+            last.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await last
+            await provider_cancelled.wait()
+        keys.gate(7).set()
+        async with asyncio.timeout(5):
+            assert isinstance(await session._e2e_cipher_key(7), rsa.RSAPrivateKey)
+        for _ in range(3):
+            await asyncio.sleep(0)
+        gc.collect()
+    finally:
+        loop.set_exception_handler(None)
+        await session.async_close()
+    assert keys.asked == [7, 7, 7]
+    assert seen == []
+
+
+async def test_a_key_fetch_failing_as_its_last_caller_is_cancelled_leaves_no_stray_error(
+    e2e_hb2: FakeStation,
+) -> None:
+    """The provider fails in the same loop turn as the only caller is cancelled: the
+    failure is not left for the loop to report as never retrieved."""
+    keys = _GatedKeys(failing=(7,))
+    session = _session(e2e_hb2, keys)
+    seen: list[dict[str, object]] = []
+    loop = asyncio.get_running_loop()
+    loop.set_exception_handler(lambda _loop, context: seen.append(context))
+    try:
+        caller = asyncio.create_task(session._e2e_cipher_key(7))
+        async with asyncio.timeout(5):
+            while not keys.asked:
+                await asyncio.sleep(0.01)
+            keys.gate(7).set()  # the fetch fails on its next step, before the cancel lands
+            caller.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await caller
+        for _ in range(3):
+            await asyncio.sleep(0)
+        gc.collect()
+    finally:
+        loop.set_exception_handler(None)
+        await session.async_close()
+    assert not session._e2e_key_fetches
+    assert seen == []

@@ -49,7 +49,7 @@ from datetime import UTC, date, datetime
 from enum import StrEnum
 from ipaddress import IPv4Network
 from types import MappingProxyType
-from typing import Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from ..._logging import (
     Address,
@@ -96,6 +96,7 @@ from ...exceptions import (
     CommandRejectedError,
     CommunicationError,
     DeviceTimeoutError,
+    EndToEndEncryptedError,
     EufySecurityError,
     HandshakeError,
     KeyRejectedError,
@@ -105,7 +106,7 @@ from ...exceptions import (
     StationUnreachableError,
     UnsupportedError,
 )
-from ...models import STATION_CHANNEL, GuardMode
+from ...models import STATION_CHANNEL, E2EKey, E2EKeyType, GuardMode
 from ...recordings import RecordingRef
 from .._json import json_int
 from ..alarm import ALARM_FRAME_VALUES, AlarmFrame, decode_alarm_frame
@@ -123,6 +124,7 @@ from ..crypto import (
     frame_encryption,
     gcm_decrypt_broadcast,
     gcm_encrypt_command,
+    load_rsa_private_key,
     parse_conn_init,
     session_key_from_conn_init,
 )
@@ -138,6 +140,7 @@ from ..media import (
     decode_record_play_ctrl,
     decode_still,
     media_variant_label,
+    pin_key_refusal,
     video_codec_label,
 )
 from ..messages import (
@@ -205,6 +208,9 @@ from .media_stream import MediaStream
 from .param_state import ParamOrigin, ParamState
 from .stats import HealthCounters, MediaCounters, SessionStats, count_capped
 from .wake import WakeBackoff
+
+if TYPE_CHECKING:
+    from cryptography.hazmat.primitives.asymmetric import rsa
 
 _LOGGER = logging.getLogger(__name__)
 _WIRE = wire_logger("p2p")
@@ -419,6 +425,15 @@ class CredentialProvider(Protocol):
     async def __call__(self, *, refresh: bool, cipher_id: int | None) -> P2PCredentials: ...
 
 
+class E2EKeyProvider(Protocol):
+    """Supplies the RSA ``private_key`` (the cloud's text) of the station owner's cloud
+    cipher ``key_id``, for a recording end-to-end encrypted under it; None when the cloud
+    serves no RSA key for it. A failed fetch raises (a :class:`~...exceptions.CloudError`).
+    """
+
+    async def __call__(self, key_id: int) -> str | None: ...
+
+
 class KeyRefreshLatch(Protocol):
     """The per-station stale-key latch: set after a key refresh, cleared by a handshake."""
 
@@ -486,6 +501,27 @@ class _Waiter:
     future: asyncio.Future[object]
 
 
+@dataclass(slots=True, eq=False)
+class _CipherKeyFetch:
+    """A cloud cipher key fetch in flight and how many callers wait on it."""
+
+    task: asyncio.Task[rsa.RSAPrivateKey]
+    waiters: int = 0
+
+
+def _cipher_key_fetched(
+    fetches: dict[int, _CipherKeyFetch],
+    key_id: int,
+    fetch: _CipherKeyFetch,
+    task: asyncio.Task[rsa.RSAPrivateKey],
+) -> None:
+    """Forget a finished fetch; its failure counts as retrieved (no caller may be left)."""
+    if fetches.get(key_id) is fetch:
+        del fetches[key_id]
+    if not task.cancelled():
+        task.exception()
+
+
 class StationSession:
     """A live, self-healing P2P session to one station."""
 
@@ -510,6 +546,7 @@ class StationSession:
         connect_path: ConnectPath | None = None,
         lan_reply_blocked: bool = False,
         local_networks: Sequence[IPv4Network] | None = None,
+        e2e_keys: E2EKeyProvider | None = None,
     ) -> None:
         # max_sessions: see the max_sessions property.
         # expect_channels: the paired sub-devices' channels, used by every parameter
@@ -527,7 +564,15 @@ class StationSession:
         # key_refresh: where the stale-key latch lives (in memory when None).
         # cloud_problems_reported: the owner delivers cloud errors as CloudProblem, so
         # ConnectionChanged carries only their cause.
+        # e2e_keys: the cloud cipher keys of end-to-end encrypted recordings (none: such
+        # a recording fails naming its cipher).
         self.serial = serial.strip()
+        self._e2e_keys = e2e_keys
+        self._e2e_cipher_keys: dict[int, rsa.RSAPrivateKey] = {}
+        """The cloud cipher keys fetched for end-to-end encrypted recordings, by key id
+        (shared with this session's extra and short-lived sessions)."""
+        self._e2e_key_fetches: dict[int, _CipherKeyFetch] = {}
+        """The cipher key fetches in flight, by key id (shared as :attr:`_e2e_cipher_keys`)."""
         max_sessions = _session_budget(max_sessions)
         self.on_demand = on_demand
         self._idle_close = idle_close
@@ -2482,7 +2527,7 @@ class StationSession:
 
     def _short_lived_session(self) -> StationSession:
         """A second, unsupervised session to this station for one media request."""
-        return StationSession(
+        short = StationSession(
             self.serial,
             self._credentials,
             host=self._host or self._search_host,
@@ -2496,7 +2541,78 @@ class StationSession:
             connect_path=self._connect_path,
             lan_reply_blocked=self._lan_reply_blocked,
             local_networks=self._local_networks,
+            e2e_keys=self._e2e_keys,
         )
+        short._e2e_cipher_keys = self._e2e_cipher_keys
+        short._e2e_key_fetches = self._e2e_key_fetches
+        return short
+
+    async def _e2e_ready(self, key: E2EKey | None) -> None:
+        """Have the key of a recording its history row names end-to-end encrypted
+        (``e2e_key``) before it opens, as the app's player does: a cloud cipher's key is
+        fetched (:meth:`_e2e_cipher_key`), the user's PIN key raises
+        :class:`PinProtectedKeyError`."""
+        if key is None:
+            return
+        if key.key_type is E2EKeyType.PIN:
+            raise pin_key_refusal(key.key_id)
+        await self._e2e_cipher_key(key.key_id)
+
+    async def _e2e_cipher_key(self, key_id: int) -> rsa.RSAPrivateKey:
+        """The RSA key of the owner's cloud cipher ``key_id``, for a recording end-to-end
+        encrypted under it, fetched once per session; raises :class:`CommunicationError`
+        (the provider's error chained) when the fetch fails, and
+        :class:`EndToEndEncryptedError` when the key cannot be had otherwise.
+
+        Concurrent callers share one fetch; it is cancelled when its last caller is."""
+        cached = self._e2e_cipher_keys.get(key_id)
+        if cached is not None:
+            return cached
+        fetches = self._e2e_key_fetches
+        fetch = fetches.get(key_id)
+        if fetch is None:
+            task = asyncio.get_running_loop().create_task(self._fetch_e2e_cipher_key(key_id))
+            fetch = fetches[key_id] = _CipherKeyFetch(task)
+            task.add_done_callback(lambda done: _cipher_key_fetched(fetches, key_id, fetch, done))
+        fetch.waiters += 1
+        try:
+            await asyncio.wait((fetch.task,))
+        finally:
+            fetch.waiters -= 1
+            if not fetch.waiters and not fetch.task.done():
+                if fetches.get(key_id) is fetch:
+                    del fetches[key_id]  # a later caller fetches afresh
+                fetch.task.cancel()
+        return fetch.task.result()
+
+    async def _fetch_e2e_cipher_key(self, key_id: int) -> rsa.RSAPrivateKey:
+        """Fetch and parse the cloud cipher ``key_id`` (:meth:`_e2e_cipher_key`)."""
+
+        def refused(reason: str) -> EndToEndEncryptedError:
+            return EndToEndEncryptedError(
+                f"the recording is end-to-end encrypted under cipher {key_id}, {reason}",
+                key_type=E2EKeyType.CIPHER,
+                key_id=key_id,
+            )
+
+        if self._e2e_keys is None:
+            raise refused("and this session cannot fetch cipher keys")
+        try:
+            text = await self._e2e_keys(key_id)
+        except EufySecurityError as err:
+            # The cloud's failure, not the recording's: asking again can work.
+            raise CommunicationError(
+                f"the key of cipher {key_id} for the recording's end-to-end encryption "
+                f"could not be fetched: {err}"
+            ) from err
+        if not text:
+            raise refused("for which the cloud serves no RSA key")
+        try:
+            key = load_rsa_private_key(text)
+        except CipherUnusableError as err:
+            raise refused("whose RSA key does not parse") from err
+        self._e2e_cipher_keys[key_id] = key
+        return key
 
     def _media_waits(self) -> MediaWaits:
         """The media waits as ``p2p.session`` holds them now, where tests and consumers
@@ -2580,6 +2696,7 @@ class StationSession:
         *,
         first_frame_timeout: float | None = None,
         wait: bool = True,
+        e2e_key: E2EKey | None = None,
     ) -> MediaClip:
         """Play a stored recording to its end and mux it into one MPEG-TS clip.
 
@@ -2601,6 +2718,7 @@ class StationSession:
         :meth:`async_open_recording` raises, and :class:`DeviceTimeoutError` when the
         recording ends before a keyframe; bytes already written stay written. A
         standalone device raises :class:`UnsupportedError` before anything is sent.
+        ``e2e_key`` is as for :meth:`async_open_recording`.
         """
         return await self._budget.download_recording(
             path,
@@ -2608,6 +2726,7 @@ class StationSession:
             write,
             first_frame_timeout=_or(first_frame_timeout, MEDIA_RECORDING_FIRST_FRAME_TIMEOUT),
             wait=wait,
+            e2e_key=e2e_key,
         )
 
     async def async_play_recording(
@@ -2619,6 +2738,7 @@ class StationSession:
         first_frame_timeout: float | None = None,
         wait: bool = True,
         realtime: bool = True,
+        e2e_key: E2EKey | None = None,
     ) -> MediaClip:
         """Play a stored recording for a viewer: MPEG-TS into ``write`` as it arrives.
 
@@ -2633,7 +2753,8 @@ class StationSession:
         sent the whole recording (a station sends faster than realtime), even while
         frames read ahead are still being written. To stop early, cancel the call: the extra session
         closes, which is the only thing that stops a playback. Raises what
-        :meth:`async_download_recording` raises.
+        :meth:`async_download_recording` raises; ``e2e_key`` is as for
+        :meth:`async_open_recording`.
         """
         return await self._budget.play_recording(
             path,
@@ -2642,6 +2763,7 @@ class StationSession:
             first_frame_timeout=_or(first_frame_timeout, MEDIA_RECORDING_FIRST_FRAME_TIMEOUT),
             wait=wait,
             realtime=realtime,
+            e2e_key=e2e_key,
         )
 
     def _send_native_recording(
@@ -2670,6 +2792,7 @@ class StationSession:
         first_frame_timeout: float | None = None,
         idle_timeout: float | None = None,
         wait: bool = False,
+        e2e_key: E2EKey | None = None,
     ) -> MediaStream:
         """Play a validated stored recording (``.zxvideo`` or native ``.dat``) off disk.
 
@@ -2688,6 +2811,13 @@ class StationSession:
         arriving and the next open on this session waits for it to drain. To take
         frames without that, use :meth:`async_trigger_frame`, which plays the
         recording on a short-lived session and closes it.
+
+        ``e2e_key`` is the end-to-end key the recording's history row names
+        (:attr:`~...events.HistoryRecord.e2e_key`): a cloud cipher's key is fetched before
+        anything is sent, as the app's player does, so the stream waits for no key; the
+        user's PIN key raises :class:`PinProtectedKeyError` before anything is sent.
+        Without it, a recording found end-to-end encrypted holds its records while the
+        key is fetched (see ``docs/protocol/media.md``).
         """
         return await self._media_slot.open_recording(
             path,
@@ -2698,6 +2828,7 @@ class StationSession:
                 idle_timeout, MEDIA_DOWNLOAD_IDLE_TIMEOUT if download else MEDIA_IDLE_TIMEOUT
             ),
             wait=wait,
+            e2e_key=e2e_key,
         )
 
     def wake_backoff_left(self, channel: int) -> float:
@@ -2737,7 +2868,7 @@ class StationSession:
             value != PLAYBACK_ENDED
             or stream is None
             or stream.command not in _RECORDING_COMMANDS
-            or not stream._started
+            or not stream._has_media
         ):
             return
         stream._end()
@@ -2748,7 +2879,7 @@ class StationSession:
         flight go into it first. Only a download that has started takes it; the frame
         carries no stream id.
         """
-        if stream is None or stream.command != CMD_DOWNLOAD_VIDEO or not stream._started:
+        if stream is None or stream.command != CMD_DOWNLOAD_VIDEO or not stream._has_media:
             return
         stream._download_finished(MEDIA_DRAIN_GAP)
 

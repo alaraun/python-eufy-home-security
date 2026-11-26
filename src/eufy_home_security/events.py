@@ -44,7 +44,7 @@ from .exceptions import (
     HandshakeError,
     RefreshCooldownError,
 )
-from .models import FrameCipher, GuardMode, ValueSource
+from .models import E2EKey, FrameCipher, GuardMode, ValueSource
 
 if TYPE_CHECKING:
     from .cloud.status import DeviceListSource
@@ -1036,6 +1036,22 @@ class HistoryRecord:
         """The recording's size on the station's disk (``folder_size``); None when absent."""
         value = coerce_int(self.raw.get("folder_size"))
         return value if value is not None and value >= 0 else None
+
+    @property
+    def cipher_id(self) -> int | None:
+        """The row's ``cipher_id``: the key the recording is encrypted under; None when
+        the station sends no such column."""
+        return coerce_int(self.raw.get("cipher_id"))
+
+    @property
+    def e2e_key(self) -> E2EKey | None:
+        """The key an end-to-end encrypted recording needs, as :attr:`cipher_id` names it
+        (declared, eufy app); None for a recording that is not end-to-end encrypted.
+
+        A :attr:`~.models.E2EKeyType.PIN` key cannot be used by the library: playing or
+        downloading such a recording raises :class:`~.exceptions.PinProtectedKeyError`.
+        """
+        return E2EKey.from_cipher_id(self.cipher_id)
 
     @classmethod
     def from_row(cls, row: Mapping[str, Any]) -> HistoryRecord:

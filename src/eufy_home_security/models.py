@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from enum import IntEnum, StrEnum
 from types import MappingProxyType
 from typing import Final
@@ -114,6 +115,43 @@ GUARD_MODE_LABELS: Final[Mapping[GuardMode, str]] = MappingProxyType(
 )
 """Display name of every guard mode, the eufy app's English words in sentence case; a
 custom mode's entry stands in when the station lists no title for it."""
+
+
+class E2EKeyType(IntEnum):
+    """Which key an end-to-end encrypted recording is wrapped for (declared, eufy app).
+
+    See docs/protocol/media.md § End-to-end encrypted recordings.
+    """
+
+    PIN = 4
+    """The user's own key pair from the app's video encryption: its private key leaves the
+    phone only encrypted under the user's PIN, so the library cannot use it."""
+    CIPHER = 5
+    """The station owner's cloud cipher named by the key id: its RSA ``private_key`` from
+    ``get_ciphers``, which the library fetches with the account's login."""
+
+
+@dataclass(frozen=True, slots=True)
+class E2EKey:
+    """The key an end-to-end encrypted recording needs: its type and its key id (the
+    PIN code id of a :attr:`E2EKeyType.PIN` key, the cipher id of a
+    :attr:`E2EKeyType.CIPHER` key)."""
+
+    key_type: E2EKeyType
+    key_id: int
+
+    @classmethod
+    def from_cipher_id(cls, cipher_id: int | None) -> E2EKey | None:
+        """The key a history row's ``cipher_id`` names: type in the top byte, key id in
+        the low byte; None for a row that is not end-to-end encrypted (no type byte) or
+        names a type the library does not know."""
+        if cipher_id is None:
+            return None
+        try:
+            key_type = E2EKeyType(cipher_id >> 24)
+        except ValueError:
+            return None
+        return cls(key_type, cipher_id & 0xFF)
 
 
 class ValueSource(StrEnum):

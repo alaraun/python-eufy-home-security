@@ -542,7 +542,9 @@ class StationHistory:
     ) -> MediaClip:
         """See :meth:`Station.async_download_recording`."""
         path, channel = self._recording_of(record)
-        clip = await self._station.session.async_download_recording(path, channel, write, wait=wait)
+        clip = await self._station.session.async_download_recording(
+            path, channel, write, wait=wait, e2e_key=record.e2e_key
+        )
         return await self._clip_of(record, clip)
 
     async def play_recording(
@@ -551,7 +553,7 @@ class StationHistory:
         """See :meth:`Station.async_play_recording`."""
         path, channel = self._recording_of(record)
         clip = await self._station.session.async_play_recording(
-            path, channel, write, wait=wait, realtime=realtime
+            path, channel, write, wait=wait, realtime=realtime, e2e_key=record.e2e_key
         )
         return await self._clip_of(record, clip)
 

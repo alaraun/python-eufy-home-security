@@ -132,6 +132,7 @@ if TYPE_CHECKING:
         DoorNotMovedError,
         DoorStateUnknownError,
         EmptyResponseError,
+        EndToEndEncryptedError,
         EufySecurityError,
         HandshakeError,
         InviteCodeError,
@@ -146,6 +147,7 @@ if TYPE_CHECKING:
         ModeInUseError,
         ModelDataError,
         NoCachedSessionError,
+        PinProtectedKeyError,
         PresetSlotsFullError,
         ProtocolError,
         PtzActionUnsupportedError,
@@ -175,7 +177,14 @@ if TYPE_CHECKING:
     )
     from .inclusion import Reach, StationChoice
     from .install import InstallState
-    from .models import GUARD_MODE_LABELS, FrameCipher, GuardMode, ValueSource
+    from .models import (
+        GUARD_MODE_LABELS,
+        E2EKey,
+        E2EKeyType,
+        FrameCipher,
+        GuardMode,
+        ValueSource,
+    )
     from .network import HostSource, LanPath, PathWarning, suggest_local_ports
     from .p2p.broadcast import (
         CODEC_CHANGE_GRACE,
@@ -378,6 +387,7 @@ _EXPORTS: dict[str, str] = {
             "DoorNotMovedError",
             "DoorStateUnknownError",
             "EmptyResponseError",
+            "EndToEndEncryptedError",
             "EufySecurityError",
             "HandshakeError",
             "InviteCodeError",
@@ -392,6 +402,7 @@ _EXPORTS: dict[str, str] = {
             "MissingDependencyError",
             "ModelDataError",
             "NoCachedSessionError",
+            "PinProtectedKeyError",
             "PresetSlotsFullError",
             "ProtocolError",
             "PtzActionUnsupportedError",
@@ -429,7 +440,10 @@ _EXPORTS: dict[str, str] = {
     **dict.fromkeys(
         ("DetectionRecording", "DetectionRecordingState", "RecordingsPage"), "recordings"
     ),
-    **dict.fromkeys(("GUARD_MODE_LABELS", "FrameCipher", "GuardMode", "ValueSource"), "models"),
+    **dict.fromkeys(
+        ("GUARD_MODE_LABELS", "E2EKey", "E2EKeyType", "FrameCipher", "GuardMode", "ValueSource"),
+        "models",
+    ),
     **dict.fromkeys(("HostSource", "LanPath", "PathWarning", "suggest_local_ports"), "network"),
     **dict.fromkeys(
         ("MediaKeyType", "Still", "StillFormat", "VideoCodec", "picture_codec"), "p2p.media"
@@ -562,8 +576,11 @@ __all__ = [
     "DiskInfo",
     "DoorNotMovedError",
     "DoorStateUnknownError",
+    "E2EKey",
+    "E2EKeyType",
     "EmmcInfo",
     "EmptyResponseError",
+    "EndToEndEncryptedError",
     "EufySecurity",
     "EufySecurityError",
     "Event",
@@ -627,6 +644,7 @@ __all__ = [
     "PanTilt",
     "ParamChanged",
     "PathWarning",
+    "PinProtectedKeyError",
     "PresetPosition",
     "PresetSlotsFullError",
     "PresetsChanged",

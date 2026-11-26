@@ -221,7 +221,7 @@ class _Stream:
 
     def __init__(self, command: int, *, started: bool) -> None:
         self.command = command
-        self._started = started
+        self._has_media = started
         self.finished: list[float] = []
 
     def _download_finished(self, settle: float) -> None:

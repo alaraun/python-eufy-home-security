@@ -253,6 +253,43 @@ def ecc_audio_record(clear_record: bytes, media_key: EccMediaKey) -> bytes:
     return clear_record[:AUDIO_HEADER_LEN] + tag_iv + ciphertext
 
 
+@dataclass(frozen=True, slots=True)
+class E2EMediaKey:
+    """An end-to-end encrypted recording's key string (47 characters) and its wrap for an
+    owner's cloud cipher: RSA PKCS#1 v1.5 to the cipher's public key, then one byte."""
+
+    secret: bytes
+    wrapped: bytes
+
+    @classmethod
+    def for_cipher(cls, public: rsa.RSAPublicKey, secret: bytes | None = None) -> E2EMediaKey:
+        """``secret`` (default: 47 random letters) wrapped to a cloud cipher's key."""
+        if secret is None:
+            secret = base64.b32encode(os.urandom(30)).rstrip(b"=")[:47]
+        return cls(secret, public.encrypt(secret, padding.PKCS1v15()) + b"\x00")
+
+    def seal(self, clear: bytes) -> bytes:
+        """``tag ‖ ciphertext`` of ``clear`` under AES-256-GCM: the key is the secret's
+        first 32 bytes, the 16-byte IV its last 16, AAD ``GCM_AAD``."""
+        sealed = AESGCM(self.secret[:32]).encrypt(self.secret[31:47], clear, GCM_AAD)
+        return sealed[-16:] + sealed[:-16]
+
+
+def e2e_video_record(clear_record: bytes, media_key: E2EMediaKey) -> bytes:
+    """A clear :func:`video_record` as an end-to-end encrypted record: its 22-byte header
+    (``datalen`` counting tag and ciphertext), the wrapped key, then tag and ciphertext."""
+    body = media_key.seal(clear_record[VIDEO_HEADER_LEN:])
+    header = struct.pack("<I", len(body)) + clear_record[4:VIDEO_HEADER_LEN]
+    return header + media_key.wrapped + body
+
+
+def e2e_audio_record(clear_record: bytes, media_key: E2EMediaKey) -> bytes:
+    """A clear :func:`audio_record` as an end-to-end encrypted record: its 16-byte header
+    (``datalen`` counting tag and ciphertext), then tag and ciphertext."""
+    body = media_key.seal(clear_record[AUDIO_HEADER_LEN:])
+    return struct.pack("<I", len(body)) + clear_record[4:AUDIO_HEADER_LEN] + body
+
+
 def v1_still(
     image: bytes,
     serial: str = SYNTHETIC.camera_sn,
@@ -421,13 +458,13 @@ def _local_event_day(row: dict[str, Any]) -> str | None:
 
 
 #: Subheader ``(media version, encrypted flag)`` of a keyframe and of a P-frame per
-#: :class:`VideoVariant`, as the app's receiver reads them (a HomeBase 3: RSA_PREFIX).
+#: :class:`VideoVariant`, as the app's receiver reads them (a HomeBase 3: RSA_PREFIX);
+#: E2E records carry :attr:`FakeStation.e2e_media_version` and ``e2e_key_id``.
 _VIDEO_SUBHEADER_FLAGS: dict[VideoVariant, tuple[tuple[int, int], tuple[int, int]]] = {
     VideoVariant.RSA_PREFIX: ((1, 1), (1, 0)),
     VideoVariant.RSA_V3: ((3, 1), (3, 0)),
     VideoVariant.PLAIN: ((0, 0), (0, 0)),
     VideoVariant.ECC: ((8, 1), (8, 0)),
-    VideoVariant.E2E: ((4, 2), (4, 2)),
 }
 _AUDIO_MEDIA_VERSION = 2
 """A HomeBase 3's audio subheader byte 0."""
@@ -731,6 +768,14 @@ class FakeStation:
     ecc_offer_ignored: bool = False
     """Answer an ECC key offer with :attr:`video_variant` records wrapped to a throwaway
     key, as a station without ECC media would; otherwise an ECC offer gets ECC records."""
+    e2e_cipher_key: rsa.RSAPrivateKey | None = None
+    """With :attr:`video_variant` E2E: seal video and audio for this owner cloud cipher's
+    key (:class:`E2EMediaKey`); None sends the bodies clear (undecodable)."""
+    e2e_media_version: int = 4
+    """Subheader byte 0 of end-to-end encrypted records."""
+    e2e_key_id: int = 2
+    """Subheader byte 3 of end-to-end encrypted records: the key id (2-9 with version 4,
+    or version 5: a cloud cipher; 10 or more with version 4: the user's PIN key)."""
 
     def __post_init__(self) -> None:
         self.static_key = static_key(self.serial, self.did)
@@ -1692,6 +1737,11 @@ class FakeStation:
         download: bool = False,
     ) -> None:
         # ``public`` None: an ECC stream, every record sealed with ``ecc``.
+        e2e = (
+            E2EMediaKey.for_cipher(self.e2e_cipher_key.public_key())
+            if self.video_variant is VideoVariant.E2E and self.e2e_cipher_key is not None
+            else None
+        )
         keyframes = (
             media_keyframe_parts(public, os.urandom(16), self.keyframe_parts)
             if public is not None and self.video_variant is VideoVariant.RSA_PREFIX
@@ -1699,7 +1749,7 @@ class FakeStation:
         )
         # Joined mid-GOP, like a real stream: a P-frame comes before the first keyframe.
         clock = MEDIA_CLOCK_START
-        self.send_video(pframe, keyframe=False, camera=camera, timestamp_ms=clock, ecc=ecc)
+        self.send_video(pframe, keyframe=False, camera=camera, timestamp_ms=clock, ecc=ecc, e2e=e2e)
         sent = 0
         loop = asyncio.get_running_loop()
         self._last_ping = max(self._last_ping, loop.time())
@@ -1733,16 +1783,19 @@ class FakeStation:
                     width=size[0],
                     height=size[1],
                     ecc=ecc,
+                    e2e=e2e,
                 )
             audio = audio_record(MEDIA_AUDIO, counter=sent + 1, timestamp_ms=clock)
-            self.send_frame(
-                FrameType.AUDIO_FRAME,
-                audio if ecc is None else ecc_audio_record(audio, ecc),
-                cipher=0,
-                channel=1,
-                subheader=_media_subheader(
+            if e2e is not None:
+                audio_subheader = _media_subheader(camera, self.e2e_media_version, self.e2e_key_id)
+                audio = e2e_audio_record(audio, e2e)
+            else:
+                audio_subheader = _media_subheader(
                     camera, self.audio_media_version if ecc is None else _ECC_MEDIA_VERSION
-                ),
+                )
+                audio = audio if ecc is None else ecc_audio_record(audio, ecc)
+            self.send_frame(
+                FrameType.AUDIO_FRAME, audio, cipher=0, channel=1, subheader=audio_subheader
             )
             sent += 1
             self.media_frames_sent = sent
@@ -1813,12 +1866,19 @@ class FakeStation:
         width: int = MEDIA_WIDTH,
         height: int = MEDIA_HEIGHT,
         ecc: EccMediaKey | None = None,
+        e2e: E2EMediaKey | None = None,
     ) -> None:
         """A video record of the camera on channel ``camera`` (subheader byte 2), tagged
-        per :attr:`video_variant`, or sealed as an ECC record with ``ecc``."""
+        per :attr:`video_variant`, sealed as an ECC record with ``ecc`` or as an
+        end-to-end encrypted one with ``e2e``."""
+        if e2e is not None:
+            ecc = None  # an end-to-end encrypted recording is sealed for its own key
         variant = self.video_variant if ecc is None else VideoVariant.ECC
-        key_flags, p_flags = _VIDEO_SUBHEADER_FLAGS[variant]
-        version, encrypted = key_flags if keyframe else p_flags
+        if variant is VideoVariant.E2E:
+            version, encrypted = self.e2e_media_version, self.e2e_key_id
+        else:
+            key_flags, p_flags = _VIDEO_SUBHEADER_FLAGS[variant]
+            version, encrypted = key_flags if keyframe else p_flags
         record = video_record(
             body,
             keyframe=keyframe and self.keyframe_flag,
@@ -1827,6 +1887,8 @@ class FakeStation:
             width=width,
             height=height,
         )
+        if e2e is not None:
+            record = e2e_video_record(record, e2e)
         self.send_frame(
             FrameType.VIDEO_FRAME,
             record if ecc is None else ecc_video_record(record, ecc),

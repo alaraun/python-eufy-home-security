@@ -99,6 +99,7 @@ from .p2p.pppp import BROADCAST, DISCOVERY_PORT
 from .p2p.session import (
     DEFAULT_STATION_SESSIONS,
     CredentialProvider,
+    E2EKeyProvider,
     P2PCredentials,
     StationSession,
     WakeProvider,
@@ -733,6 +734,7 @@ class EufySecurity:
                 connect_path=self.cache.link_path(serial),
                 lan_reply_blocked=self.cache.lan_reply_blocked(serial),
                 local_networks=self._local_networks,
+                e2e_keys=self._e2e_key_provider(serial),
             )
             station = Station(
                 device,
@@ -1034,6 +1036,24 @@ class EufySecurity:
                 cipher_id=cipher_id,
                 rsa_private_key=keys.rsa_private_key,
             )
+
+        return provide
+
+    def _e2e_key_provider(self, station_sn: str) -> E2EKeyProvider:
+        """The RSA key of the station owner's cloud cipher an end-to-end encrypted
+        recording names (``get_ciphers``, as the eufy app fetches it); a cloud failure
+        inside it becomes a ``CloudProblem``."""
+
+        async def provide(key_id: int) -> str | None:
+            await self._ensure_cache_loaded()
+            try:
+                keys = await self.cloud.async_get_cipher_keys(station_sn, key_id)
+            except (CipherUnavailableError, CipherKeyMissingError):
+                return None  # the recording's problem, not the account's
+            except CloudError as err:
+                self._cloud_failed(err, station_sn)
+                raise
+            return keys.rsa_private_key
 
         return provide
 
