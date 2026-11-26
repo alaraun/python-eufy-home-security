@@ -9,6 +9,7 @@ and a bare 1004 carrying the channel.
 from __future__ import annotations
 
 import asyncio
+import logging
 import struct
 import time
 from collections.abc import AsyncIterator
@@ -979,9 +980,11 @@ async def test_a_second_cipher_that_fails_on_a_started_stream_still_ends_it_on_t
 
 
 async def test_a_cipher_whose_key_failed_is_not_fetched_again_per_record(
-    e2e_hb2: FakeStation,
+    e2e_hb2: FakeStation, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Its later records are dropped, video resumes at a keyframe of a cipher it holds."""
+    """Its later records are dropped with one warning, video resumes at a keyframe of a
+    cipher it holds."""
+    caplog.set_level(logging.WARNING, logger=media_stream_module.__name__)
     keys = _GatedKeys(failing=(8,))
     keys.gate(8).set()
     session = _session(e2e_hb2, keys)
@@ -1002,6 +1005,13 @@ async def test_a_cipher_whose_key_failed_is_not_fetched_again_per_record(
     assert keys.asked == [7, 8]
     video = [_counter(f) for f in frames if f.kind is MediaKind.VIDEO]
     assert video == [0, *range(2 * MEDIA_GOP, 2 * MEDIA_GOP + 2)]
+    warnings = [
+        r.getMessage()
+        for r in caplog.records
+        if r.name == media_stream_module.__name__ and r.levelno == logging.WARNING
+    ]
+    assert len(warnings) == 1
+    assert "cipher 8" in warnings[0]
 
 
 async def test_a_second_fetch_during_the_replay_keeps_the_first_holds_overflow(
@@ -1078,3 +1088,54 @@ async def test_a_hold_counts_the_frames_still_queued_against_its_cap(
         await session.async_close()
     video = [_counter(f) for f in frames if f.kind is MediaKind.VIDEO]
     assert video == [*range(2 * MEDIA_GOP + 1)]
+
+
+async def test_a_second_ciphers_hold_gets_the_whole_cap_once_the_first_was_read(
+    e2e_hb2: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The first hold filled the cap and the reader took its replay: the next cipher's
+    hold starts from nothing and keeps as many bytes again."""
+    records = [_e2e_video(n) for n in range(MEDIA_GOP)]
+    monkeypatch.setattr(media_stream_module, "MEDIA_KEY_WAIT_BYTES", sum(map(len, records)))
+    keys = _GatedKeys()
+    session = _session(e2e_hb2, keys)
+    stream = _e2e_stream(session)
+    try:
+        for record in records:
+            stream._feed(FrameType.VIDEO_FRAME, record, subheader=_e2e_sub())
+        keys.gate(7).set()
+        await _key_settled(stream)
+        read = [await anext(stream) for _ in range(MEDIA_GOP - 1)]  # the last one is held
+        for n in range(MEDIA_GOP, 2 * MEDIA_GOP):
+            stream._feed(FrameType.VIDEO_FRAME, _e2e_video(n), subheader=_e2e_sub(8))
+        keys.gate(8).set()
+        await _key_settled(stream)
+        stream._end()
+        async with asyncio.timeout(2):
+            read += [frame async for frame in stream]
+    finally:
+        await stream.aclose()
+        await session.async_close()
+    assert [_counter(f) for f in read if f.kind is MediaKind.VIDEO] == [*range(2 * MEDIA_GOP)]
+
+
+async def test_a_key_an_extra_session_fetched_serves_the_stations_later_recordings(
+    e2e_hb2: FakeStation,
+) -> None:
+    """Each download runs on its own extra session and fetches the cipher's key there;
+    the key reaches the station's session, so the second download asks for none."""
+    keys = _Keys(delay=0)
+    session = _session(e2e_hb2, keys)
+
+    async def write(_chunk: bytes) -> None:
+        return None
+
+    try:
+        await session.async_connect()
+        for _ in range(2):
+            async with asyncio.timeout(10):
+                await session.async_download_recording(NATIVE_CLIP, CAMERA, write)
+    finally:
+        await session.async_close()
+    assert keys.asked == [7]
+    assert 7 in session._e2e_cipher_keys
