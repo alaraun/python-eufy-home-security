@@ -193,6 +193,7 @@ class MediaStream:
         self._end_after_key = False
         """The station ended the recording while its key was fetched."""
         self._key_task: asyncio.Task[rsa.RSAPrivateKey] | None = None
+        self._key_fetch_id = 0
         self._replaying = False
         """Held records are being decoded: they are queued whatever the queue holds."""
 
@@ -245,6 +246,7 @@ class MediaStream:
                     )
                     self._finish()
                     continue
+                fetching = self._key_fetching
                 await self.aclose()
                 if self._started:
                     raise StopAsyncIteration
@@ -257,8 +259,15 @@ class MediaStream:
                         self._first_frame_timeout,
                         self._foreign_keyframes,
                     )
-                if self._last_rx is not None:
-                    timed_out: EufySecurityError = ProtocolError(
+                if fetching is not None:
+                    timed_out: EufySecurityError = EndToEndEncryptedError(
+                        f"the key of cipher {fetching} for the recording's end-to-end "
+                        f"encryption was not fetched within {self._first_frame_timeout:.0f}s",
+                        key_type=E2EKeyType.CIPHER,
+                        key_id=fetching,
+                    )
+                elif self._last_rx is not None:
+                    timed_out = ProtocolError(
                         f"media for command {self.command} arrived, but no keyframe decoded "
                         f"within {self._first_frame_timeout:.0f}s"
                     )
@@ -609,6 +618,11 @@ class MediaStream:
         self._wake.set()
 
     @property
+    def _key_fetching(self) -> int | None:
+        """The cipher whose key is being fetched (None: no fetch running)."""
+        return self._key_fetch_id if self._key_task is not None else None
+
+    @property
     def _key_pending(self) -> bool:
         """Whether records are held while an end-to-end key is fetched."""
         return self._key_wait is not None
@@ -774,6 +788,7 @@ class MediaStream:
             key_id,
         )
         self._key_wait, self._key_wait_bytes, self._key_wait_overflow = [], 0, False
+        self._key_fetch_id = key_id
         self._key_task = asyncio.get_running_loop().create_task(
             self._session._e2e_cipher_key(key_id)
         )

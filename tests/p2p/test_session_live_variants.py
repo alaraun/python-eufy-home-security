@@ -853,3 +853,34 @@ async def test_a_held_record_that_fails_the_stream_ends_the_replay(e2e_hb2: Fake
     finally:
         await stream.aclose()
         await session.async_close()
+
+
+async def test_a_key_fetch_past_the_first_frame_wait_ends_the_stream_naming_the_cipher(
+    e2e_hb2: FakeStation,
+) -> None:
+    """The first-frame wait runs out while the cipher key is still being fetched: the
+    stream fails with the typed error naming the cipher, not as a stream that decoded
+    nothing."""
+    cancelled = asyncio.Event()
+
+    class Keys(_Keys):
+        async def __call__(self, key_id: int) -> str | None:
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+            return None
+
+    session = _session(e2e_hb2, Keys(delay=0))
+    stream = _e2e_stream(session, first_frame_timeout=0.3)
+    try:
+        stream._feed(FrameType.VIDEO_FRAME, _e2e_video(0), subheader=_e2e_sub())
+        async with asyncio.timeout(5):
+            with pytest.raises(EndToEndEncryptedError, match="cipher 7") as err:
+                await anext(stream)
+            await cancelled.wait()  # the fetch ends with the stream
+    finally:
+        await stream.aclose()
+        await session.async_close()
+    assert (err.value.key_type, err.value.key_id) == (E2EKeyType.CIPHER, 7)
