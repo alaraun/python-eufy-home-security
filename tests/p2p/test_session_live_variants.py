@@ -9,6 +9,7 @@ and a bare 1004 carrying the channel.
 from __future__ import annotations
 
 import asyncio
+import gc
 import logging
 import struct
 import time
@@ -1181,3 +1182,99 @@ async def test_a_key_an_extra_session_fetched_serves_the_stations_later_recordin
         await session.async_close()
     assert keys.asked == [7]
     assert 7 in session._e2e_cipher_keys
+
+
+def _both_holding(session: StationSession) -> bool:
+    """Whether two extra sessions carry a stream holding records for a key."""
+    streams = [extra._media_slot.stream for extra in session._budget.extra_live]
+    return len(streams) == 2 and all(s is not None and s._key_pending for s in streams)
+
+
+@pytest.mark.parametrize("from_row", [True, False])
+async def test_concurrent_recordings_of_one_cipher_share_its_key_fetch(
+    e2e_hb2: FakeStation, from_row: bool
+) -> None:
+    """A download and a play of one cipher start together, with the row's key (fetched
+    before each open) or by path (held on each extra session): one fetch serves both."""
+    keys = _GatedKeys()
+    session = _session(e2e_hb2, keys)
+    key = E2EKey(E2EKeyType.CIPHER, 7) if from_row else None
+
+    async def write(_chunk: bytes) -> None:
+        return None
+
+    try:
+        await session.async_connect()
+        transfers = [
+            asyncio.create_task(getattr(session, call)(NATIVE_CLIP, CAMERA, write, e2e_key=key))
+            for call in ("async_download_recording", "async_play_recording")
+        ]
+        async with asyncio.timeout(5):
+            while not keys.asked:
+                await asyncio.sleep(0.01)
+            while not from_row and not _both_holding(session):
+                await asyncio.sleep(0.01)
+            await asyncio.sleep(0.05)
+        keys.gate(7).set()
+        async with asyncio.timeout(10):
+            clips = await asyncio.gather(*transfers)
+    finally:
+        await session.async_close()
+    assert keys.asked == [7]
+    assert [clip.video_frames for clip in clips] == [e2e_hb2.recording_frames] * 2
+
+
+async def test_a_shared_key_fetch_outlives_a_cancelled_waiter_and_ends_with_the_last(
+    e2e_hb2: FakeStation,
+) -> None:
+    """One of two waiters on a cipher's fetch is cancelled: the fetch goes on for the
+    other. When the only waiter left is cancelled, the provider's call is cancelled too,
+    and the next request fetches afresh."""
+    provider_cancelled = asyncio.Event()
+
+    class Keys(_GatedKeys):
+        async def __call__(self, key_id: int) -> str | None:
+            try:
+                return await super().__call__(key_id)
+            except asyncio.CancelledError:
+                provider_cancelled.set()
+                raise
+
+    keys = Keys()
+    session = _session(e2e_hb2, keys)
+    seen: list[dict[str, object]] = []
+    loop = asyncio.get_running_loop()
+    loop.set_exception_handler(lambda _loop, context: seen.append(context))
+    try:
+        first, second = (asyncio.create_task(session._e2e_cipher_key(7)) for _ in range(2))
+        async with asyncio.timeout(5):
+            while not keys.asked:
+                await asyncio.sleep(0.01)
+            first.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await first
+            await asyncio.sleep(0.01)
+            assert not provider_cancelled.is_set()
+            keys.gate(7).set()
+            assert isinstance(await second, rsa.RSAPrivateKey)
+        session._e2e_cipher_keys.clear()
+        keys.gate(7).clear()
+        last = asyncio.create_task(session._e2e_cipher_key(7))
+        async with asyncio.timeout(5):
+            while len(keys.asked) < 2:
+                await asyncio.sleep(0.01)
+            last.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await last
+            await provider_cancelled.wait()
+        keys.gate(7).set()
+        async with asyncio.timeout(5):
+            assert isinstance(await session._e2e_cipher_key(7), rsa.RSAPrivateKey)
+        for _ in range(3):
+            await asyncio.sleep(0)
+        gc.collect()
+    finally:
+        loop.set_exception_handler(None)
+        await session.async_close()
+    assert keys.asked == [7, 7, 7]
+    assert seen == []

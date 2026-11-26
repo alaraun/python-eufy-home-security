@@ -850,7 +850,8 @@ the **key id**, and the record names one of two key types (`E2EKeyType`):
   session, a standalone device's download or play, a path that is not a recording's)
   fetches no key.
 - **What the library does.** A session fetches each cloud cipher's key once
-  (`E2EKeyProvider`; `EufySecurity` supplies it) and keeps it for its later recordings.
+  (`E2EKeyProvider`; `EufySecurity` supplies it) and keeps it for its later recordings;
+  recordings that need it at the same time share one fetch.
   A recording opened by path alone holds the records of a cloud cipher it has no key for
   while it fetches the key, then decodes them in order and queues every one, past the
   media queue's 250 frames too (nothing read them meanwhile). Records arriving after

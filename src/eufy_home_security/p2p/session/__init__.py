@@ -501,6 +501,27 @@ class _Waiter:
     future: asyncio.Future[object]
 
 
+@dataclass(slots=True, eq=False)
+class _CipherKeyFetch:
+    """A cloud cipher key fetch in flight and how many callers wait on it."""
+
+    task: asyncio.Task[rsa.RSAPrivateKey]
+    waiters: int = 0
+
+
+def _cipher_key_fetched(
+    fetches: dict[int, _CipherKeyFetch],
+    key_id: int,
+    fetch: _CipherKeyFetch,
+    task: asyncio.Task[rsa.RSAPrivateKey],
+) -> None:
+    """Forget a finished fetch; its failure counts as retrieved (no caller may be left)."""
+    if fetches.get(key_id) is fetch:
+        del fetches[key_id]
+    if not task.cancelled():
+        task.exception()
+
+
 class StationSession:
     """A live, self-healing P2P session to one station."""
 
@@ -550,6 +571,8 @@ class StationSession:
         self._e2e_cipher_keys: dict[int, rsa.RSAPrivateKey] = {}
         """The cloud cipher keys fetched for end-to-end encrypted recordings, by key id
         (shared with this session's extra and short-lived sessions)."""
+        self._e2e_key_fetches: dict[int, _CipherKeyFetch] = {}
+        """The cipher key fetches in flight, by key id (shared as :attr:`_e2e_cipher_keys`)."""
         max_sessions = _session_budget(max_sessions)
         self.on_demand = on_demand
         self._idle_close = idle_close
@@ -2521,6 +2544,7 @@ class StationSession:
             e2e_keys=self._e2e_keys,
         )
         short._e2e_cipher_keys = self._e2e_cipher_keys
+        short._e2e_key_fetches = self._e2e_key_fetches
         return short
 
     async def _e2e_ready(self, key: E2EKey | None) -> None:
@@ -2537,10 +2561,31 @@ class StationSession:
     async def _e2e_cipher_key(self, key_id: int) -> rsa.RSAPrivateKey:
         """The RSA key of the owner's cloud cipher ``key_id``, for a recording end-to-end
         encrypted under it, fetched once per session; raises
-        :class:`EndToEndEncryptedError` (cause chained) when it cannot be had."""
+        :class:`EndToEndEncryptedError` (cause chained) when it cannot be had.
+
+        Concurrent callers share one fetch; it is cancelled when its last caller is."""
         cached = self._e2e_cipher_keys.get(key_id)
         if cached is not None:
             return cached
+        fetches = self._e2e_key_fetches
+        fetch = fetches.get(key_id)
+        if fetch is None:
+            task = asyncio.get_running_loop().create_task(self._fetch_e2e_cipher_key(key_id))
+            fetch = fetches[key_id] = _CipherKeyFetch(task)
+            task.add_done_callback(lambda done: _cipher_key_fetched(fetches, key_id, fetch, done))
+        fetch.waiters += 1
+        try:
+            await asyncio.wait((fetch.task,))
+        finally:
+            fetch.waiters -= 1
+            if not fetch.waiters and not fetch.task.done():
+                if fetches.get(key_id) is fetch:
+                    del fetches[key_id]  # a later caller fetches afresh
+                fetch.task.cancel()
+        return fetch.task.result()
+
+    async def _fetch_e2e_cipher_key(self, key_id: int) -> rsa.RSAPrivateKey:
+        """Fetch and parse the cloud cipher ``key_id`` (:meth:`_e2e_cipher_key`)."""
 
         def refused(reason: str) -> EndToEndEncryptedError:
             return EndToEndEncryptedError(
