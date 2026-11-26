@@ -276,7 +276,7 @@ class MediaStream:
                 if fetching is not None:
                     timed_out: EufySecurityError = EndToEndEncryptedError(
                         f"the key of cipher {fetching} for the recording's end-to-end "
-                        f"encryption was not fetched within {self._first_frame_timeout:.0f}s",
+                        f"encryption was not fetched within {self._first_frame_timeout:g}s",
                         key_type=E2EKeyType.CIPHER,
                         key_id=fetching,
                     )

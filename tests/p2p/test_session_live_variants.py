@@ -921,7 +921,7 @@ async def test_a_key_fetch_past_the_first_frame_wait_ends_the_stream_naming_the_
     try:
         stream._feed(FrameType.VIDEO_FRAME, _e2e_video(0), subheader=_e2e_sub())
         async with asyncio.timeout(5):
-            with pytest.raises(EndToEndEncryptedError, match="cipher 7") as err:
+            with pytest.raises(EndToEndEncryptedError, match=r"cipher 7 .* within 0\.3s") as err:
                 await anext(stream)
             await cancelled.wait()  # the fetch ends with the stream
     finally:
