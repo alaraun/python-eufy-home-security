@@ -25,6 +25,7 @@ from eufy_home_security.exceptions import (
     CloudApiError,
     CommandNotAppliedError,
     CommandRejectedError,
+    CommunicationError,
     EndToEndEncryptedError,
     PinProtectedKeyError,
     StationUnreachableError,
@@ -737,6 +738,47 @@ async def test_a_recording_refused_before_its_open_fetches_no_cloud_key(
     assert not isinstance(err.value, EndToEndEncryptedError)
     assert keys.asked == []
     assert e2e_hb2.sessions == 0
+
+
+@pytest.mark.parametrize("call", ["async_open_recording", "async_download_recording"])
+async def test_a_cloud_failure_fetching_a_rows_key_is_a_communication_error_to_retry(
+    e2e_hb2: FakeStation, call: str
+) -> None:
+    """The provider fails while the row's cipher key is fetched before the open: the call
+    raises a :class:`CommunicationError` naming the cipher (the cloud's error chained),
+    not the recording's refusal, sends nothing, and the next call fetches again."""
+    keys = _Keys(delay=0)
+    keys.error = CloudApiError(500, "boom")
+    session = _session(e2e_hb2, keys)
+    key = E2EKey(E2EKeyType.CIPHER, 7)
+
+    async def write(_chunk: bytes) -> None:
+        return None
+
+    args: tuple[object, ...] = (
+        (NATIVE_CLIP, CAMERA) if "open" in call else (NATIVE_CLIP, CAMERA, write)
+    )
+    try:
+        with pytest.raises(CommunicationError, match="cipher 7") as err:
+            await getattr(session, call)(*args, e2e_key=key)
+        assert e2e_hb2.sessions == 0
+        keys.error = None
+        async with asyncio.timeout(10):
+            result = await getattr(session, call)(*args, e2e_key=key)
+            if isinstance(result, MediaStream):
+                async with result:
+                    frames = [frame async for frame in result]
+                assert (
+                    len([f for f in frames if f.kind is MediaKind.VIDEO])
+                    == e2e_hb2.recording_frames
+                )
+            else:
+                assert result.video_frames == e2e_hb2.recording_frames
+    finally:
+        await session.async_close()
+    assert not isinstance(err.value, UnsupportedError)
+    assert isinstance(err.value.__cause__, CloudApiError)
+    assert keys.asked == [7, 7]
 
 
 async def test_every_record_held_during_a_slow_key_fetch_is_delivered(

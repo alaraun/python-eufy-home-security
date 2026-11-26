@@ -2346,10 +2346,14 @@ video and AAC untouched, starting at a keyframe) written through the integration
 **End-to-end encrypted recordings** (the owner turned on the app's video encryption)
 play and download like the others when the station seals them for the owner's cloud
 cipher: the library fetches that key itself, before anything is sent when the row's
-`HistoryRecord.e2e_key` names the cipher. Under the user's PIN-protected key they
-raise `PinProtectedKeyError` (an `EndToEndEncryptedError`, an `UnsupportedError`):
-before anything is sent when the row's `HistoryRecord.e2e_key` names it, else at the
-first record; the library neither asks for nor stores a PIN, so offer no retry. See
+`HistoryRecord.e2e_key` names the cipher. When the cloud fails that fetch, the call
+raises `CommunicationError` (the cloud's error as `__cause__`; a `CloudError` also
+arrives on `eufy.subscribe` as a `CloudProblem`) with nothing sent: answer it as any
+unreachable cloud (`HomeAssistantError`, or 503 from a view) and let the user try again;
+the next call fetches the key again. Under the user's PIN-protected key they raise
+`PinProtectedKeyError` (an `EndToEndEncryptedError`, an `UnsupportedError`): before
+anything is sent when the row's `HistoryRecord.e2e_key` names it, else at the first
+record; the library neither asks for nor stores a PIN, so offer no retry. See
 [media.md](../protocol/media.md#end-to-end-encrypted-recordings-app).
 
 `MediaClip`: `video_frames`, `audio_frames`, `keyframes`, `bytes_written`,

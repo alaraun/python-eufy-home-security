@@ -846,9 +846,11 @@ the **key id**, and the record names one of two key types (`E2EKeyType`):
   recording played or downloaded from its row (`Station.async_play_recording`,
   `async_download_recording`; the session methods' `e2e_key`) has the key before
   anything is sent: a cloud cipher's key is fetched first, so no record waits for it; the
-  PIN key is refused (`PinProtectedKeyError`). A request refused anyway (a closed
-  session, a standalone device's download or play, a path that is not a recording's)
-  fetches no key.
+  PIN key is refused (`PinProtectedKeyError`). A cloud failure during that fetch raises
+  `CommunicationError` naming the cipher (the cloud's error chained; a `CloudError` is
+  also reported as a `CloudProblem`) with nothing sent, and the next request fetches
+  again. A request refused anyway (a closed session, a standalone device's download or
+  play, a path that is not a recording's) fetches no key.
 - **What the library does.** A session fetches each cloud cipher's key once
   (`E2EKeyProvider`; `EufySecurity` supplies it) and keeps it for its later recordings;
   recordings that need it at the same time share one fetch.

@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Protocol, cast
 from ..._logging import LogThrottle, Secret
 from ...exceptions import (
     CommandNotAppliedError,
+    CommunicationError,
     DeviceTimeoutError,
     EndToEndEncryptedError,
     EufySecurityError,
@@ -845,9 +846,12 @@ class MediaStream:
             return
         if error is not None:
             if not isinstance(error, EndToEndEncryptedError):
+                # A failed fetch ends this recording: the stream cannot ask again.
                 error = EndToEndEncryptedError(
-                    f"the key of cipher {key_id} for the recording's end-to-end encryption "
-                    f"could not be fetched: {error}",
+                    str(error)
+                    if isinstance(error, CommunicationError)
+                    else f"the key of cipher {key_id} for the recording's end-to-end "
+                    f"encryption could not be fetched: {error}",
                     key_type=E2EKeyType.CIPHER,
                     key_id=key_id,
                 )

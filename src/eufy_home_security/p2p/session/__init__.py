@@ -2560,8 +2560,9 @@ class StationSession:
 
     async def _e2e_cipher_key(self, key_id: int) -> rsa.RSAPrivateKey:
         """The RSA key of the owner's cloud cipher ``key_id``, for a recording end-to-end
-        encrypted under it, fetched once per session; raises
-        :class:`EndToEndEncryptedError` (cause chained) when it cannot be had.
+        encrypted under it, fetched once per session; raises :class:`CommunicationError`
+        (the provider's error chained) when the fetch fails, and
+        :class:`EndToEndEncryptedError` when the key cannot be had otherwise.
 
         Concurrent callers share one fetch; it is cancelled when its last caller is."""
         cached = self._e2e_cipher_keys.get(key_id)
@@ -2599,7 +2600,11 @@ class StationSession:
         try:
             text = await self._e2e_keys(key_id)
         except EufySecurityError as err:
-            raise refused(f"whose key could not be fetched: {err}") from err
+            # The cloud's failure, not the recording's: asking again can work.
+            raise CommunicationError(
+                f"the key of cipher {key_id} for the recording's end-to-end encryption "
+                f"could not be fetched: {err}"
+            ) from err
         if not text:
             raise refused("for which the cloud serves no RSA key")
         try:
