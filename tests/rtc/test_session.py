@@ -579,6 +579,44 @@ async def test_a_peer_that_stops_acknowledging_reconnects(
     assert isinstance(session.last_error, CommunicationError)
 
 
+async def test_a_signaling_socket_error_while_connecting_fails_start_at_once(
+    fake: FakeRtcServer, make_session: Callable[..., RtcSession]
+) -> None:
+    """The answer would be waited for up to ANSWER_TIMEOUT; the socket error ends it."""
+    fake.call_reply = "silent"
+    session = make_session()
+    clients: list[Any] = []
+    build = session._signaling
+
+    def keep(lost: Callable[[Exception], None]) -> Any:
+        clients.append(build(lost))
+        return clients[-1]
+
+    session._signaling = keep  # type: ignore[method-assign]
+    start = asyncio.create_task(session.start())
+    await until(lambda: fake.of_type(MessageType.CALL))
+    clients[0]._main.error_received(ConnectionRefusedError("gone"))
+    with pytest.raises(CommunicationError) as caught:
+        async with asyncio.timeout(2):
+            await start
+    assert isinstance(caught.value.__cause__, ConnectionRefusedError)
+    assert own_tasks(fake) == set()
+
+
+async def test_a_hang_up_during_ice_fails_start_at_once(
+    fake: FakeRtcServer, make_session: Callable[..., RtcSession]
+) -> None:
+    fake.ice_connects = False
+    session = make_session()
+    start = asyncio.create_task(session.start())
+    await until(lambda: fake.client_candidates)
+    fake.hang_up()
+    with pytest.raises(SignalingError):
+        async with asyncio.timeout(2):
+            await start
+    assert own_tasks(fake) == set()
+
+
 async def test_a_signaling_socket_error_reconnects(
     fake: FakeRtcServer, make_session: Callable[..., RtcSession], quick: None
 ) -> None:

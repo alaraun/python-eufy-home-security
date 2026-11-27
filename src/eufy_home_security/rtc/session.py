@@ -40,6 +40,7 @@ from .._logging import LogThrottle, redact_serial
 from ..exceptions import (
     CommunicationError,
     DeviceTimeoutError,
+    EufySecurityError,
     ProtocolError,
     SignalingError,
     UnsupportedError,
@@ -247,8 +248,9 @@ class RtcSession:
         login, :class:`~.exceptions.CallRefusedError` for a refused or hung-up CALL,
         :class:`~.exceptions.DeviceTimeoutError` for an unanswered step or ICE not up in
         :data:`ICE_TIMEOUT`, :class:`~.exceptions.UnsupportedError` for a device that picks
-        QUIC, :class:`~.exceptions.CommunicationError` when ICE fails or :meth:`close`
-        ran meanwhile. A second start while running returns at once. A cancelled start
+        QUIC, :class:`~.exceptions.CommunicationError` when ICE fails, the signaling
+        socket fails or :meth:`close` ran meanwhile; a socket error or a hang-up ends the
+        steps at once. A second start while running returns at once. A cancelled start
         (cancelled again or not) returns only after the connect it cancelled has closed.
         """
         if self._ice_factory is None:
@@ -369,11 +371,31 @@ class RtcSession:
 
         attempt = _Attempt(self._signaling(on_lost), lost)
         try:
-            await self._connect(attempt)
+            await self._until_lost(attempt)
         except BaseException:
             await self._close_attempt(attempt)
             raise
         return attempt
+
+    async def _until_lost(self, attempt: _Attempt) -> None:
+        """Run the connect steps; a loss meanwhile (a socket error, a hang-up) ends them
+        and raises it, as a :class:`~.exceptions.CommunicationError` when it is an OS error."""
+        steps = asyncio.get_running_loop().create_task(self._connect(attempt))
+        try:
+            await asyncio.wait({steps, attempt.lost}, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            if not steps.done():
+                steps.cancel()
+                while not steps.done():  # a second cancel still waits for the steps
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await asyncio.wait({steps})
+        if not steps.cancelled():
+            steps.result()
+            return
+        cause = attempt.lost.result()
+        if isinstance(cause, EufySecurityError):
+            raise cause
+        raise CommunicationError(f"RTC signaling failed while connecting: {cause}") from cause
 
     async def _connect(self, attempt: _Attempt) -> None:
         signaling = attempt.signaling

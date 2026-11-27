@@ -210,7 +210,9 @@ client has run only against the library's loopback fake (`eufy_home_security.tes
 `start` returns once the data channel is up and otherwise raises the attempt's error
 with nothing left running: `MissingDependencyError` without the `rtc` extra (before any
 socket), the client's errors above, `DeviceTimeoutError` when ICE does not connect in
-time, `CommunicationError` when it fails. After that the session reconnects by itself
+time, `CommunicationError` when it fails. A signaling socket error or a hang-up of the
+data call during these steps ends them at once with that error (a socket error as
+`CommunicationError`). After that the session reconnects by itself
 when the signaling socket fails, the device hangs up the call or the data channel stops:
 it waits 1 s, closes everything, waits 0.5 s and connects again, as the eufy app does. A
 failed reconnect waits 1.5 s for its first three failures, then twice the previous wait,
