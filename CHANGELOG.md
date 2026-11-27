@@ -4,6 +4,30 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.21](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.20...v0.4.21) (2026-11-27)
+
+
+### Features
+
+* **locks:** EufySecurity.lock_state() gives a lock's merged reading, and LockStateChanged is emitted per report taken with changed and observed_at ([#241](https://github.com/alaraun/python-eufy-home-security/issues/241)) ([7d74c7d](https://github.com/alaraun/python-eufy-home-security/commit/7d74c7d621872bdc51ef8744ceb288dfe756036d))
+* **locks:** GuestAccessError, MqttAccountRequiredError and LockNotMovedError import from the package root ([#241](https://github.com/alaraun/python-eufy-home-security/issues/241)) ([7d74c7d](https://github.com/alaraun/python-eufy-home-security/commit/7d74c7d621872bdc51ef8744ceb288dfe756036d))
+* **rtc:** add the WebRTC protocol layers (signaling codec and crypto, command channel, KCP data channel, RTP depacketizers) as internal modules ([#243](https://github.com/alaraun/python-eufy-home-security/issues/243)) ([b13124f](https://github.com/alaraun/python-eufy-home-security/commit/b13124faf8488a0b6c6911d4474da68463edea3a))
+
+
+### Bug Fixes
+
+* **locks:** a lock command the lock took whose call fails or is cancelled keeps the lock locking or unlocking until its next report, at most 30 s, and the next command is sent; a lock with nothing reported then reads unknown ([#241](https://github.com/alaraun/python-eufy-home-security/issues/241)) ([7d74c7d](https://github.com/alaraun/python-eufy-home-security/commit/7d74c7d621872bdc51ef8744ceb288dfe756036d))
+* **locks:** a lock command's timeout caps the whole call while each wait keeps its own default ([#241](https://github.com/alaraun/python-eufy-home-security/issues/241)) ([7d74c7d](https://github.com/alaraun/python-eufy-home-security/commit/7d74c7d621872bdc51ef8744ceb288dfe756036d))
+* **locks:** an MQTT lock is writable exactly when one of the eufy app's MQTT connectors serves it; T85F2 and T85F3 now take commands, the T8506 serial variant is not writable ([#241](https://github.com/alaraun/python-eufy-home-security/issues/241)) ([7d74c7d](https://github.com/alaraun/python-eufy-home-security/commit/7d74c7d621872bdc51ef8744ceb288dfe756036d))
+* **locks:** one merged reading per lock from every source; a lock command is skipped only when that reading already is the asked state and no report may be newer, and a push up to 30 s before the lock's own report is taken (two clocks) ([#241](https://github.com/alaraun/python-eufy-home-security/issues/241)) ([7d74c7d](https://github.com/alaraun/python-eufy-home-security/commit/7d74c7d621872bdc51ef8744ceb288dfe756036d))
+* **media:** drop an end-to-end record whose freshly unwrapped key string fails its GCM tag as wrapped for another key, instead of raising ProtocolError and keeping that key string ([#242](https://github.com/alaraun/python-eufy-home-security/issues/242)) ([59449b0](https://github.com/alaraun/python-eufy-home-security/commit/59449b05e804945ac8dba03161496ab7cc948750))
+* **media:** refuse a recording's version-9 records and type-9 history rows as the user's PIN-protected key (PinProtectedKeyError) on any media key offer ([#242](https://github.com/alaraun/python-eufy-home-security/issues/242)) ([59449b0](https://github.com/alaraun/python-eufy-home-security/commit/59449b05e804945ac8dba03161496ab7cc948750))
+* **mqtt:** a cancelled EufyMqttAccount.async_stop still stops every client, and a start still waiting when it comes starts none ([#241](https://github.com/alaraun/python-eufy-home-security/issues/241)) ([7d74c7d](https://github.com/alaraun/python-eufy-home-security/commit/7d74c7d621872bdc51ef8744ceb288dfe756036d))
+* **mqtt:** the MQTT certificate fetch in the background never logs in, and its cloud errors are reported as a CloudProblem ([#241](https://github.com/alaraun/python-eufy-home-security/issues/241)) ([7d74c7d](https://github.com/alaraun/python-eufy-home-security/commit/7d74c7d621872bdc51ef8744ceb288dfe756036d))
+* parse every device, cloud and broker JSON text with the depth bound ([#247](https://github.com/alaraun/python-eufy-home-security/issues/247)) ([307d59e](https://github.com/alaraun/python-eufy-home-security/commit/307d59e0a85070a2c5ebb677bd70e9548496cb44))
+* raise the new public StorageError when the session cache file cannot be read, moved aside or written; it is never read as a cloud refusal ([#247](https://github.com/alaraun/python-eufy-home-security/issues/247)) ([307d59e](https://github.com/alaraun/python-eufy-home-security/commit/307d59e0a85070a2c5ebb677bd70e9548496cb44))
+* **station:** group StationState.storage_ok by the station model's SD status table, as the storage record does (a standalone T8115 now reports status 30 as not normal) ([#246](https://github.com/alaraun/python-eufy-home-security/issues/246)) ([37f9d65](https://github.com/alaraun/python-eufy-home-security/commit/37f9d65ff7835f3a7b5f2b69ad92ab90e260dd2e))
+
 ## [0.4.20](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.19...v0.4.20) (2026-11-26)
 
 
