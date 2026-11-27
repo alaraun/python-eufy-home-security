@@ -22,6 +22,7 @@ from typing import Any, Final
 
 from .._logging import redact
 from ..exceptions import ProtocolError
+from .codec import ascii_decimal
 
 SDP_INFO_LEN: Final = 86
 """Length of the packed ``sdp_info`` structure."""
@@ -36,6 +37,8 @@ ICE_PWD_LEN: Final = 23
 CONTENT_KEY_LEN: Final = 16
 #: Content IV length, in characters.
 CONTENT_IV_LEN: Final = 12
+#: Digits of a u32 SSRC.
+_SSRC_DIGITS: Final = 10
 #: Answer lines kept: the ICE credentials and the SSRC attributes.
 ANSWER_PREFIXES: Final = ("a=ice-ufrag:", "a=ice-pwd:", "a=ssrc:")
 
@@ -202,6 +205,13 @@ class SdpInfo:
         )
 
 
+def _ssrc(value: object) -> int | None:
+    """An SSRC from a compact offer: an int, or a string of at most 10 ASCII digits."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return ascii_decimal(value, _SSRC_DIGITS) if isinstance(value, str) else None
+
+
 @dataclass(frozen=True, slots=True)
 class CompactOffer:
     """The device's compact offer of a private media call."""
@@ -216,12 +226,7 @@ class CompactOffer:
     @classmethod
     def from_json(cls, data: Mapping[str, Any]) -> CompactOffer:
         def num(key: str) -> int | None:
-            value = data.get(key)
-            if isinstance(value, int):
-                return value
-            if isinstance(value, str) and value.isdigit():
-                return int(value)
-            return None
+            return _ssrc(data.get(key))
 
         def text(key: str) -> str | None:
             value = data.get(key)
@@ -240,10 +245,7 @@ def expand_offer(offer: CompactOffer) -> str:
     """
     if offer.ice_ufrag is None or offer.ice_pwd is None:
         raise ProtocolError("RTC compact offer has no ICE credentials")
-    fec = offer.fields.get("sgc")
-    fec_ssrc = (
-        fec if isinstance(fec, int) else (int(fec) if isinstance(fec, str) and fec.isdigit() else 0)
-    )
+    fec_ssrc = _ssrc(offer.fields.get("sgc")) or 0
     fields = {
         "ufrag": offer.ice_ufrag,
         "pwd": offer.ice_pwd,

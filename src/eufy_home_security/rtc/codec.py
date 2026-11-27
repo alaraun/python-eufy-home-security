@@ -165,6 +165,14 @@ CONTENT_COMMAND_TYPES: Final = frozenset({2, 0x65})
 FLAG_REDISCOVER: Final = 0x01
 
 
+def ascii_decimal(text: str, max_digits: int) -> int | None:
+    """``text`` as an int when it is 1 to ``max_digits`` ASCII digits, else None (peer
+    and cloud text: no sign, space, other scripts' digits or unbounded length)."""
+    if 0 < len(text) <= max_digits and text.isascii() and text.isdecimal():
+        return int(text)
+    return None
+
+
 def crc16(data: bytes) -> int:
     """CRC-16/XMODEM (poly 0x1021, init 0, no reflection)."""
     return binascii.crc_hqx(data, 0)

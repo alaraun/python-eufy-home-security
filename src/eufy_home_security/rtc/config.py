@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import Any, Final, cast
 
 from .._logging import redact, redact_serial
-from .codec import CONTACT_LEN
+from .codec import CONTACT_LEN, ascii_decimal
 from .crypto import SESSION_KEY_LEN
 
 #: How long a quick-login record stays usable after its login, in seconds.
@@ -59,12 +59,16 @@ def signaling_domain(servers: Sequence[object]) -> str | None:
     return None
 
 
+#: The most digits a firmware number is read with.
+_FIRMWARE_DIGITS: Final = 16
+
+
 def firmware_number(version: str | None) -> int | None:
-    """``main_sw_version`` with the dots removed, as an int (``"3.8.7.4"`` -> 3874)."""
+    """``main_sw_version`` with the dots removed, as an int (``"3.8.7.4"`` -> 3874);
+    None when that is not 1 to 16 ASCII digits."""
     if not version:
         return None
-    digits = version.replace(".", "")
-    return int(digits) if digits.isdigit() else None
+    return ascii_decimal(version.replace(".", ""), _FIRMWARE_DIGITS)
 
 
 #: Data-channel framing: kcp_type 2 puts a 32-byte prefix before every KCP datagram,

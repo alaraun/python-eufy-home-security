@@ -289,3 +289,29 @@ def test_a_quick_login_record_lasts_23_hours() -> None:
     assert not QuickLogin("k" * 15, "c" * 32, "s", 1000.0).usable(1000.0)
     assert not QuickLogin("k" * 16, "c" * 31, "s", 1000.0).usable(1000.0)
     assert "k" * 16 not in repr(record)
+
+
+@pytest.mark.parametrize("version", ["3.8.²", "1" * 5000, "", "3.8.7.4 ", "-3874", "1" * 17])
+def test_an_unreadable_firmware_is_none(version: str) -> None:
+    assert firmware_number(version) is None
+
+
+def test_a_long_firmware_within_the_cap_is_read() -> None:
+    assert firmware_number("1" * 16) == int("1" * 16)
+
+
+@pytest.mark.parametrize(
+    "value", ["²", "1" * 5000, "1" * 11, "-5", " 5", "\uff15"]
+)  # last: a full-width digit
+def test_a_compact_offer_takes_only_ascii_decimal_ssrcs(value: str) -> None:
+    offer = CompactOffer.from_json(
+        {"ice-u": "u", "ice-p": "p", "asc": value, "vsc": value, "sgc": value}
+    )
+    assert (offer.audio_ssrc, offer.video_ssrc) == (None, None)
+    assert "a=ssrc-group:FEC-FR 0 0\r\n" in expand_offer(offer)
+
+
+def test_a_ten_digit_ssrc_is_read() -> None:
+    offer = CompactOffer.from_json({"ice-u": "u", "ice-p": "p", "asc": "4294967295", "sgc": "7"})
+    assert offer.audio_ssrc == 4294967295
+    assert "a=ssrc-group:FEC-FR 0 7\r\n" in expand_offer(offer)

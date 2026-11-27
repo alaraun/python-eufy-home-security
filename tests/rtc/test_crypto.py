@@ -170,3 +170,19 @@ def test_seal_round_trips_through_the_class() -> None:
 def test_a_short_secret_is_cut_at_its_first_nul() -> None:
     # "ab" + 13 NULs + "7": the NUL cut drops the salt's digit as well.
     assert derive_key("ab", 7) == b"ab" + bytes(14)
+
+
+@pytest.mark.parametrize(
+    "modulus",
+    [
+        "0" * 256,  # zero
+        "0" * 255 + "f",  # too small for the session key
+        "f" * 255 + "e",  # even
+        "-" + "f" * 255,  # a sign int() would accept
+        "0x" + "f" * 254,  # a prefix int() would accept
+        "²" * 256,  # not ASCII
+    ],
+)
+def test_a_degenerate_challenge_modulus_is_a_protocol_error(modulus: str) -> None:
+    with pytest.raises(ProtocolError, match="RTC LOGIN challenge"):
+        RtcSignalingCrypto().seal_session_key(modulus, SESSION)

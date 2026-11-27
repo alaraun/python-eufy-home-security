@@ -79,16 +79,15 @@ def aes_ecb_decrypt(secret: str, salt: int, data: bytes) -> bytes:
 
 
 def rsa_modulus(public_key: str) -> int:
-    """The RSA modulus of a LOGIN challenge: exactly 256 hex characters. Raises
-    :class:`~.exceptions.ProtocolError` otherwise."""
+    """The RSA modulus of a LOGIN challenge: exactly 256 hex digits (no sign or prefix).
+    Raises :class:`~.exceptions.ProtocolError` otherwise."""
     if len(public_key) != RSA_MODULUS_HEX_LEN:
         raise ProtocolError(
             f"RTC LOGIN challenge is not a {RSA_MODULUS_HEX_LEN}-character RSA modulus"
         )
-    try:
-        return int(public_key, 16)
-    except ValueError as exc:
-        raise ProtocolError("RTC LOGIN challenge modulus is not hexadecimal") from exc
+    if not all(c in string.hexdigits for c in public_key):
+        raise ProtocolError("RTC LOGIN challenge modulus is not hexadecimal")
+    return int(public_key, 16)
 
 
 class RtcSignalingCrypto:
@@ -112,9 +111,15 @@ class RtcSignalingCrypto:
         return self._random(SESSION_KEY_LEN)
 
     def seal_session_key(self, public_key: str, session_key: str) -> bytes:
-        """``session_key`` sealed for the server: the key exchange's first blob."""
-        key = rsa.RSAPublicNumbers(e=RSA_EXPONENT, n=rsa_modulus(public_key)).public_key()
-        return key.encrypt(session_key.encode(), padding.PKCS1v15())
+        """``session_key`` sealed for the server: the key exchange's first blob. Raises
+        :class:`~.exceptions.ProtocolError` for a modulus no RSA key can be built from or
+        too small for the key."""
+        modulus = rsa_modulus(public_key)
+        try:
+            key = rsa.RSAPublicNumbers(e=RSA_EXPONENT, n=modulus).public_key()
+            return key.encrypt(session_key.encode(), padding.PKCS1v15())
+        except ValueError as exc:
+            raise ProtocolError(f"RTC LOGIN challenge modulus is unusable: {exc}") from exc
 
     def seal(self, session_key: str, salt: int, data: bytes) -> bytes:
         """``data`` sealed with ``session_key``, salted with a packet id."""
