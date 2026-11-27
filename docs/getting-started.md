@@ -33,6 +33,9 @@ uv add eufy-home-security                            # or: pip install eufy-home
 uv add "eufy-home-security[mqtt]"                    # with the MQTT transport (Wi-Fi locks)
 ```
 
+A station the eufy app reaches only over WebRTC (T8N00, T9000, T7000, T8040) is not
+served yet; [how-to/diagnose-rtc.md](how-to/diagnose-rtc.md) shows how to help test it.
+
 ## Log in and read a station
 
 ```python
