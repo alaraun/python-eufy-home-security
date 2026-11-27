@@ -522,6 +522,25 @@ async def test_the_run_bound_during_the_close_is_the_closes_timeout(
     assert fake.call_kinds() == [CallKind.PRIV1]
 
 
+async def test_the_run_bound_during_the_probe_clients_close_keeps_the_probes(
+    fake: FakeRtcServer, run: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(diag, "station_budget", lambda seconds, probes: 2.5)
+
+    class HeldClose(client_mod.SignalingClient):
+        async def close(self) -> None:
+            await asyncio.sleep(5.0)  # held past the run's bound
+            await super().close()
+
+    monkeypatch.setattr(diag, "SignalingClient", HeldClose)
+    report = await run(seconds=0.2, probe_kinds=True)
+    assert report.data_channel.outcome.status is StepStatus.OK
+    assert report.close.status is StepStatus.OK
+    assert report.probes.login.status is StepStatus.OK
+    assert [p.kind for p in report.probes.kinds] == [1, 3, 4]
+    assert all(p.outcome.status is StepStatus.OK for p in report.probes.kinds)
+
+
 async def test_the_close_after_the_watch_is_recorded(fake: FakeRtcServer, run: Any) -> None:
     report = await run()
     assert report.close.status is StepStatus.OK

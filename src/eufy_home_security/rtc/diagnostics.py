@@ -732,8 +732,9 @@ async def async_diagnose_station(
                 ProbeReport(run.probe_current, StepOutcome(StepStatus.TIMEOUT))
             )
         elif run.probe_started is not None:
-            seconds = round(loop.time() - run.probe_started, 3)
-            run.probe_login = StepOutcome(StepStatus.TIMEOUT, seconds)
+            if run.probe_login is None:  # else the probe client's close: the probes stand
+                seconds = round(loop.time() - run.probe_started, 3)
+                run.probe_login = StepOutcome(StepStatus.TIMEOUT, seconds)
         elif run.closing_started is not None and run.close_outcome is None:
             seconds = round(loop.time() - run.closing_started, 3)
             run.close_outcome = StepOutcome(StepStatus.TIMEOUT, seconds, reason=CLOSE_TIMED_OUT)
