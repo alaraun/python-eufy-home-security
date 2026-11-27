@@ -215,7 +215,10 @@ when the signaling socket fails, the device hangs up the call or the data channe
 it waits 1 s, closes everything, waits 0.5 s and connects again, as the eufy app does. A
 failed reconnect waits 1.5 s for its first three failures, then twice the previous wait,
 at most 64 s (the library's back-off). `close` hangs up and closes every socket and
-task. No command is sent over the channel yet.
+task, the ICE connectivity checks of a connect still running included. One leftover is
+aioice's: with a TURN server in the call, a cancel while candidates are gathered (or a
+TURN allocation slower than aioice's 5 s gathering bound) leaves its TURN socket to the
+garbage collector. No command is sent over the channel yet.
 
 ## Media plane
 

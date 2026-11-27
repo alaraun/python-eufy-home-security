@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import base64
 import dataclasses
+import gc
+import importlib.util
 import logging
 from collections.abc import AsyncIterator, Callable
 from typing import Any
@@ -25,6 +27,7 @@ from eufy_home_security.rtc import session as session_mod
 from eufy_home_security.rtc.codec import MessageType
 from eufy_home_security.rtc.config import KCP_TYPE_MULTI, KCP_TYPE_SINGLE, QuickLogin, ServerInfo
 from eufy_home_security.rtc.data_channel import DataMsgType
+from eufy_home_security.rtc.ice import require_aioice
 from eufy_home_security.rtc.session import (
     CallAnswer,
     DataTransport,
@@ -107,6 +110,37 @@ async def until(check: Callable[[], object], timeout: float = 3.0) -> None:
     async with asyncio.timeout(timeout):
         while not check():
             await asyncio.sleep(0.01)
+
+
+needs_aioice = pytest.mark.skipif(
+    importlib.util.find_spec("aioice") is None, reason="needs the rtc extra"
+)
+
+
+@pytest.fixture
+def real_ice(monkeypatch: pytest.MonkeyPatch) -> None:
+    """aioice on 127.0.0.1 only, its STUN retries every 20 ms; ICE up to 0.3 s."""
+    aioice = require_aioice()
+    monkeypatch.setattr(aioice.ice, "get_host_addresses", lambda **_kw: ["127.0.0.1"])
+    monkeypatch.setattr(aioice.stun, "RETRY_RTO", 0.02)
+    monkeypatch.setattr(session_mod, "ICE_TIMEOUT", 0.3)
+
+
+def ice_checks() -> list[asyncio.Task[Any]]:
+    return [
+        t
+        for t in asyncio.all_tasks()
+        if not t.done() and getattr(t.get_coro(), "__qualname__", "").startswith("Connection.")
+    ]
+
+
+async def settled(errors: list[dict[str, Any]]) -> None:
+    """Let the timers of anything left running fire, then collect garbage."""
+    await asyncio.sleep(0.3)
+    gc.collect()
+    await asyncio.sleep(0)
+    assert ice_checks() == []
+    assert errors == []
 
 
 # ── pure decisions ───────────────────────────────────────────────────────────
@@ -388,6 +422,45 @@ async def test_an_acknowledged_candidate_is_not_sent_again(
     numbers = [c["file_candidate_num"] for c in fake.client_candidates]
     assert numbers.count(0) == 1
     assert numbers.count(1) > 2
+
+
+@needs_aioice
+async def test_real_ice_that_times_out_leaves_nothing_running(
+    real_ice: None, handler_errors: list[dict[str, Any]]
+) -> None:
+    """The device's candidate never answers the checks."""
+    server = await FakeRtcServer(turn=None).start()
+    session = RtcSession(rtc_config(), signaling_port=server.port, tcp_ports=(server.tcp_port,))
+    try:
+        with pytest.raises(DeviceTimeoutError):
+            await session.start()
+        assert ice_checks() == []
+        await settled(handler_errors)
+    finally:
+        await session.close()
+        await server.close()
+        asyncio.get_running_loop().set_exception_handler(None)
+
+
+@needs_aioice
+async def test_close_during_real_ice_checks_leaves_nothing_running(
+    real_ice: None, handler_errors: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(session_mod, "ICE_TIMEOUT", 30.0)
+    server = await FakeRtcServer(turn=None).start()
+    session = RtcSession(rtc_config(), signaling_port=server.port, tcp_ports=(server.tcp_port,))
+    before = set(ice_checks())
+    start = asyncio.create_task(session.start())
+    try:
+        await until(lambda: set(ice_checks()) - before)  # this session's checks run
+        await session.close()
+        with pytest.raises(CommunicationError):
+            await start
+        await settled(handler_errors)
+    finally:
+        await session.close()
+        await server.close()
+        asyncio.get_running_loop().set_exception_handler(None)
 
 
 async def test_start_without_the_extra_raises_before_any_socket(

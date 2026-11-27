@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import importlib.util
+import logging
 import sys
+from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
 
+from eufy_home_security._logging import LogThrottle
 from eufy_home_security.exceptions import CommunicationError, MissingDependencyError, ProtocolError
+from eufy_home_security.rtc import ice as ice_mod
 from eufy_home_security.rtc.ice import MAX_REMOTE_CANDIDATES, IceAgent, IceTransport, require_aioice
 
 needs_aioice = pytest.mark.skipif(
@@ -26,6 +31,123 @@ def aioice() -> Any:
 def loopback_only(monkeypatch: pytest.MonkeyPatch, aioice: Any) -> None:
     """Host candidates on 127.0.0.1 only (aioice leaves loopback out by default)."""
     monkeypatch.setattr(aioice.ice, "get_host_addresses", lambda **_kw: ["127.0.0.1"])
+
+
+@pytest.fixture
+def fast_stun(monkeypatch: pytest.MonkeyPatch, aioice: Any) -> None:
+    """STUN retries every 20 ms, so a check left running shows within the test."""
+    monkeypatch.setattr(aioice.stun, "RETRY_RTO", 0.02)
+
+
+@pytest.fixture
+async def loop_errors() -> AsyncIterator[list[dict[str, Any]]]:
+    seen: list[dict[str, Any]] = []
+    loop = asyncio.get_running_loop()
+    loop.set_exception_handler(lambda _loop, ctx: seen.append(ctx))
+    yield seen
+    loop.set_exception_handler(None)
+
+
+@pytest.fixture
+async def silent_port() -> AsyncIterator[int]:
+    """A UDP port that receives the checks and never answers."""
+    transport, _ = await asyncio.get_running_loop().create_datagram_endpoint(
+        asyncio.DatagramProtocol, local_addr=("127.0.0.1", 0)
+    )
+    yield transport.get_extra_info("sockname")[1]
+    transport.close()
+
+
+def check_tasks() -> list[asyncio.Task[Any]]:
+    return [
+        t
+        for t in asyncio.all_tasks()
+        if getattr(t.get_coro(), "__qualname__", "") == "Connection.check_start"
+    ]
+
+
+async def checking(port: int) -> IceTransport:
+    """A client whose checks run against ``port`` (which never answers)."""
+    client = IceTransport()
+    client.add_remote_candidate(f"candidate:1 1 udp 2130706431 127.0.0.1 {port} typ host")
+    await client.gather(local_ufrag="abcd", local_pwd="p" * 22, turn=None)
+    return client
+
+
+async def settled(errors: list[dict[str, Any]]) -> None:
+    """Let timers of anything left running fire, then collect garbage."""
+    await asyncio.sleep(0.3)
+    gc.collect()
+    await asyncio.sleep(0)
+    assert errors == []
+
+
+@needs_aioice
+def test_the_aioice_internals_the_transport_stops_are_there(aioice: Any) -> None:
+    """The check list and the pair's task are aioice internals: an upgrade renaming them
+    must fail here."""
+    connection = aioice.Connection(ice_controlling=False, components=1, use_ipv6=False)
+    assert isinstance(connection._check_list, list)
+    candidate = aioice.Candidate.from_sdp("1 1 udp 1 127.0.0.1 9 typ host")
+    pair = aioice.ice.CandidatePair(None, candidate)
+    assert pair.task is None
+    assert aioice.Connection.check_start.__qualname__ == "Connection.check_start"
+
+
+@needs_aioice
+async def test_a_timed_out_connect_leaves_no_check_running(
+    loopback_only: None, fast_stun: None, silent_port: int, loop_errors: list[dict[str, Any]]
+) -> None:
+    client = await checking(silent_port)
+    try:
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(0.3):
+                await client.connect(remote_ufrag="wxyz", remote_pwd="q" * 22)
+        assert check_tasks() == []
+        await settled(loop_errors)
+    finally:
+        await client.close()
+    await settled(loop_errors)
+
+
+@needs_aioice
+async def test_close_during_the_checks_stops_them_and_fails_connect(
+    loopback_only: None, fast_stun: None, silent_port: int, loop_errors: list[dict[str, Any]]
+) -> None:
+    client = await checking(silent_port)
+    connect = asyncio.create_task(client.connect(remote_ufrag="wxyz", remote_pwd="q" * 22))
+    await asyncio.sleep(0.2)
+    assert check_tasks()  # the checks run
+    await client.close()
+    assert check_tasks() == []
+    with pytest.raises(CommunicationError):
+        async with asyncio.timeout(2):
+            await connect
+    await settled(loop_errors)
+
+
+@needs_aioice
+async def test_without_the_check_list_close_warns_once_and_still_closes(
+    loopback_only: None, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An aioice that renamed its check list: the checks are left to aioice, said once."""
+    monkeypatch.setattr(ice_mod, "_CHECK_LIST", "_renamed")
+    monkeypatch.setattr(ice_mod, "_contract_warned", LogThrottle())
+    for _ in range(2):
+        client = IceTransport()
+        await client.gather(local_ufrag="abcd", local_pwd="p" * 22, turn=None)
+        connection = client._connection
+        assert connection is not None
+        await client.close()
+        assert connection._protocols == []
+    warnings = [
+        r
+        for r in caplog.records
+        if r.name == ice_mod.__name__
+        and r.levelno == logging.WARNING
+        and "check list" in r.getMessage()
+    ]
+    assert len(warnings) == 1
 
 
 @needs_aioice
