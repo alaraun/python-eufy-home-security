@@ -12,7 +12,7 @@ import struct
 
 import pytest
 
-from eufy_home_security.exceptions import ProtocolError
+from eufy_home_security.exceptions import CommunicationError, ProtocolError
 from eufy_home_security.rtc.rtcp_channel import (
     APP_NAME,
     APP_SUBTYPE,
@@ -335,3 +335,66 @@ async def test_the_seq_wraps_at_32_bits() -> None:
         assert await channel.send_data(b"b") == 0
     finally:
         await channel.close()
+
+
+class _Flaky(_Recorder):
+    """A send callback that fails its first ``failures`` calls."""
+
+    def __init__(self, failures: int) -> None:
+        super().__init__()
+        self.failures = failures
+
+    async def __call__(self, frame: bytes) -> None:
+        if self.failures > 0:
+            self.failures -= 1
+            raise OSError("transient")
+        await super().__call__(frame)
+
+
+async def _until_sent(send: _Recorder, count: int) -> None:
+    async with asyncio.timeout(2):
+        while len(send.sent) < count:
+            await asyncio.sleep(0.005)
+
+
+async def test_the_heartbeat_survives_failed_sends_and_warns_once(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    send = _Flaky(failures=3)
+    channel = _channel(send, heartbeat_interval=0.01)
+    with caplog.at_level("DEBUG", logger="eufy_home_security.rtc.rtcp_channel"):
+        channel.start()
+        try:
+            await _until_sent(send, 2)
+        finally:
+            await channel.close()
+    assert all(f.type == FrameType.HEARTBEAT for f in map(decode_frame, send.sent))
+    warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert len(warnings) == 1
+    assert "heartbeat" in warnings[0].getMessage()
+
+
+async def test_start_restarts_a_heartbeat_that_ended() -> None:
+    send = _Recorder()
+    channel = _channel(send, heartbeat_interval=0.01)
+    channel.start()
+    try:
+        await _until_sent(send, 1)
+        for task in list(channel._tasks):
+            task.cancel()
+        await asyncio.sleep(0.03)
+        count = len(send.sent)
+        channel.start()
+        await _until_sent(send, count + 1)
+    finally:
+        await channel.close()
+
+
+async def test_send_data_after_close_raises_and_sends_nothing() -> None:
+    send = _Recorder()
+    channel = _channel(send)
+    await channel.close()
+    with pytest.raises(CommunicationError, match="closed"):
+        await channel.send_data(b"late")
+    assert send.sent == []
+    assert channel._acks == {}

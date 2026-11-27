@@ -38,7 +38,8 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any, Final
 
-from ..exceptions import ProtocolError
+from .._logging import LogThrottle
+from ..exceptions import CommunicationError, ProtocolError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -138,19 +139,25 @@ class RtcpChannel:
         self._inbound: asyncio.Queue[bytes] = asyncio.Queue()
         self._acks: dict[int, asyncio.Event] = {}
         self._tasks: set[asyncio.Task[None]] = set()
-        self._heartbeat = False
+        self._heartbeat: asyncio.Task[None] | None = None
+        self._heartbeat_warning = LogThrottle()
         self._closed = False
 
     def start(self) -> None:
-        """Start the heartbeat, once (none when its interval is not positive)."""
-        if self._heartbeat_interval > 0 and not self._heartbeat:
-            self._heartbeat = True
-            self._spawn(self._heartbeat_loop())
+        """Start the heartbeat unless it runs (none when its interval is not positive, or
+        after :meth:`close`); a heartbeat that ended is started again."""
+        if self._heartbeat_interval <= 0 or self._closed:
+            return
+        if self._heartbeat is None or self._heartbeat.done():
+            self._heartbeat = self._spawn(self._heartbeat_loop())
 
     async def send_data(self, body: bytes) -> int:
         """Send ``body`` as a DATA frame and return its seq; it is sent again until the
         device acknowledges it or the resend delays run out. An error of the first send
-        propagates."""
+        propagates; after :meth:`close` it raises
+        :class:`~.exceptions.CommunicationError` and sends nothing."""
+        if self._closed:
+            raise CommunicationError("RTC command channel is closed")
         seq = self._next_seq
         self._next_seq = (self._next_seq + 1) & 0xFFFFFFFF
         frame = encode_frame(FrameType.DATA, seq, body)
@@ -208,13 +215,14 @@ class RtcpChannel:
     async def _send_one(self, frame: bytes) -> None:
         await self._send(frame)
 
-    def _spawn(self, coro: Coroutine[Any, Any, None]) -> None:
+    def _spawn(self, coro: Coroutine[Any, Any, None]) -> asyncio.Task[None] | None:
         if self._closed:
             coro.close()
-            return
+            return None
         task = asyncio.get_running_loop().create_task(coro)
         self._tasks.add(task)
         task.add_done_callback(self._task_done)
+        return task
 
     def _task_done(self, task: asyncio.Task[None]) -> None:
         self._tasks.discard(task)
@@ -238,6 +246,14 @@ class RtcpChannel:
             self._acks.pop(seq, None)
 
     async def _heartbeat_loop(self) -> None:
+        """One heartbeat per interval; a failed send is logged (WARNING once per five
+        minutes, DEBUG in between) and the next tick tries again."""
         while True:
             await asyncio.sleep(self._heartbeat_interval)
-            await self._send(encode_frame(FrameType.HEARTBEAT, 0))
+            try:
+                await self._send(encode_frame(FrameType.HEARTBEAT, 0))
+            except Exception as exc:  # the caller's send: any failure, next tick retries
+                level = (
+                    logging.WARNING if self._heartbeat_warning.should_log("send") else logging.DEBUG
+                )
+                _LOGGER.log(level, "RTC command-channel heartbeat not sent: %s", exc)
