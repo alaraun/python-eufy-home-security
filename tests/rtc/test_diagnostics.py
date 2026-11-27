@@ -15,6 +15,7 @@ import pytest
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.exceptions import MissingDependencyError
 from eufy_home_security.p2p.xzyh import encode_frame
+from eufy_home_security.rtc import client as client_mod
 from eufy_home_security.rtc import diagnostics as diag
 from eufy_home_security.rtc import session as session_mod
 from eufy_home_security.rtc.codec import CallKind, MessageType
@@ -390,14 +391,45 @@ async def test_per_kind_replies_are_recorded(
     fake: FakeRtcServer, run: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(diag, "PROBE_TIMEOUT", 0.3)
+    monkeypatch.setattr(client_mod, "CALL_REPLY_TIMEOUT", 0.05)
     fake.kind_replies = {1: "busy", 3: "silent", 4: "hangup"}
-    report = await run(probe_kinds=True)
+    async with asyncio.timeout(3):
+        report = await run(probe_kinds=True)
+    assert all(r.via == "udp" for r in fake.received)  # no TCP wake re-send
     probes = {p.kind: p for p in report.probes.kinds}
     assert probes[1].codes == (486,)
     assert probes[3].outcome.status is StepStatus.TIMEOUT
     assert probes[3].codes == ()
     assert probes[4].codes == (100,)
     assert probes[4].hung_up is True
+
+
+async def test_an_unreadable_answer_fails_step_three_with_its_keys_recorded(
+    fake: FakeRtcServer, run: Any
+) -> None:
+    fake.answer_extra = {"sdp_info": "AAAA"}
+    report = await run()
+    assert report.call.outcome.status is StepStatus.FAILED
+    assert report.call.outcome.error == "ProtocolError"
+    assert "sdp_info" in report.call.answer_keys
+    assert report.call.device_sdp is None
+    assert report.ice.outcome.status is StepStatus.SKIPPED
+
+
+async def test_a_probe_cut_by_the_run_bound_is_a_timeout_and_the_rest_skipped(
+    fake: FakeRtcServer, run: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(diag, "station_budget", lambda seconds, probes: 1.0)
+    monkeypatch.setattr(diag, "PROBE_TIMEOUT", 5.0)
+    fake.kind_replies = {1: "silent"}
+    report = await run(seconds=0.2, probe_kinds=True)
+    statuses = [(p.kind, p.outcome.status, p.outcome.reason) for p in report.probes.kinds]
+    assert statuses == [
+        (1, StepStatus.TIMEOUT, None),
+        (3, StepStatus.SKIPPED, "run timed out"),
+        (4, StepStatus.SKIPPED, "run timed out"),
+    ]
+    assert report.data_channel.outcome.status is StepStatus.OK
 
 
 async def test_ice_that_never_connects_is_a_step_four_failure(
@@ -437,6 +469,40 @@ async def test_the_whole_run_is_bounded(
     assert report.ice.outcome.status is StepStatus.SKIPPED
 
 
+async def test_the_watch_is_capped(
+    fake: FakeRtcServer, run: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(diag, "MAX_WATCH", 0.2)
+    async with asyncio.timeout(3):
+        report = await run(seconds=100.0)
+    assert report.data_channel.watched < 1.0
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "kept"),
+    [
+        ("srflx", "8.8.8.8:4000", "public"),
+        ("addr", "10.0.0.2", "private"),
+        ("transport_caps", True, "<transport_caps:4>"),
+        ("call_type", "x" * 33, "<call_type:33>"),
+        ("call_type", "a b", "<call_type:3>"),
+        ("port", 5062, 5062),
+        ("ftv", 20, 20),
+        ("token", "abc", "<token:3>"),
+    ],
+)
+def test_answer_values_keep_only_allowed_short_values(
+    key: str, value: object, kept: object
+) -> None:
+    assert diag._answer_value(key, value) == kept
+
+
+def test_answer_key_names_are_bounded() -> None:
+    names = diag._key_names({f"{'k' * 50}{i:03d}": i for i in range(100)})
+    assert len(names) == diag.MAX_ANSWER_KEYS
+    assert all(len(n) == diag.MAX_KEY_LEN for n in names)
+
+
 def test_the_budget_covers_the_session_bound_the_watch_and_the_probes() -> None:
     assert diag.station_budget(60, probes=False) > session_mod.START_TIMEOUT + 60
     assert diag.station_budget(60, probes=True) > (
@@ -445,21 +511,25 @@ def test_the_budget_covers_the_session_bound_the_watch_and_the_probes() -> None:
 
 
 async def test_a_lost_link_ends_the_watch_without_a_second_connect(
-    fake: FakeRtcServer, run: Any
+    fake: FakeRtcServer, run: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # A slow first probe keeps the run going past the session's reconnect wait.
+    monkeypatch.setattr(diag, "PROBE_TIMEOUT", 2.0)
+    fake.kind_replies = {1: "silent"}
+
     async def hang_up_soon() -> None:
         while not fake.device_channels:
             await asyncio.sleep(0.01)
         fake.hang_up()
 
     task = asyncio.create_task(hang_up_soon())
-    report = await run(seconds=5.0)
+    report = await run(seconds=5.0, probe_kinds=True)
     await task
     channel = report.data_channel
     assert channel.outcome.status is StepStatus.FAILED
-    assert channel.watched < 2.0
-    assert fake.call_kinds() == [CallKind.PRIV1]  # no reconnect
-    assert fake.kinds().count(MessageType.LOGIN) == 2  # the one key exchange
+    assert channel.ended == "SignalingError"
+    assert channel.watched < 0.9  # noticed before the session's 1 s loss wait ends
+    assert fake.call_kinds() == [CallKind.PRIV1, 1, 3, 4]  # no reconnect
 
 
 async def test_missing_inputs_skip_every_network_step(fake: FakeRtcServer, run: Any) -> None:

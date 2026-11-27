@@ -162,8 +162,11 @@ async def test_a_named_station_runs_whatever_its_route(
 ) -> None:
     out = tmp_path / "report.json"
     assert await run("diagnose", "rtc", PLAIN_SN, "--seconds", "0.2", "--out", str(out)) == 0
-    data = json.loads(out.read_text())
+    text = out.read_text()
+    data = json.loads(text)
     assert [(s["station"], s["reason"]) for s in data["stations"]] == [("T8025***2345", "asked")]
+    assert data["options"]["serial"] == "T8025***2345"
+    assert [v for v in synthetic_values() if v in text] == []
 
 
 async def test_a_serial_no_station_has_is_a_usage_error(
@@ -191,9 +194,23 @@ async def test_without_the_extra_it_says_how_to_install_before_logging_in(
     assert "pip install 'eufy-home-security[rtc]'" in capsys.readouterr().err
 
 
-async def test_a_watch_longer_than_the_bound_is_a_usage_error(tmp_path: Path) -> None:
-    code = await run("diagnose", "rtc", "--seconds", "601", "--out", str(tmp_path / "r.json"))
+class ReachedLoginError(Exception):
+    """Raised by a stand-in login: the command got past its argument checks."""
+
+
+async def test_a_watch_longer_than_the_bound_is_refused_before_login(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    async def reached(*_args: Any, **_kwargs: Any) -> Any:
+        raise ReachedLoginError
+
+    monkeypatch.setattr(commands, "open_account", reached)
+    argv = ("diagnose", "rtc", "--store", str(tmp_path / "cache.json"), "--out")
+    code = await run(*argv, str(tmp_path / "r.json"), "--seconds", "601")
     assert code == EXIT_USAGE
+    assert "--seconds must be at most 600" in capsys.readouterr().err
+    with pytest.raises(ReachedLoginError):
+        await run(*argv, str(tmp_path / "r.json"), "--seconds", "600")
 
 
 @pytest.mark.parametrize(

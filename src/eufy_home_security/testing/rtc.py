@@ -20,7 +20,7 @@ every message (:attr:`FakeRtcServer.device_channels`) and records it
 (:attr:`FakeRtcServer.device_received`).
 
 Scripts: ``call_reply`` (``answer``, ``trying``, ``busy``, ``hangup``, ``silent``) and
-``kind_replies`` (the same per CALL kind), ``udp_calls`` False (only a CALL over TCP is answered: a sleeping device),
+``kind_replies`` (the same per CALL kind), ``answer_extra``, ``udp_calls`` False (only a CALL over TCP is answered: a sleeping device),
 ``refuse_login``, ``drop_logins``, ``drop_discovers``, ``answer_repeats``,
 ``ice_connects`` False, ``ack_candidates``/``ack_only``, ``pbsdp`` (an answer blob),
 ``unasked`` (messages the station sends once its data channel is up, behind the older
@@ -205,6 +205,8 @@ class FakeRtcServer(asyncio.DatagramProtocol):
     transport_caps: int | None = None
     pbsdp: str | None = None
     """The 200's ``pbsdp`` text; None leaves it out."""
+    answer_extra: dict[str, Any] = field(default_factory=dict)
+    """Fields added to (or replacing those of) the 200's answer."""
     turn: dict[str, Any] | None = field(default_factory=lambda: dict(TURN))
     device_info: SdpInfo = DEVICE_INFO
     ice_connects: bool = True
@@ -522,6 +524,7 @@ class FakeRtcServer(asyncio.DatagramProtocol):
             answer["transport_caps"] = self.transport_caps
         if self.pbsdp is not None:
             answer["pbsdp"] = self.pbsdp
+        answer |= self.answer_extra
         for _ in range(self.answer_repeats):
             reply(
                 header.response(200),
