@@ -36,6 +36,7 @@ the eufy app reaches over WebRTC, prints a summary, and writes
 | `--seconds N` | how long to record what the station sends on its own (default 60, at most 600) |
 | `--probe-kinds` | also ask once for each of three older channel kinds and hang each up at once; only the answer codes are kept. Kind 3 asks for a camera's media channel (channel 0), so a camera may wake for a moment |
 | `--out FILE` | where to write the report |
+| `--secrets` (before `diagnose`) | a maintainer may ask for it privately: writes the raw values to a second file, and with `-vv` also logs secrets in clear; see below |
 
 Without the extra it stops before logging in and prints the install command.
 
@@ -49,7 +50,8 @@ servers, through which it reaches the station:
 2. logs in to the signaling server, as the eufy app does;
 3. asks the station for its command channel (one call), as the app does when it opens;
 4. connects that channel (ICE);
-5. listens on it for `--seconds`, recording what the station sends unasked;
+5. listens on it for `--seconds`, recording what the station sends unasked, then closes
+   it;
 6. with `--probe-kinds`, after closing that channel, logs in again and places one call
    of each older kind, hanging each up as soon as it is answered (or after a few
    seconds). The media-channel kind may briefly wake a camera.
@@ -68,7 +70,8 @@ not stop the others. Then the facts the support needs:
 - which WebRTC settings the station's record has, its firmware and WebRTC SDK version,
   its devices' models and channels;
 - the station's answer to the call: the names of its fields (a name that is not a plain
-  lower-case word shows only as its length), its `transport_caps` (the data-channel
+  lower-case word shows only as its length), the call type names it echoes when they are
+  ones a call carries, its `transport_caps` (the data-channel
   transports it offers) and where it came from, the field numbers of its binary session
   description, the shape of its session description (lengths and flag bytes, not the
   values);
@@ -77,7 +80,9 @@ not stop the others. Then the facts the support needs:
 - for every message the station sent unasked: its type, length, header bytes and
   channel; never its content. How many encrypted ones the run could open (with the key
   of this connection), and after how many seconds the first one naming the guard mode
-  came (the mode itself is not kept);
+  came (the mode itself is not kept; with encrypted messages it could not open, a missing
+  time means unknown, not absent);
+- how long closing the connection took (the run's time limit can end it there);
 - with `--probe-kinds`, the answer codes of the older channel kinds.
 
 It does **not** contain your e-mail, password, account or user id, serial numbers (only
@@ -85,10 +90,12 @@ the model and the last four characters, as `T8N00***1234`), the station's P2P id
 license, keys, IP addresses (only their kind: private, public, loopback), candidates or
 any message content. Read it before you share it: it is plain JSON.
 
-`--secrets` (a maintainer may ask for it privately, never in public) writes the raw
-values (serial, P2P id and license, contact id, addresses, the station's full answer,
-the first bytes of each message) to a second file, `<name>.secrets.json`, readable by
-you only, and prints a warning. The report itself stays the same.
+`--secrets` (a maintainer may ask for it privately, never in public) does two things.
+It writes the raw values (serial, P2P id and license, contact id, addresses, the
+station's full answer, the first bytes of each message) to a second file,
+`<name>.secrets.json`, readable by you only (never written through a symbolic link), and
+prints a warning; the report itself stays the same. And, as for every command, with
+`-vv` it logs passwords, tokens and keys in clear: never share such a log.
 
 ## Send it
 
