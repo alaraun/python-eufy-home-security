@@ -31,6 +31,7 @@ from eufy_home_security.rtc.config import KCP_TYPE_MULTI, KCP_TYPE_SINGLE, Quick
 from eufy_home_security.rtc.data_channel import DataMsgType
 from eufy_home_security.rtc.ice import IceAgent, IceTransport, require_aioice
 from eufy_home_security.rtc.session import (
+    FLAG_QUIC,
     CallAnswer,
     DataTransport,
     RtcSession,
@@ -261,12 +262,64 @@ def test_candidates_are_resent_on_the_apps_schedule() -> None:
     assert [candidate_resend_delay(n) for n in (1, 5, 6, 7)] == [0.3, 0.7, 1.4, 1.6]
 
 
-def test_the_answer_reads_sdp_info_and_transport_caps() -> None:
-    raw = base64.b64encode(DEVICE_INFO.encode()).decode()
-    answer = CallAnswer.parse({"sdp_info": raw, "transport_caps": 3, "pbsdp": "AA=="})
-    assert (answer.sdp_info, answer.transport_caps, answer.pbsdp) == (DEVICE_INFO, 3, True)
-    plain = CallAnswer.parse({"sdp_info": raw, "transport_caps": True})
+RAW_INFO = base64.b64encode(DEVICE_INFO.encode()).decode()
+
+
+def _pb_varint(value: int) -> bytes:
+    out = bytearray()
+    while True:
+        low, value = value & 0x7F, value >> 7
+        out.append(low | (0x80 if value else 0))
+        if not value:
+            return bytes(out)
+
+
+def pbsdp(caps: int | None, *, sdp_field: int = 3) -> str:
+    """A base64 ``PbMessageSdpUnit`` whose field ``sdp_field`` carries sub-field 16 =
+    ``caps`` (left out for None) next to an ICE username."""
+    inner = b"\x32\x04abcd"  # field 6, the ufrag
+    if caps is not None:
+        inner += _pb_varint(16 << 3) + _pb_varint(caps)
+    unit = b"\x08\x01" + _pb_varint(sdp_field << 3 | 2) + _pb_varint(len(inner)) + inner
+    return base64.b64encode(unit).decode()
+
+
+def test_the_answer_reads_sdp_info_and_the_json_transport_caps() -> None:
+    answer = CallAnswer.parse({"sdp_info": RAW_INFO, "transport_caps": 3})
+    assert (answer.sdp_info, answer.transport_caps, answer.pbsdp) == (DEVICE_INFO, 3, False)
+    plain = CallAnswer.parse({"sdp_info": RAW_INFO, "transport_caps": True})
     assert (plain.transport_caps, plain.pbsdp) == (None, False)
+
+
+@pytest.mark.parametrize(
+    ("pb", "json_caps", "caps"),
+    [
+        (pbsdp(3), 1, 3),  # pbsdp says QUIC, the JSON key KCP: pbsdp wins
+        (pbsdp(1), 3, 1),  # and the reverse
+        (pbsdp(2), None, 2),
+        (pbsdp(None), 3, 0),  # field 3 without sub-field 16
+        (pbsdp(3, sdp_field=2), 3, 0),  # no field 3
+        ("!!not base64", 3, 0),  # undecodable: KCP, never the JSON key
+        (base64.b64encode(b"\xff\xff").decode(), 3, 0),  # base64 of no protobuf
+    ],
+)
+def test_a_pbsdp_answer_gives_the_transport_caps(pb: str, json_caps: int | None, caps: int) -> None:
+    payload: dict[str, Any] = {"sdp_info": RAW_INFO, "pbsdp": pb}
+    if json_caps is not None:
+        payload["transport_caps"] = json_caps
+    answer = CallAnswer.parse(payload)
+    assert (answer.transport_caps, answer.pbsdp) == (caps, True)
+
+
+@pytest.mark.parametrize("pb", ["", None, 5])
+def test_without_a_pbsdp_text_the_json_transport_caps_count(pb: object) -> None:
+    answer = CallAnswer.parse({"sdp_info": RAW_INFO, "pbsdp": pb, "transport_caps": 3})
+    assert (answer.transport_caps, answer.pbsdp) == (3, False)
+
+
+def test_a_pbsdp_declaring_quic_picks_quic_for_a_client_that_offers_it() -> None:
+    answer = CallAnswer.parse({"sdp_info": RAW_INFO, "pbsdp": pbsdp(3), "transport_caps": 1})
+    assert select_transport(FLAG_QUIC | 1, answer.transport_caps) is DataTransport.QUIC
 
 
 @pytest.mark.parametrize(

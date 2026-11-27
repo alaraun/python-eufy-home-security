@@ -52,7 +52,7 @@ from .crypto import RtcSignalingCrypto
 from .data_channel import KcpDataChannel
 from .ice import IceAgent, IceTransport, require_aioice
 from .media import TurnServer
-from .sdp import CONTENT_IV_LEN, CONTENT_KEY_LEN, SdpInfo
+from .sdp import CONTENT_IV_LEN, CONTENT_KEY_LEN, SdpInfo, read_pbsdp
 from .signaling import CallEventKind
 
 _LOGGER = logging.getLogger(__name__)
@@ -140,11 +140,13 @@ class CallAnswer:
     transport_caps: int | None
     """The device's ``transport_caps``; None when the answer carries none."""
     pbsdp: bool
-    """Whether the answer carries the binary ``pbsdp`` form (not decoded)."""
+    """Whether the answer carries a ``pbsdp`` text, the source of ``transport_caps``."""
 
     @classmethod
     def parse(cls, payload: Mapping[str, Any]) -> CallAnswer:
-        """The answer in a CALL 200 attachment. Raises
+        """The answer in a CALL 200 attachment. ``transport_caps`` comes from ``pbsdp``
+        when that is a non-empty text (0 when it does not decode or lacks the field) and
+        from the JSON ``transport_caps`` only otherwise, as the eufy app reads it. Raises
         :class:`~.exceptions.ProtocolError` without a readable ``sdp_info``."""
         raw = payload.get("sdp_info")
         if not isinstance(raw, str) or not raw:
@@ -153,11 +155,12 @@ class CallAnswer:
             info = SdpInfo.decode(base64.b64decode(raw, validate=True))
         except ValueError as exc:  # binascii.Error, and a non-ASCII text
             raise ProtocolError(f"the device's sdp_info is not base64: {exc}") from exc
+        reading = read_pbsdp(payload.get("pbsdp"))
+        if reading is not None:
+            return cls(info, reading.transport_caps, True)
         caps = payload.get("transport_caps")
         return cls(
-            info,
-            caps if isinstance(caps, int) and not isinstance(caps, bool) else None,
-            "pbsdp" in payload,
+            info, caps if isinstance(caps, int) and not isinstance(caps, bool) else None, False
         )
 
 
