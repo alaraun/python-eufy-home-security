@@ -10,6 +10,7 @@ import pytest
 
 from eufy_home_security.exceptions import ProtocolError
 from eufy_home_security.rtc.media import (
+    MAX_ACCESS_UNIT,
     START_CODE,
     AccessUnit,
     H264Depacketizer,
@@ -310,3 +311,35 @@ def test_an_aggregate_stops_at_a_zero_length() -> None:
     payload = _stap_a(SPS) + b"\x00\x00" + struct.pack("!H", 3) + b"\x68ab"
     out = H264Depacketizer().push(RtpPacket.parse(rtp(payload, marker=True)))
     assert [u.data for u in out] == [START_CODE + SPS]
+
+
+def test_an_access_unit_over_the_bound_is_dropped_and_the_next_one_kept() -> None:
+    dep = H265Depacketizer()
+    chunk = b"\x02\x01" + b"z" * 60_000
+    packets = MAX_ACCESS_UNIT // len(chunk) + 2
+    out = []
+    for seq in range(1, packets + 1):
+        out += dep.push(RtpPacket.parse(rtp(chunk, seq=seq, ts=1000, pt=PayloadType.H265)))
+    out += dep.push(
+        RtpPacket.parse(rtp(HTRAIL, seq=packets + 1, ts=1000, pt=PayloadType.H265, marker=True))
+    )
+    assert out == []
+    kept = dep.push(
+        RtpPacket.parse(rtp(HTRAIL, seq=packets + 2, ts=2000, pt=PayloadType.H265, marker=True))
+    )
+    assert [unit.data for unit in kept] == [START_CODE + HTRAIL]
+
+
+def test_an_access_unit_at_the_bound_is_kept() -> None:
+    dep = H265Depacketizer()
+    nal = b"\x02\x01" + b"z" * (MAX_ACCESS_UNIT - 2)
+    [unit] = dep.push(RtpPacket.parse(rtp(nal, ts=1000, pt=PayloadType.H265, marker=True)))
+    assert unit.data == START_CODE + nal
+
+
+def test_an_over_bound_frame_ended_by_a_new_timestamp_is_dropped_too() -> None:
+    dep = H265Depacketizer()
+    big = b"\x02\x01" + b"z" * MAX_ACCESS_UNIT
+    assert dep.push(RtpPacket.parse(rtp(big, seq=1, ts=1000, pt=PayloadType.H265))) == []
+    out = dep.push(RtpPacket.parse(rtp(HTRAIL, seq=2, ts=2000, pt=PayloadType.H265, marker=True)))
+    assert [unit.data for unit in out] == [START_CODE + HTRAIL]

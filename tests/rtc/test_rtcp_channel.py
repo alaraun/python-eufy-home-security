@@ -20,6 +20,8 @@ from eufy_home_security.rtc.rtcp_channel import (
     FRAME_HEADER_LEN,
     FRAME_MAGIC,
     HEARTBEAT_INTERVAL,
+    MAX_QUEUED_BODIES,
+    MAX_TASKS,
     RETRANSMIT_DELAYS,
     Frame,
     FrameType,
@@ -313,12 +315,18 @@ async def test_a_corrupt_frame_is_dropped() -> None:
 async def test_dedup_forgets_the_oldest_seq_past_its_window() -> None:
     send = _Recorder()
     channel = _channel(send)
+    bodies: list[bytes] = []
+
+    async def feed(seq: int, body: bytes) -> None:
+        channel.feed(encode_frame(FrameType.DATA, seq, body))
+        await asyncio.sleep(0)  # the ack goes out within the task bound
+        bodies.extend(channel._inbound.get_nowait() for _ in range(channel._inbound.qsize()))
+
     try:
         for seq in range(DEDUP_WINDOW + 1):
-            channel.feed(encode_frame(FrameType.DATA, seq, b"x"))
-        channel.feed(encode_frame(FrameType.DATA, 1, b"again"))  # still remembered
-        channel.feed(encode_frame(FrameType.DATA, 0, b"again"))  # forgotten: delivered again
-        bodies = [channel._inbound.get_nowait() for _ in range(channel._inbound.qsize())]
+            await feed(seq, b"x")
+        await feed(1, b"again")  # still remembered
+        await feed(0, b"again")  # forgotten: delivered again
     finally:
         await channel.close()
     assert len(bodies) == DEDUP_WINDOW + 2
@@ -404,3 +412,65 @@ async def test_send_data_after_close_raises_and_sends_nothing() -> None:
     assert channel._acks == {}
     channel.start()  # no heartbeat after close
     assert channel._tasks == set()
+
+
+# ── bounds ───────────────────────────────────────────────────────────────────
+
+
+async def test_unread_data_is_capped_and_left_unacknowledged() -> None:
+    send = _Recorder()
+    channel = _channel(send)
+    try:
+        for seq in range(MAX_QUEUED_BODIES + 2):
+            channel.feed(encode_frame(FrameType.DATA, seq, seq.to_bytes(4, "big")))
+            await asyncio.sleep(0)  # let each ack go out
+        await asyncio.sleep(0.01)
+        acked = {f.seq for f in send.of_type(FrameType.ACK)}
+        assert acked == set(range(MAX_QUEUED_BODIES))
+        assert await channel.recv_data() == (0).to_bytes(4, "big")
+        # one read frees one place: the device's resend of a dropped frame is taken
+        channel.feed(encode_frame(FrameType.DATA, MAX_QUEUED_BODIES, b"late"))
+        await asyncio.sleep(0.01)
+        assert MAX_QUEUED_BODIES in {f.seq for f in send.of_type(FrameType.ACK)}
+    finally:
+        await channel.close()
+
+
+async def test_a_repeat_of_a_delivered_frame_is_acked_while_the_queue_is_full() -> None:
+    send = _Recorder()
+    channel = _channel(send)
+    try:
+        for seq in range(MAX_QUEUED_BODIES):
+            channel.feed(encode_frame(FrameType.DATA, seq, b"x"))
+            await asyncio.sleep(0)
+        channel.feed(encode_frame(FrameType.DATA, 0, b"x"))  # its ack was lost
+        await asyncio.sleep(0.01)
+        assert [f.seq for f in send.of_type(FrameType.ACK)].count(0) == 2
+    finally:
+        await channel.close()
+
+
+async def test_inbound_frames_are_dropped_while_the_task_bound_is_reached() -> None:
+    gate = asyncio.Event()
+    sent: list[bytes] = []
+
+    async def slow(frame: bytes) -> None:
+        sent.append(frame)
+        await gate.wait()
+
+    channel = RtcpChannel(slow, heartbeat_interval=0)
+    try:
+        for seq in range(MAX_TASKS + 3):
+            channel.feed(encode_frame(FrameType.DATA, seq, b"x"))
+        channel.feed(encode_frame(FrameType.MTU_REQUEST, 1, b"m"))
+        await asyncio.sleep(0.01)
+        assert len(sent) == MAX_TASKS
+        assert channel._inbound.qsize() == MAX_TASKS
+        gate.set()
+        await asyncio.sleep(0.01)
+        channel.feed(encode_frame(FrameType.MTU_REQUEST, 2, b"m"))
+        await asyncio.sleep(0.01)
+        assert decode_frame(sent[-1]).type == FrameType.MTU_RESPONSE
+    finally:
+        gate.set()
+        await channel.close()

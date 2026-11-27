@@ -57,6 +57,12 @@ RETRANSMIT_DELAYS: Final = (0.1, 0.2, 0.5, 0.5, 0.5)
 HEARTBEAT_INTERVAL: Final = 1.0
 #: How many recently seen inbound seqs are kept for deduplication.
 DEDUP_WINDOW: Final = 1000
+#: Inbound DATA bodies kept for :meth:`RtcpChannel.recv_data`; newer ones are dropped
+#: (unacknowledged, so the device sends them again) while that many wait.
+MAX_QUEUED_BODIES: Final = 256
+#: Tasks the channel runs at most (resends, heartbeat, answers to inbound frames); an
+#: inbound frame that would need one more is dropped unanswered.
+MAX_TASKS: Final = 64
 
 _HEADER = struct.Struct("<IIBxxxI")  # magic, seq, type, 3 unused, body length
 #: The MTU frame types share every bit but the lowest (8 and 9).
@@ -141,6 +147,7 @@ class RtcpChannel:
         self._tasks: set[asyncio.Task[None]] = set()
         self._heartbeat: asyncio.Task[None] | None = None
         self._heartbeat_warning = LogThrottle()
+        self._dropped = LogThrottle()
         self._closed = False
 
     def start(self) -> None:
@@ -187,10 +194,16 @@ class RtcpChannel:
             if event is not None:
                 event.set()
         elif frame.type == FrameType.DATA:
+            if self._busy("DATA"):
+                return
+            if frame.seq not in self._seen and self._inbound.qsize() >= MAX_QUEUED_BODIES:
+                if self._dropped.should_log("full"):
+                    _LOGGER.debug("RTC command-channel DATA dropped: %d unread", MAX_QUEUED_BODIES)
+                return
             self._spawn(self._send_one(encode_frame(FrameType.ACK, frame.seq)))
             if self._remember(frame.seq):
                 self._inbound.put_nowait(frame.body)
-        elif frame.type == FrameType.MTU_REQUEST:
+        elif frame.type == FrameType.MTU_REQUEST and not self._busy("MTU request"):
             self._spawn(self._send_one(encode_frame(FrameType.MTU_RESPONSE, frame.seq, frame.body)))
         # A heartbeat and an MTU response need no answer.
 
@@ -201,6 +214,14 @@ class RtcpChannel:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+
+    def _busy(self, what: str) -> bool:
+        """Whether :data:`MAX_TASKS` run, so an inbound ``what`` is dropped unanswered."""
+        if len(self._tasks) < MAX_TASKS:
+            return False
+        if self._dropped.should_log("tasks"):
+            _LOGGER.debug("RTC command-channel %s dropped: %d tasks running", what, MAX_TASKS)
+        return True
 
     def _remember(self, seq: int) -> bool:
         """Whether ``seq`` is new; it is then kept among the last :data:`DEDUP_WINDOW`."""

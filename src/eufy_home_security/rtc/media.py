@@ -10,20 +10,26 @@ Declared (eufy app); no media has been received from a device yet.
 
 from __future__ import annotations
 
+import logging
 import struct
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any, Final
 
-from .._logging import redact
+from .._logging import LogThrottle, redact
 from ..exceptions import ProtocolError
+
+_LOGGER = logging.getLogger(__name__)
 
 RTP_VERSION: Final = 2
 RTP_HEADER_LEN: Final = 12
 RTCP_APP: Final = 204
 
 START_CODE: Final = b"\x00\x00\x00\x01"
+#: The most RTP payload bytes one access unit may collect (a 4K H.265 keyframe fits with
+#: room to spare); a larger one is dropped whole.
+MAX_ACCESS_UNIT: Final = 4 * 1024 * 1024
 
 
 class PayloadType(IntEnum):
@@ -183,13 +189,17 @@ class AccessUnit:
 
 class _Depacketizer:
     """Collects NAL units per RTP timestamp; a marker bit or a new timestamp ends
-    the frame. A lost fragment drops the NAL unit it belonged to."""
+    the frame. A lost fragment drops the NAL unit it belonged to; a frame whose payloads
+    pass :data:`MAX_ACCESS_UNIT` bytes is dropped."""
 
     def __init__(self) -> None:
         self._nals: list[bytes] = []
         self._timestamp: int | None = None
         self._fragment: bytearray | None = None
         self._next_seq: int | None = None
+        self._size = 0
+        self._overflow = False
+        self._throttle = LogThrottle()
 
     def push(self, packet: RtpPacket) -> list[AccessUnit]:
         """Take one packet; returns the frames it completes (none, or one or two when a
@@ -201,7 +211,14 @@ class _Depacketizer:
             self._fragment = None
         self._next_seq = (packet.sequence + 1) & 0xFFFF
         self._timestamp = packet.timestamp
-        self._nals.extend(self._unpack(packet.payload))
+        self._size += len(packet.payload)
+        if self._size > MAX_ACCESS_UNIT and not self._overflow:
+            self._overflow = True
+            self._nals, self._fragment = [], None
+            if self._throttle.should_log("size"):
+                _LOGGER.debug("RTC frame dropped: over %d bytes", MAX_ACCESS_UNIT)
+        if not self._overflow:
+            self._nals.extend(self._unpack(packet.payload))
         if packet.marker:
             out.extend(self._flush())
         return out
@@ -210,6 +227,8 @@ class _Depacketizer:
         nals, self._nals = self._nals, []
         ts, self._timestamp = self._timestamp, None
         self._fragment = None
+        self._size = 0
+        self._overflow = False
         if not nals or ts is None:
             return []
         keyframe = any(self._is_key(n) for n in nals)
