@@ -6,14 +6,12 @@ import asyncio
 import gc
 import importlib.util
 import inspect
-import logging
 import sys
 from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
 
-from eufy_home_security._logging import LogThrottle
 from eufy_home_security.exceptions import CommunicationError, MissingDependencyError, ProtocolError
 from eufy_home_security.rtc import ice as ice_mod
 from eufy_home_security.rtc.ice import MAX_REMOTE_CANDIDATES, IceAgent, IceTransport, require_aioice
@@ -90,18 +88,16 @@ def test_aioices_gathering_bound_is_the_one_counted(aioice: Any) -> None:
 
 
 @needs_aioice
-async def test_a_timed_out_connect_leaves_no_check_running(
+async def test_a_timed_out_connect_then_close_leaves_no_check_running(
     loopback_only: None, fast_stun: None, silent_port: int, loop_errors: list[dict[str, Any]]
 ) -> None:
+    """The session closes every attempt; the close stops the checks a timeout left."""
     client = await checking(silent_port)
-    try:
-        with pytest.raises(TimeoutError):
-            async with asyncio.timeout(0.3):
-                await client.connect(remote_ufrag="wxyz", remote_pwd="q" * 22)
-        assert check_tasks() == []
-        await settled(loop_errors)
-    finally:
-        await client.close()
+    with pytest.raises(TimeoutError):
+        async with asyncio.timeout(0.3):
+            await client.connect(remote_ufrag="wxyz", remote_pwd="q" * 22)
+    await client.close()
+    assert check_tasks() == []
     await settled(loop_errors)
 
 
@@ -119,60 +115,6 @@ async def test_close_during_the_checks_stops_them_and_fails_connect(
         async with asyncio.timeout(2):
             await connect
     await settled(loop_errors)
-
-
-@needs_aioice
-async def test_close_stops_the_checks_before_and_after_the_sockets_close(
-    loopback_only: None, fast_stun: None, silent_port: int, loop_errors: list[dict[str, Any]]
-) -> None:
-    """None runs while the sockets close; one a request starts meanwhile is stopped too."""
-    client = await checking(silent_port)
-    connect = asyncio.create_task(client.connect(remote_ufrag="wxyz", remote_pwd="q" * 22))
-    await asyncio.sleep(0.2)
-    connection = client._connection
-    assert connection is not None
-    assert check_tasks()
-    real_close = connection.close
-    running_at_close: list[int] = []
-
-    async def closing() -> None:
-        running_at_close.append(len(check_tasks()))
-        pair = connection._check_list[0]
-        pair.task = None
-        connection.check_start_task(pair)  # as an incoming check request would
-        await real_close()
-
-    connection.close = closing  # type: ignore[method-assign]
-    await client.close()
-    assert running_at_close == [0]
-    assert check_tasks() == []
-    with pytest.raises(CommunicationError):
-        await connect
-    await settled(loop_errors)
-
-
-@needs_aioice
-async def test_without_the_check_list_close_warns_once_and_still_closes(
-    loopback_only: None, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """An aioice that renamed its check list: the checks are left to aioice, said once."""
-    monkeypatch.setattr(ice_mod, "_CHECK_LIST", "_renamed")
-    monkeypatch.setattr(ice_mod, "_contract_warned", LogThrottle())
-    for _ in range(2):
-        client = IceTransport()
-        await client.gather(local_ufrag="abcd", local_pwd="p" * 22, turn=None)
-        connection = client._connection
-        assert connection is not None
-        await client.close()
-        assert connection._protocols == []
-    warnings = [
-        r
-        for r in caplog.records
-        if r.name == ice_mod.__name__
-        and r.levelno == logging.WARNING
-        and "check list" in r.getMessage()
-    ]
-    assert len(warnings) == 1
 
 
 @needs_aioice

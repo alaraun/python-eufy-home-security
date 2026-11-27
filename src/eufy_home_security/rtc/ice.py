@@ -8,12 +8,13 @@ Remote candidates may arrive before :meth:`IceTransport.gather`; they are kept a
 over then. A device sends a handful of candidates; at most :data:`MAX_REMOTE_CANDIDATES`
 are taken per connection.
 
-aioice stops its connectivity checks only when its connect finishes. A connect that is
-cancelled or times out, or a close while the checks run, therefore cancels and awaits
-every check of the connection's check list here, so no STUN retry is left to fire on a
-closed socket. With a TURN server, a cancel during gathering, or an allocation slower
-than aioice's 5 s gathering bound (an unreachable TURN server), leaves aioice's TURN
-socket to the garbage collector.
+:meth:`IceTransport.close` closes the aioice connection, which stops its connectivity
+checks; a cancelled or timed-out connect leaves them to that close (the session always
+closes an attempt). aioice fails ICE only after the end of the remote candidates, which
+the device does not signal, so a failed ICE ends at the session's ``ICE_TIMEOUT`` as a
+:class:`~.exceptions.DeviceTimeoutError`. With a TURN server, a cancel or a close while
+candidates are gathered leaves aioice's TURN allocation running until its request times
+out, or its socket open when the server answers after it (an aioice limit).
 
 :mod:`aioice` is imported on first use; without the extra the constructor raises
 :class:`~.exceptions.MissingDependencyError`. See ``docs/protocol/rtc-signaling.md``
@@ -40,10 +41,6 @@ MAX_REMOTE_CANDIDATES: Final = 16
 
 #: aioice's own bound on gathering STUN and TURN candidates, in seconds.
 AIOICE_GATHER_TIMEOUT: Final = 5.0
-
-#: The aioice connection's list of candidate pairs; each pair's ``task`` runs its check.
-_CHECK_LIST: Final = "_check_list"
-_contract_warned = LogThrottle()
 
 
 def require_aioice() -> Any:
@@ -150,7 +147,6 @@ class IceTransport:
         except asyncio.CancelledError:
             checks.cancel()
             await asyncio.wait({checks})
-            await self._stop_checks()
             raise
         finally:
             if self._checks is checks:
@@ -176,8 +172,8 @@ class IceTransport:
             raise CommunicationError("RTC ICE connection closed") from exc
 
     async def close(self) -> None:
-        """Stop the checks, close every socket; a running :meth:`connect` raises
-        :class:`~.exceptions.CommunicationError`."""
+        """Close the connection, which stops its checks, and every socket; a running
+        :meth:`connect` raises :class:`~.exceptions.CommunicationError`."""
         self._closed = True
         checks = self._checks
         tasks = list(self._tasks)
@@ -188,27 +184,7 @@ class IceTransport:
         if tasks:
             await asyncio.wait(tasks)
         if self._connection is not None:
-            await self._stop_checks()
             await self._connection.close()
-            await self._stop_checks()  # a check an incoming request started meanwhile
-
-    async def _stop_checks(self) -> None:
-        """Cancel and await the connectivity check of every candidate pair."""
-        pairs = getattr(self._connection, _CHECK_LIST, None)
-        if not isinstance(pairs, list):
-            if _contract_warned.should_log("check list"):
-                _LOGGER.warning(
-                    "RTC ICE: aioice has no check list (%s): its checks are not stopped",
-                    _CHECK_LIST,
-                )
-            return
-        tasks = [
-            task for pair in pairs if isinstance(task := getattr(pair, "task", None), asyncio.Task)
-        ]
-        for task in tasks:
-            task.cancel()
-        if tasks:
-            await asyncio.wait(tasks)
 
     def _require(self) -> Connection:
         if self._connection is None:
