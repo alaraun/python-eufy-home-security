@@ -60,6 +60,7 @@ from ..exceptions import (
     RefreshCooldownError,
     SessionRejectedError,
     SessionReplacedError,
+    StorageError,
     UnsupportedError,
 )
 from ..p2p._json import parse_json
@@ -1104,7 +1105,7 @@ class EufyCloudApi:
         else:
             try:
                 home = await self._lookup_home_region(code)
-            except _LOOKUP_TRANSIENT:
+            except (*_LOOKUP_TRANSIENT, StorageError):
                 raise
             except EufySecurityError as err:
                 _LOGGER.info("no home cluster for country %s: %s", code, err)
@@ -1149,6 +1150,8 @@ class EufyCloudApi:
                 continue
             try:
                 home = await self._lookup_home_region(code)
+            except StorageError:
+                raise
             except _LOOKUP_TRANSIENT as err:
                 _LOGGER.info("no home cluster for extra country %s yet: %s", code, err)
                 continue
@@ -1178,7 +1181,7 @@ class EufyCloudApi:
             _code, _resp, data = await self._call(
                 self._host("passport", region), const.CLIENT_COUNTRY_PATH, {}, identity
             )
-        except _LOOKUP_TRANSIENT:
+        except (*_LOOKUP_TRANSIENT, StorageError):
             raise
         except EufySecurityError as err:
             _LOGGER.info("IP country lookup refused: %s", err)
@@ -1261,7 +1264,8 @@ class EufyCloudApi:
         never a prompt). The cached session stays in use whatever happens: a hold-off, a
         spent budget or no network leaves it for the next :meth:`async_login`; any other
         refusal (a challenge, a credential or body-code error) is recorded so it is not
-        asked again for this country. The re-login runs unattended: a challenge it meets
+        asked again for this country; a :class:`StorageError` (the cache, not the cloud)
+        propagates and records nothing. The re-login runs unattended: a challenge it meets
         asks eufy for no e-mailed code and no captcha.
         """
         made = self._session_ab_wanted(region)
@@ -1291,6 +1295,8 @@ class EufyCloudApi:
             _LOGGER.info(
                 "%s re-login with ab %s not done (%s); kept the session", region, wanted, err
             )
+        except StorageError:
+            raise  # the cache, not the cloud: no refusal to record
         except EufySecurityError as err:
             _LOGGER.warning(
                 "%s re-login with ab %s refused (%s); kept the session made with ab %s",
