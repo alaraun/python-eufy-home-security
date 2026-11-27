@@ -6,6 +6,7 @@ account (user id, an app install id). The signaling host is the first bare IPv4
 entry of ``signaling_servers``; a domain entry is only a cache key and is never
 resolved. Also the per-station protocol choices the eufy app makes from the station's
 prefix and versions: the data channel's KCP framing and whether commands are sealed.
+Declared (eufy app): per-prefix rules with no data source.
 """
 
 from __future__ import annotations
@@ -119,9 +120,10 @@ _COMMAND_GCM_FIRMWARE: Final[Mapping[str, tuple[tuple[int, int | None], ...]]] =
 
 
 def commands_encrypted(model: str, firmware: int | None) -> bool:
-    """Whether station prefix ``model`` at ``firmware`` (:func:`firmware_number`; None
-    counts as 0) takes AES-GCM commands; otherwise they go in the clear. Declared (eufy
-    app)."""
+    """Whether station prefix ``model`` at ``firmware`` (:func:`firmware_number`) takes
+    AES-GCM commands; otherwise they go in the clear. An unknown firmware (None) reads as
+    0, as the app's integer version defaults to 0: a gated prefix then sends in the clear.
+    Declared (eufy app)."""
     ranges = _COMMAND_GCM_FIRMWARE.get(model)
     if ranges is None:
         return True
