@@ -763,6 +763,8 @@ async def _watch(run: _Run, session: RtcSession, seconds: float) -> DataChannelR
     frames: list[FrameRecord] = []
     heads: list[str] = []
     ended: BaseException | None = None
+    if channel is None:  # lost between the session's start and the watch
+        ended = session.last_error or CommunicationError("RTC session lost")
     while channel is not None:
         left = began + seconds - run.loop.time()
         if left <= 0:

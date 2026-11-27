@@ -626,6 +626,18 @@ async def test_a_lost_link_ends_the_watch_without_a_second_connect(
     assert fake.call_kinds() == [CallKind.PRIV1, 1, 3, 4]  # no reconnect
 
 
+async def test_a_link_gone_before_the_watch_is_the_steps_failure(
+    fake: FakeRtcServer, run: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # lost between start() and the watch: the session has already dropped the channel
+    monkeypatch.setattr(RtcSession, "data_channel", property(lambda self: None))
+    report = await run()
+    channel = report.data_channel
+    assert channel.outcome.status is StepStatus.FAILED
+    assert channel.ended == "CommunicationError"
+    assert fake.call_kinds() == [CallKind.PRIV1]
+
+
 OWN = ("RtcSession.", "SignalingClient.", "KcpDataChannel.", "IceTransport.", "_close")
 
 
