@@ -532,6 +532,55 @@ async def test_a_lost_link_ends_the_watch_without_a_second_connect(
     assert fake.call_kinds() == [CallKind.PRIV1, 1, 3, 4]  # no reconnect
 
 
+OWN = ("RtcSession.", "SignalingClient.", "KcpDataChannel.", "IceTransport.", "_close")
+
+
+def own_tasks(fake: FakeRtcServer) -> list[asyncio.Task[Any]]:
+    """Unfinished tasks of the client's code (the fake station's channels excluded)."""
+    left = []
+    for task in asyncio.all_tasks():
+        coro: Any = task.get_coro()
+        frame = getattr(coro, "cr_frame", None)
+        owner = frame.f_locals.get("self") if frame is not None else None
+        if any(owner is channel for channel in fake.device_channels):
+            continue
+        name = getattr(coro, "__qualname__", "")
+        if not task.done() and (name.startswith(OWN) or "_close" in name):
+            left.append(task)
+    return left
+
+
+@pytest.mark.parametrize("phase", ["call", "watch", "probe"])
+@pytest.mark.parametrize("cancels", [1, 2])
+async def test_a_cancelled_run_raises_and_leaves_nothing(
+    fake: FakeRtcServer,
+    run: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    phase: str,
+    cancels: int,
+) -> None:
+    monkeypatch.setattr(diag, "PROBE_TIMEOUT", 5.0)
+    if phase == "call":
+        fake.call_reply = "silent"
+    fake.kind_replies = {1: "silent"}
+    reached: Callable[[], bool] = {
+        "call": lambda: fake.call_kinds() == [CallKind.PRIV1],
+        "watch": lambda: bool(fake.device_channels),
+        "probe": lambda: fake.call_kinds() == [CallKind.PRIV1, 1],
+    }[phase]
+    task = asyncio.create_task(run(seconds=0.3 if phase == "probe" else 5.0, probe_kinds=True))
+    async with asyncio.timeout(5):
+        while not reached():
+            await asyncio.sleep(0.01)
+    for _ in range(cancels):
+        task.cancel()
+        await asyncio.sleep(0)
+    with pytest.raises(asyncio.CancelledError):
+        async with asyncio.timeout(5):
+            await task
+    assert own_tasks(fake) == []
+
+
 async def test_missing_inputs_skip_every_network_step(fake: FakeRtcServer, run: Any) -> None:
     report = await run(station_entry(p2p_did=""), probe_kinds=True)
     assert report.inputs.outcome.status is StepStatus.FAILED

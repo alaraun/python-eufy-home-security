@@ -39,7 +39,7 @@ import logging
 import re
 import struct
 from collections import Counter
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Final
@@ -71,7 +71,7 @@ from .data_channel import DataMsgType, LinkMessage
 from .ice import IceAgent, IceTransport, require_aioice
 from .media import TurnServer
 from .sdp import SdpInfo
-from .session import ConnectStep, RtcSession, client_flag, select_transport
+from .session import ConnectStep, RtcSession, _finish, client_flag, select_transport
 from .signaling import CallEventKind
 
 _LOGGER = logging.getLogger(__name__)
@@ -652,8 +652,17 @@ async def async_diagnose_station(
             run.fail(None, StepStatus.TIMEOUT)
     finally:
         if run.session is not None:
-            await run.session.close()
+            await _close(run.session.close())
     return _report(run, station, reason, inputs, probe_kinds)
+
+
+async def _close(closing: Awaitable[None]) -> None:
+    """Await ``closing`` to its end; a cancel meanwhile is raised after it."""
+
+    async def wrapped() -> None:
+        await closing
+
+    await _finish(asyncio.get_running_loop().create_task(wrapped()))
 
 
 def _placeholder_config() -> RtcConfig:
@@ -729,7 +738,7 @@ async def _watch(run: _Run, session: RtcSession, seconds: float) -> DataChannelR
     if heads:
         run.secrets["frame_heads"] = heads
     if ended is not None:
-        await session.close()  # before the session's reconnect wait ends
+        await _close(session.close())  # before the session's reconnect wait ends
         run.fail(ended)
     else:
         run.finish()
@@ -791,7 +800,7 @@ async def _probe(run: _Run, port: int | None, tcp_ports: tuple[int, ...] | None)
             run.probe_results.append(await _probe_kind(run, client, kind))
         run.probe_current = None
     finally:
-        await client.close()
+        await _close(client.close())
 
 
 async def _probe_kind(run: _Run, client: SignalingClient, kind: CallKind) -> ProbeReport:
