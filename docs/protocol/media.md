@@ -884,15 +884,18 @@ record names one of two key types (`E2EKeyType`):
   raises (the cloud's error chained, also reported as a `CloudProblem`), and the next
   open fetches again. On a stream that already delivered video, a further cipher whose
   key cannot be had is not fetched again: its records are dropped (one warning) and video
-  resumes at a keyframe the stream decodes. A record of the PIN key ends the stream with
-  `PinProtectedKeyError`: the key needs the user's PIN, which the library neither asks
-  for nor stores. A live stream decodes no end-to-end record, as the app plays them only
-  from recordings.
-- **The key id is the library's choice.** The key type follows the eufy app's current
-  playback path (the table above); the key id is the record's byte 3 (from a row: its
-  low byte). The app's current path takes no key id from the record, and its older path,
-  which takes byte 3, treats version 4 with key id 2–9 as not end-to-end encrypted, so
-  this combination is the library's own.
+  resumes at a keyframe the stream decodes. A record of the PIN key (`v` 4 with key id
+  10 or more, or `v` 9) before the stream's first keyframe ends the stream with
+  `PinProtectedKeyError`; after it, such records are dropped, logged with a warning at
+  most once every five minutes. The key needs the user's PIN, which the library neither
+  asks for nor stores. A live stream decodes no end-to-end record, as the app plays them
+  only from recordings.
+- **The key id of a `v` 4 or 5 record is the library's choice.** The key type follows
+  the eufy app's current playback path (the table above); the key id is the record's
+  byte 3 (from a row: its low byte). For these versions the app's current path takes no
+  key id from the record, and its older path, which takes byte 3, treats version 4 with
+  key id 2–9 as not end-to-end encrypted, so this combination is the library's own. A
+  `v` 9 record's key id is its byte 3, as the app's playback path takes it.
 - Not tested on hardware: the key-type rule and the layouts come from the eufy app, the
   key id as above.
 

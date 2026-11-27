@@ -414,6 +414,32 @@ def test_an_e2e_key_string_whose_first_tag_fails_is_foreign_and_not_kept() -> No
     assert frame.data == _PICTURE
 
 
+@pytest.mark.parametrize(
+    "wrapped_plain",
+    [b"\x01" * 16, bytes(range(65, 65 + 47))],
+    ids=["other-length", "47-bytes-failing-its-tag"],
+)
+def test_a_foreign_e2e_record_mid_stream_leaves_the_kept_key_string(
+    wrapped_plain: bytes,
+) -> None:
+    """A record of another wrap that does not decode is foreign, whether its key string
+    has another length or 47 bytes that fail the tag: the kept key string stays, so audio
+    and the next record under the kept wrap still decode."""
+    decoder = _e2e_decoder(c7=_E2E_CIPHER)
+    good = _e2e_video(_PICTURE)
+    assert decoder.decode(FrameType.VIDEO_FRAME, good, _E2E_SUB) is not None
+    foreign = _e2e_video(_PICTURE, wrapped_plain=wrapped_plain)
+    with pytest.raises(media._ForeignKeyframeError):
+        decoder.decode(FrameType.VIDEO_FRAME, foreign, _E2E_SUB)
+    assert decoder.aes_key == _E2E_SECRET[:32]
+    audio = decoder.decode(FrameType.AUDIO_FRAME, _e2e_audio(b"\xff\xf1AAC"), _E2E_SUB)
+    assert audio is not None
+    assert audio.data == b"\xff\xf1AAC"
+    frame = decoder.decode(FrameType.VIDEO_FRAME, good, _E2E_SUB)
+    assert frame is not None
+    assert frame.data == _PICTURE
+
+
 def test_an_e2e_record_too_short_for_its_tag_raises_protocol_error() -> None:
     decoder = _e2e_decoder(c7=_E2E_CIPHER)
     cut = _e2e_video(_PICTURE)[: media.E2E_VIDEO_HEADER_LEN + 15]
