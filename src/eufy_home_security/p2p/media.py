@@ -1001,11 +1001,10 @@ class MediaDecoder:
         )
         return bytes(payload[:AUDIO_HEADER_LEN]) + body
 
-    def _e2e_aes(self, wrapped: bytes, key: rsa.RSAPrivateKey) -> bytes:
-        """The 47-byte key string a cloud cipher's RSA-wrapped bytes carry, unwrapped once
-        per distinct wrap. The key string ends at its first NUL byte, as the app reads it."""
-        if wrapped == self._wrapped and self._e2e_secret:
-            return self._e2e_secret
+    @staticmethod
+    def _e2e_unwrap(wrapped: bytes, key: rsa.RSAPrivateKey) -> bytes:
+        """The 47-byte key string a cloud cipher's RSA-wrapped bytes carry. The key string
+        ends at its first NUL byte, as the app reads it."""
         try:
             plain = key.decrypt(wrapped, padding.PKCS1v15())
         except ValueError as exc:
@@ -1018,8 +1017,6 @@ class MediaDecoder:
             raise _ForeignKeyframeError(
                 f"end-to-end record unwrapped to {len(secret)} bytes, not {_E2E_SECRET_LEN}"
             )
-        self._e2e_secret, self._wrapped = secret, wrapped
-        self._aes_key = secret[_E2E_KEY]
         return secret
 
     def decrypt_e2e_video(self, payload: bytes, subheader: bytes) -> bytes:
@@ -1029,8 +1026,13 @@ class MediaDecoder:
         ciphertext (AAD ``b"eufy security"``), the key the string's first 32 bytes, the
         IV its last 16.
 
+        The key string is unwrapped once per distinct wrap and kept only once a record
+        under it passed its tag: an RSA unwrap under another key mostly yields bytes of
+        another length, but now and then 47 of them, which only the tag tells apart.
+
         A key that is not held raises :meth:`e2e_refusal`'s error, a wrap for another key
-        :class:`_ForeignKeyframeError`, a body that fails its tag :class:`ProtocolError`.
+        :class:`_ForeignKeyframeError` (also a first record under a wrap that fails its
+        tag), a body that fails its tag under a kept key string :class:`ProtocolError`.
         """
         refusal = self.e2e_refusal(subheader)
         if refusal is not None:
@@ -1039,11 +1041,23 @@ class MediaDecoder:
         if key is None or self._e2e_keys is None:
             raise UnsupportedError("not an end-to-end encrypted record of a recording")
         header_len = _sealed_video_header_len(payload, VideoVariant.E2E)
-        secret = self._e2e_aes(bytes(payload[_E2E_RSA_WRAPPED]), self._e2e_keys[key.key_id])
+        wrapped = bytes(payload[_E2E_RSA_WRAPPED])
+        kept = wrapped == self._wrapped and bool(self._e2e_secret)
+        secret = self._e2e_secret if kept else self._e2e_unwrap(wrapped, self._e2e_keys[key.key_id])
         body = payload[header_len:]
-        return _gcm_open(
-            secret[_E2E_KEY], secret[_E2E_IV], body[_GCM_TAG_LEN:], body[:_GCM_TAG_LEN]
-        )
+        try:
+            clear = _gcm_open(
+                secret[_E2E_KEY], secret[_E2E_IV], body[_GCM_TAG_LEN:], body[:_GCM_TAG_LEN]
+            )
+        except ProtocolError as exc:
+            if kept:
+                raise
+            raise _ForeignKeyframeError(
+                "end-to-end record's key string failed its GCM tag: not wrapped for its "
+                "cipher's key"
+            ) from exc
+        self._e2e_secret, self._wrapped, self._aes_key = secret, wrapped, secret[_E2E_KEY]
+        return clear
 
     def decrypt_e2e_audio(self, payload: bytes) -> bytes | None:
         """An end-to-end encrypted AUDIO_FRAME record as a clear audio record (its 16-byte

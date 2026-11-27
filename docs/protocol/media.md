@@ -844,7 +844,11 @@ record names one of two key types (`E2EKeyType`):
   an ECIES wrap as the ECC media key's.
 - The wrapped key decrypts to a **47-character key string**, ending at its first NUL
   byte: the AES-256 key is its first 32 bytes, the 16-byte IV its last 16 (byte 31
-  belongs to both). A string of another length does not decode.
+  belongs to both). A string of another length does not decode, and neither does a
+  record whose key string fails its GCM tag before any record under that wrap passed
+  it: an RSA unwrap under another key can come out at 47 bytes, so the library drops
+  such a record as wrapped for another key. A tag failure under a key string that
+  already decoded a record is a corrupt record (`ProtocolError`).
 - **Audio record:** the 16-byte audio header, then `datalen` bytes: GCM tag and
   ciphertext under the key string of the recording's latest video record. Before the
   first video record, audio is dropped.

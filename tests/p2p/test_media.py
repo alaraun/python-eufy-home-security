@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import struct
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
@@ -379,12 +379,39 @@ def test_an_e2e_record_wrapped_for_another_cipher_is_foreign() -> None:
     assert decoder.aes_key == b""
 
 
-def test_an_e2e_record_with_a_broken_tag_raises_protocol_error() -> None:
+def test_an_e2e_record_with_a_broken_tag_under_a_confirmed_key_raises_protocol_error() -> None:
+    """A wrap whose key string already opened a record: a tag failure is a corrupt record."""
     decoder = _e2e_decoder(c7=_E2E_CIPHER)
-    record = bytearray(_e2e_video(_PICTURE))
-    record[media.E2E_VIDEO_HEADER_LEN] ^= 1  # the tag's first byte
-    with pytest.raises(ProtocolError, match="GCM tag"):
-        decoder.decode(FrameType.VIDEO_FRAME, bytes(record), _E2E_SUB)
+    record = _e2e_video(_PICTURE)
+    assert decoder.decode(FrameType.VIDEO_FRAME, record, _E2E_SUB) is not None
+    broken = bytearray(record)
+    broken[media.E2E_VIDEO_HEADER_LEN] ^= 1  # the tag's first byte
+    with pytest.raises(ProtocolError, match="GCM tag") as err:
+        decoder.decode(FrameType.VIDEO_FRAME, bytes(broken), _E2E_SUB)
+    assert not isinstance(err.value, media._ForeignKeyframeError)
+
+
+class _WrongUnwrap:
+    """A cipher key whose unwrap gives 47 bytes that are not the record's key string, as an
+    RSA unwrap under another key with implicit rejection does about once in a hundred."""
+
+    def decrypt(self, _ciphertext: bytes, _padding: object) -> bytes:
+        return bytes(range(65, 65 + 47))
+
+
+def test_an_e2e_key_string_whose_first_tag_fails_is_foreign_and_not_kept() -> None:
+    """An unwrap no record has confirmed, failing its tag, is another cipher's wrap: the
+    record is foreign, and neither the key string nor the wrap is kept for the next one."""
+    decoder = _e2e_decoder(c7=cast(rsa.RSAPrivateKey, _WrongUnwrap()))
+    record = _e2e_video(_PICTURE)
+    with pytest.raises(media._ForeignKeyframeError, match="failed its GCM tag"):
+        decoder.decode(FrameType.VIDEO_FRAME, record, _E2E_SUB)
+    assert decoder.aes_key == b""
+    assert decoder.decode(FrameType.AUDIO_FRAME, _e2e_audio(b"\xff\xf1AAC"), _E2E_SUB) is None
+    decoder.add_e2e_key(7, _E2E_CIPHER)
+    frame = decoder.decode(FrameType.VIDEO_FRAME, record, _E2E_SUB)  # the same wrap
+    assert frame is not None
+    assert frame.data == _PICTURE
 
 
 def test_an_e2e_record_too_short_for_its_tag_raises_protocol_error() -> None:
