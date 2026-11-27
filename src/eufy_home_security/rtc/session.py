@@ -115,6 +115,19 @@ def candidate_resend_delay(count: int) -> float:
     return ((100 if count < 6 else 200) * count + 200) / 1000
 
 
+async def _finish(task: asyncio.Task[Any]) -> None:
+    """Wait for ``task`` to end. A cancel meanwhile does not stop the wait; it is raised
+    once the task has ended."""
+    cancelled = False
+    while not task.done():
+        try:
+            await asyncio.wait({task})
+        except asyncio.CancelledError:
+            cancelled = True
+    if cancelled:
+        raise asyncio.CancelledError
+
+
 @dataclass(frozen=True, slots=True)
 class CallAnswer:
     """What the device's answer to the data-channel CALL says."""
@@ -258,7 +271,8 @@ class RtcSession:
         waits 7 to 9 minutes). After the first connection, reconnects keep the eufy app's
         schedule without an end. A second start while running returns at once. A
         cancelled start (cancelled again or not) returns only after the connect it
-        cancelled has closed.
+        cancelled has closed, and raises the cancel, also one that lands while it cleans up
+        after :data:`START_TIMEOUT`.
         """
         if self._ice_factory is None:
             require_aioice()
@@ -277,13 +291,13 @@ class RtcSession:
                     await asyncio.wait({first, run}, return_when=asyncio.FIRST_COMPLETED)
             except (asyncio.CancelledError, TimeoutError) as exc:
                 run.cancel()
-                while not run.done():  # a second cancel still waits for the cleanup
-                    with contextlib.suppress(asyncio.CancelledError):
-                        await asyncio.wait({run})
-                if first.done() and not first.cancelled():
-                    first.exception()  # read: nobody else will
-                if self._run is run:
-                    self._run = None
+                try:
+                    await _finish(run)  # a cancel during the cleanup wins over the timeout
+                finally:
+                    if first.done() and not first.cancelled():
+                        first.exception()  # read: nobody else will
+                    if self._run is run:
+                        self._run = None
                 if isinstance(exc, TimeoutError):
                     raise DeviceTimeoutError(
                         f"the RTC session did not connect within {START_TIMEOUT:.0f} s"
@@ -399,9 +413,7 @@ class RtcSession:
         finally:
             if not steps.done():
                 steps.cancel()
-                while not steps.done():  # a second cancel still waits for the steps
-                    with contextlib.suppress(asyncio.CancelledError):
-                        await asyncio.wait({steps})
+                await _finish(steps)  # a cancel meanwhile is the run's own: raised after
         if not steps.cancelled():
             steps.result()
             return
@@ -523,12 +535,7 @@ class RtcSession:
 
     async def _close_attempt(self, attempt: _Attempt) -> None:
         """Close one connection whole; a cancel waits for it to finish, then re-raises."""
-        closing = asyncio.get_running_loop().create_task(self._close_parts(attempt))
-        try:
-            await asyncio.wait({closing})
-        except asyncio.CancelledError:
-            await asyncio.wait({closing})
-            raise
+        await _finish(asyncio.get_running_loop().create_task(self._close_parts(attempt)))
 
     async def _close_parts(self, attempt: _Attempt) -> None:
         tasks = list(attempt.tasks)

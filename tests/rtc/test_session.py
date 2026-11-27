@@ -28,7 +28,7 @@ from eufy_home_security.rtc import session as session_mod
 from eufy_home_security.rtc.codec import MessageType
 from eufy_home_security.rtc.config import KCP_TYPE_MULTI, KCP_TYPE_SINGLE, QuickLogin, ServerInfo
 from eufy_home_security.rtc.data_channel import DataMsgType
-from eufy_home_security.rtc.ice import require_aioice
+from eufy_home_security.rtc.ice import IceAgent, IceTransport, require_aioice
 from eufy_home_security.rtc.session import (
     CallAnswer,
     DataTransport,
@@ -107,6 +107,59 @@ def own_tasks(fake: FakeRtcServer) -> set[asyncio.Task[Any]]:
         if not task.done() and getattr(coro, "__qualname__", "").startswith(OWN):
             tasks.add(task)
     return tasks
+
+
+class SlowToStop(PipeIce):
+    """An in-memory ICE connection whose cancelled connect takes ``stop_time`` to end."""
+
+    stop_time = 0.05
+
+    async def connect(self, *, remote_ufrag: str, remote_pwd: str) -> None:
+        try:
+            await super().connect(remote_ufrag=remote_ufrag, remote_pwd=remote_pwd)
+        except asyncio.CancelledError:
+            await asyncio.sleep(self.stop_time)
+            raise
+
+
+def slow_to_stop(fake: FakeRtcServer, stop_time: float = 0.05) -> Callable[[], PipeIce]:
+    def factory() -> PipeIce:
+        pipe = fake.ice_factory()
+        pipe.__class__ = SlowToStop
+        pipe.stop_time = stop_time  # type: ignore[attr-defined]
+        return pipe
+
+    return factory
+
+
+def close_after_the_next_loss(
+    monkeypatch: pytest.MonkeyPatch, session: RtcSession, ticks: int
+) -> list[asyncio.Task[None]]:
+    """The consumer's close(), ``ticks`` loop turns after the next loss of an attempt."""
+    closing: list[asyncio.Task[None]] = []
+    real_lose = session_mod._Attempt.lose
+
+    def lose(attempt: Any, exc: Exception) -> None:
+        real_lose(attempt, exc)
+
+        async def later() -> None:
+            for _ in range(ticks):
+                await asyncio.sleep(0)
+            await session.close()
+
+        if not closing:
+            closing.append(asyncio.get_running_loop().create_task(later()))
+
+    monkeypatch.setattr(session_mod._Attempt, "lose", lose)
+    return closing
+
+
+def run_loops() -> list[asyncio.Task[Any]]:
+    return [
+        t
+        for t in asyncio.all_tasks()
+        if not t.done() and getattr(t.get_coro(), "__qualname__", "") == "RtcSession._run_loop"
+    ]
 
 
 async def until(check: Callable[[], object], timeout: float = 3.0) -> None:
@@ -898,20 +951,7 @@ async def test_a_run_cancelled_twice_while_connecting_leaves_nothing(
 ) -> None:
     """The second cancel lands while the run waits for its cancelled connect steps."""
     fake.ice_connects = False
-
-    class SlowToStop(PipeIce):
-        async def connect(self, *, remote_ufrag: str, remote_pwd: str) -> None:
-            try:
-                await super().connect(remote_ufrag=remote_ufrag, remote_pwd=remote_pwd)
-            finally:
-                await asyncio.sleep(0.05)  # its cleanup takes a few loop turns
-
-    def factory() -> PipeIce:
-        pipe = fake.ice_factory()
-        pipe.__class__ = SlowToStop
-        return pipe
-
-    session = make_session(ice_factory=factory)
+    session = make_session(ice_factory=slow_to_stop(fake))
     start = asyncio.create_task(session.start())
     await until(lambda: fake.client_candidates)
     run = session._run
@@ -920,6 +960,84 @@ async def test_a_run_cancelled_twice_while_connecting_leaves_nothing(
     await asyncio.sleep(0)
     run.cancel()
     with pytest.raises(CommunicationError):
+        await start
+    assert own_tasks(fake) == set()
+
+
+@pytest.mark.parametrize("ticks", [1, 2, 3])
+async def test_close_right_after_a_loss_during_a_reconnect_ends_the_session(
+    fake: FakeRtcServer,
+    make_session: Callable[..., RtcSession],
+    quick: None,
+    monkeypatch: pytest.MonkeyPatch,
+    ticks: int,
+) -> None:
+    """The close lands while the reconnect's cancelled steps wind down after the loss."""
+    session = make_session(ice_factory=slow_to_stop(fake))
+    await session.start()
+    fake.ice_connects = False
+    sent = len(fake.client_candidates)
+    await fake.break_link()
+    await until(lambda: len(fake.client_candidates) > sent)  # the reconnect is in ICE
+    closing = close_after_the_next_loss(monkeypatch, session, ticks)
+    fake.hang_up()
+    await until(lambda: closing)
+    async with asyncio.timeout(2):
+        await closing[0]
+    assert run_loops() == []
+    assert own_tasks(fake) == set()
+
+
+@needs_aioice
+@pytest.mark.parametrize("ticks", [1, 4])
+async def test_close_right_after_a_loss_during_a_real_ice_reconnect_ends_the_session(
+    real_ice: None,
+    handler_errors: list[dict[str, Any]],
+    quick: None,
+    monkeypatch: pytest.MonkeyPatch,
+    ticks: int,
+) -> None:
+    monkeypatch.setattr(session_mod, "ICE_TIMEOUT", 30.0)
+    server = await FakeRtcServer(turn=None).start()
+    made: list[IceAgent] = []
+
+    def factory() -> IceAgent:
+        made.append(server.ice_factory() if not made else IceTransport())
+        return made[-1]
+
+    session = RtcSession(
+        rtc_config(), signaling_port=server.port, tcp_ports=(server.tcp_port,), ice_factory=factory
+    )
+    try:
+        await session.start()
+        await server.break_link()
+        await until(lambda: len(made) == 2 and ice_checks())  # the reconnect's checks run
+        closing = close_after_the_next_loss(monkeypatch, session, ticks)
+        server.hang_up()
+        await until(lambda: closing)
+        async with asyncio.timeout(2):
+            await closing[0]
+        assert run_loops() == []
+        await settled(handler_errors)
+        assert server.refused == []
+    finally:
+        await session.close()
+        await server.close()
+        asyncio.get_running_loop().set_exception_handler(None)
+
+
+async def test_a_cancel_during_the_cleanup_after_start_timeout_is_raised(
+    fake: FakeRtcServer, make_session: Callable[..., RtcSession], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """START_TIMEOUT fired; the caller's cancel during the cleanup wins over the timeout."""
+    monkeypatch.setattr(session_mod, "START_TIMEOUT", 0.2)
+    fake.ice_connects = False
+    session = make_session(ice_factory=slow_to_stop(fake, stop_time=0.6))
+    start = asyncio.create_task(session.start())
+    await asyncio.sleep(0.4)  # the bound fired; the cleanup waits for the ICE stand-in
+    assert not start.done()
+    start.cancel()
+    with pytest.raises(asyncio.CancelledError):
         await start
     assert own_tasks(fake) == set()
 
