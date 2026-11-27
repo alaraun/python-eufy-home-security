@@ -62,6 +62,7 @@ from ..exceptions import (
     EufySecurityError,
     RateLimitedError,
 )
+from ..p2p._json import parse_json
 from ..storage import SessionCache
 from . import const
 from .decode import body_field, decode_payload, decode_push, is_security_push
@@ -261,7 +262,7 @@ class _EufyFcmRegister(FcmRegister):
                 raise CommunicationError(f"Firebase Installations HTTP {status}")
             raise CloudApiError(status, "Firebase Installations rejected the install", endpoint=url)
         try:
-            body = json.loads(text)
+            body = parse_json(text)
             auth = body["authToken"]
             installation = {
                 "token": str(auth["token"]),

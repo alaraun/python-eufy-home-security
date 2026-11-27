@@ -16,7 +16,7 @@ from enum import IntEnum, StrEnum
 from types import MappingProxyType
 from typing import Any, Final
 
-from ..p2p._json import json_int
+from ..p2p._json import json_int, parse_json
 from .recipes import PIP_CORD_KEYS, StitchMode
 
 LENS_LIST_PARAM: Final = 9240
@@ -46,7 +46,7 @@ def parse_lenses(value: str | None) -> tuple[Lens, ...]:
     if not value:
         return ()
     try:
-        raw = json.loads(value)
+        raw = parse_json(value)
     except ValueError:
         return ()
     if not isinstance(raw, list):

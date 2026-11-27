@@ -22,6 +22,7 @@ from eufy_home_security.exceptions import (
     LoginLimitedError,
     NoCachedSessionError,
     RateLimitedError,
+    StorageError,
 )
 from eufy_home_security.storage import MemoryStore, SessionCache
 from eufy_home_security.testing import SYNTHETIC
@@ -332,6 +333,72 @@ async def test_a_refused_re_login_keeps_the_session_and_is_not_asked_again(
         fake_mega.calls.clear()
         await _api(http, await _reloaded(store)).async_login()
     assert _login_abs(fake_mega) == []
+
+
+class _FailOnceStore(MemoryStore):
+    """A store whose next save fails once while :attr:`fail` is set: a transient disk
+    failure."""
+
+    fail = False
+
+    async def async_save(self, data: dict[str, Any]) -> None:
+        if self.fail:
+            self.fail = False
+            raise StorageError("cache file could not be written: [Errno 28] No space left")
+        await super().async_save(data)
+
+
+async def test_a_storage_error_in_the_re_login_propagates_and_records_no_refusal(
+    fake_mega: FakeMega, http: aiohttp.ClientSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _FailOnceStore()
+    cache = await _reloaded(store)
+    await _logged_in_by_region(fake_mega, cache, http)
+    fake_mega.client_country = "EE"
+    fake_mega.country_regions = {"EE": "eu"}
+    api = _api(http, cache)
+    do_login = api._do_login
+
+    async def re_login_with_a_failing_save(*args: Any, **kwargs: Any) -> None:
+        store.fail = True  # the re-login's first save fails
+        await do_login(*args, **kwargs)
+
+    monkeypatch.setattr(api, "_do_login", re_login_with_a_failing_save)
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        with pytest.raises(StorageError):
+            await api.async_login()
+    session = cache.cloud_session("eu")
+    assert (session["ab"], session.get("ab_wanted")) == ("eu", "eu")  # no refusal recorded
+    assert (await _reloaded(store)).cloud_session("eu").get("ab_wanted") == "eu"
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        ("EE", "_lookup_home_region", "_resolve_login_country"),
+        ("", "_key_exchange", "_resolve_login_country"),
+        (("EE", "CH"), "_lookup_home_region", "_resolve_extra_countries"),
+    ],
+    ids=["home-region", "ip-country", "extra-country"],
+)
+async def test_a_storage_error_in_a_country_lookup_propagates_and_settles_nothing(
+    cache: SessionCache,
+    http: aiohttp.ClientSession,
+    monkeypatch: pytest.MonkeyPatch,
+    case: tuple[str | tuple[str, ...], str, str],
+) -> None:
+    country, failing, step = case  # the login country option, the failing lookup, the step
+    api = _api(http, cache, country=country)
+
+    async def fail(*_args: object, **_kwargs: object) -> None:
+        raise StorageError("cache file could not be written: [Errno 28] No space left")
+
+    monkeypatch.setattr(api, failing, fail)
+    with pytest.raises(StorageError):
+        await getattr(api, step)()
+    assert api.login_country is None
+    assert (api._country_resolved, api._country_error, api._extras_answered) == (False, None, set())
 
 
 @pytest.mark.parametrize(

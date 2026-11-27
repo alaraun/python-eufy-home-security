@@ -60,8 +60,10 @@ from ..exceptions import (
     RefreshCooldownError,
     SessionRejectedError,
     SessionReplacedError,
+    StorageError,
     UnsupportedError,
 )
+from ..p2p._json import parse_json
 from ..storage import INSTALL_IDS_KEY, SessionCache
 from . import arming, const, crypto
 from .arming import ArmingGroupList, ArmingGroupLog, ArmingGroupMember
@@ -1103,7 +1105,7 @@ class EufyCloudApi:
         else:
             try:
                 home = await self._lookup_home_region(code)
-            except _LOOKUP_TRANSIENT:
+            except (*_LOOKUP_TRANSIENT, StorageError):
                 raise
             except EufySecurityError as err:
                 _LOGGER.info("no home cluster for country %s: %s", code, err)
@@ -1148,6 +1150,8 @@ class EufyCloudApi:
                 continue
             try:
                 home = await self._lookup_home_region(code)
+            except StorageError:
+                raise
             except _LOOKUP_TRANSIENT as err:
                 _LOGGER.info("no home cluster for extra country %s yet: %s", code, err)
                 continue
@@ -1177,7 +1181,7 @@ class EufyCloudApi:
             _code, _resp, data = await self._call(
                 self._host("passport", region), const.CLIENT_COUNTRY_PATH, {}, identity
             )
-        except _LOOKUP_TRANSIENT:
+        except (*_LOOKUP_TRANSIENT, StorageError):
             raise
         except EufySecurityError as err:
             _LOGGER.info("IP country lookup refused: %s", err)
@@ -1240,7 +1244,7 @@ class EufyCloudApi:
         if status != 200:
             raise classify_refusal(status, _loose_code(text), _message(_loose_object(text)), path)
         try:
-            parsed = json.loads(text)
+            parsed = parse_json(text)
         except ValueError as exc:
             raise CommunicationError(f"cloud response to {path} was not JSON") from exc
         if not isinstance(parsed, dict):
@@ -1260,7 +1264,8 @@ class EufyCloudApi:
         never a prompt). The cached session stays in use whatever happens: a hold-off, a
         spent budget or no network leaves it for the next :meth:`async_login`; any other
         refusal (a challenge, a credential or body-code error) is recorded so it is not
-        asked again for this country. The re-login runs unattended: a challenge it meets
+        asked again for this country; a :class:`StorageError` (the cache, not the cloud)
+        propagates and records nothing. The re-login runs unattended: a challenge it meets
         asks eufy for no e-mailed code and no captcha.
         """
         made = self._session_ab_wanted(region)
@@ -1290,6 +1295,8 @@ class EufyCloudApi:
             _LOGGER.info(
                 "%s re-login with ab %s not done (%s); kept the session", region, wanted, err
             )
+        except StorageError:
+            raise  # the cache, not the cloud: no refusal to record
         except EufySecurityError as err:
             _LOGGER.warning(
                 "%s re-login with ab %s refused (%s); kept the session made with ab %s",
@@ -3833,7 +3840,7 @@ class EufyCloudApi:
         if isinstance(data, str):
             plain = crypto.body_decrypt(data, identity.shared_key)
             try:
-                return json.loads(plain)
+                return parse_json(plain)
             except ValueError as exc:
                 raise ProtocolError("decrypted cloud data was not JSON") from exc
         raise ProtocolError(f"cloud data field was {type(data).__name__}, not an object")
@@ -4142,7 +4149,7 @@ def classify_refusal(
 def _loose_object(text: str) -> Mapping[str, Any]:
     """An error page's JSON object, or an empty one."""
     try:
-        parsed = json.loads(text)
+        parsed = parse_json(text)
     except ValueError:
         return {}
     return parsed if isinstance(parsed, dict) else {}
@@ -4167,7 +4174,7 @@ def _envelope_object(text: str, path: str) -> dict[str, Any]:
     """``text`` of a 200 answer as its JSON object; :class:`CommunicationError` when it
     is no JSON object."""
     try:
-        parsed = json.loads(text)
+        parsed = parse_json(text)
     except ValueError as exc:
         raise CommunicationError(f"cloud response to {path} was not JSON") from exc
     if not isinstance(parsed, dict):

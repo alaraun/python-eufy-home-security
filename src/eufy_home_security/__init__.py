@@ -164,6 +164,7 @@ if TYPE_CHECKING:
         SessionReplacedError,
         StationUnreachableError,
         StillNotWrittenError,
+        StorageError,
         UnsupportedError,
         VideoEncryptedPictureError,
     )
@@ -422,6 +423,7 @@ _EXPORTS: dict[str, str] = {
             "SessionReplacedError",
             "StationUnreachableError",
             "StillNotWrittenError",
+            "StorageError",
             "UnsupportedError",
             "VideoEncryptedPictureError",
         ),
@@ -709,6 +711,7 @@ __all__ = [
     "StillFormat",
     "StillNotWrittenError",
     "StorageChanged",
+    "StorageError",
     "StorageInfo",
     "StorageMedium",
     "Store",

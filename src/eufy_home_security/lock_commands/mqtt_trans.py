@@ -10,11 +10,11 @@ from __future__ import annotations
 
 import base64
 import binascii
-import json
 from collections.abc import Mapping
 from typing import Any
 
 from ..exceptions import ProtocolError
+from ..p2p._json import parse_json
 from .anker import gson_json
 
 
@@ -30,7 +30,7 @@ def decode_trans(trans: str) -> tuple[int, Mapping[str, Any]]:
     compact = "".join(trans.split())
     try:
         raw = base64.b64decode(compact + "=" * (-len(compact) % 4), validate=True)
-        obj = json.loads(raw)
+        obj = parse_json(raw)
     except (binascii.Error, UnicodeDecodeError, ValueError) as err:
         raise ProtocolError(f"MQTT lock message trans does not decode: {err}") from err
     if not isinstance(obj, Mapping):

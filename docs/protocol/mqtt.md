@@ -156,7 +156,9 @@ Every message body is a JSON object:
 A received message is parsed leniently: unknown head fields are ignored, quoted numbers
 accepted, missing fields take their defaults, and a `payload` that is no JSON object is
 kept as text. A topic that names no serial, a body that is no JSON object, one without a
-`head`, or a head field of another type is dropped (and logged at DEBUG).
+`head`, or a head field of another type is dropped (and logged at DEBUG). The body, the
+`payload` and a lock's `trans` are read as strict JSON (UTF-8, no NaN or Infinity) nested
+at most 64 levels deep; anything else counts as no JSON.
 
 ## The client
 

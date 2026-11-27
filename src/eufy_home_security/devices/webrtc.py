@@ -23,13 +23,13 @@ functions: no I/O.
 
 from __future__ import annotations
 
-import json
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Final
 
+from ..p2p._json import parse_json
 from ._webrtc_routing_data import ROUTE_PROPERTIES
 from .conditions import Condition, ConditionUnit, Groups, choices, passes, variant_rest
 from .model_settings import product_code_of
@@ -203,7 +203,7 @@ def _as_int(text: str) -> int:
 def _code_list(text: str) -> list[str]:
     """A sub-device list: a JSON list of product codes; anything else is empty."""
     try:
-        codes = json.loads(text)
+        codes = parse_json(text)
     except ValueError:
         return []
     if not isinstance(codes, list) or not all(isinstance(c, str) for c in codes):

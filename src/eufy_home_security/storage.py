@@ -40,6 +40,8 @@ from .cloud.const import (
 )
 from .cloud.models import REGION_KEY, CloudDevice, device_cache_entry
 from .devices.types import connects_on_demand
+from .exceptions import StorageError
+from .p2p._json import parse_json
 from .p2p.transport import ConnectPath
 
 CACHE_VERSION = 2
@@ -133,7 +135,11 @@ class MemoryStore:
 
 
 class JsonFileStore:
-    """A JSON file, written atomically and readable only by its owner."""
+    """A JSON file, written atomically and readable only by its owner.
+
+    One process per file: a load that finds the file damaged moves aside whatever is at
+    the path then, a good file another process has just written included.
+    """
 
     def __init__(self, path: str | os.PathLike[str]) -> None:
         self.path = Path(path).expanduser()
@@ -146,21 +152,36 @@ class JsonFileStore:
 
     def _load(self) -> dict[str, Any] | None:
         try:
-            text = self.path.read_text(encoding="utf-8")
+            content = self.path.read_bytes()
         except FileNotFoundError:
             return None
+        except OSError as err:
+            raise StorageError(f"cache file {self.path} could not be read: {_reason(err)}") from err
         try:
-            doc = json.loads(text)
-        except ValueError:  # JSONDecodeError and UnicodeDecodeError both
-            # An empty or truncated file must not wedge every later start: move it
-            # aside (kept for inspection) and start from nothing.
+            doc = parse_json(content)
+        except ValueError:  # not UTF-8, not JSON, or nested past the depth bound
+            # An empty, truncated or damaged file must not wedge every later start: move
+            # it aside (kept for inspection) and start from nothing.
             aside = self.path.with_name(f"{self.path.name}.corrupt")
-            os.replace(self.path, aside)
+            try:
+                os.replace(self.path, aside)
+            except OSError as err:
+                raise StorageError(
+                    f"damaged cache file {self.path} could not be moved aside: {_reason(err)}"
+                ) from err
             _LOGGER.warning("cache file was not valid JSON; moved it to %s", aside)
             return None
         return doc if isinstance(doc, dict) else None
 
     def _save(self, data: dict[str, Any]) -> None:
+        try:
+            self._write(data)
+        except OSError as err:
+            raise StorageError(
+                f"cache file {self.path} could not be written: {_reason(err)}"
+            ) from err
+
+    def _write(self, data: dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=self.path.parent, prefix=f".{self.path.name}.")
         try:
@@ -173,6 +194,11 @@ class JsonFileStore:
         except BaseException:
             Path(tmp).unlink(missing_ok=True)
             raise
+
+
+def _reason(err: OSError) -> str:
+    """The OS's reason for ``err`` without the paths it names (the message names the file)."""
+    return err.strerror or str(err) or type(err).__name__
 
 
 async def async_cached_account(store: Store) -> str | None:
@@ -336,6 +362,8 @@ class SessionCache:
         self._pending_save = None  # from here on the write must not be cancelled
         try:
             await self.async_save()
+        except StorageError as err:
+            _LOGGER.warning("session cache not saved: %s", err)
         except Exception:
             _LOGGER.warning("session cache not saved", exc_info=True)
 

@@ -14,7 +14,7 @@ from aioresponses import aioresponses
 from eufy_home_security import storage
 from eufy_home_security.cloud.api import EufyCloudApi
 from eufy_home_security.cloud.const import KEY_REFRESH_SLOW_RETRY
-from eufy_home_security.exceptions import LoginLimitedError
+from eufy_home_security.exceptions import LoginLimitedError, StorageError
 from eufy_home_security.p2p.transport import ConnectPath
 from eufy_home_security.storage import (
     CACHE_VERSION,
@@ -26,6 +26,7 @@ from eufy_home_security.storage import (
     async_forget_account,
 )
 from eufy_home_security.testing import SYNTHETIC
+from tests.json_depth import past_the_bound
 
 
 async def test_file_store_roundtrip_is_private(tmp_path: Path) -> None:
@@ -439,12 +440,87 @@ async def test_cached_account_is_the_email_of_the_stored_session() -> None:
     assert await async_cached_account(store) == "user@example.com"  # migrated on load
 
 
-async def test_corrupt_cache_file_is_moved_aside(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "content",
+    [b"", past_the_bound({"version": 1}).encode(), b'{"version": "\xff"}'],
+    ids=["empty", "deep", "not-utf-8"],  # empty, as after a crash mid-write without fsync
+)
+async def test_corrupt_cache_file_is_moved_aside(tmp_path: Path, content: bytes) -> None:
     path = tmp_path / "cache.json"
-    path.write_text("")  # empty, as after a crash mid-write on a filesystem without fsync
+    path.write_bytes(content)
     assert await JsonFileStore(path).async_load() is None
     assert (tmp_path / "cache.json.corrupt").exists()
     assert not path.exists()
+
+
+def _assert_names_the_file_once(err: StorageError, path: Path) -> None:
+    """The error names the cache file once, then the OS's reason; the OSError is its cause."""
+    cause = err.__cause__
+    assert isinstance(cause, OSError)
+    assert str(err).count(str(path)) == 1
+    assert str(err).endswith(f": {cause.strerror}")
+
+
+async def test_a_cache_file_that_cannot_be_read_is_a_storage_error(tmp_path: Path) -> None:
+    path = tmp_path / "cache.json"
+    path.mkdir()  # reading it fails as a permission or disk error would
+    with pytest.raises(StorageError, match="could not be read") as caught:
+        await JsonFileStore(path).async_load()
+    _assert_names_the_file_once(caught.value, path)
+
+
+async def test_a_damaged_cache_file_that_cannot_be_moved_aside_is_a_storage_error(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "cache.json"
+    path.write_text("{")
+    (tmp_path / "cache.json.corrupt").mkdir()
+    (tmp_path / "cache.json.corrupt" / "x").write_text("")  # a target os.replace refuses
+    with pytest.raises(StorageError, match="could not be moved aside") as caught:
+        await JsonFileStore(path).async_load()
+    _assert_names_the_file_once(caught.value, path)
+    assert path.read_text() == "{"
+
+
+def _unwritable(tmp_path: Path, where: str) -> Path:
+    """A cache path the store cannot write: the path is a non-empty directory, or its
+    parent directory is a file."""
+    if where == "target":
+        (tmp_path / "cache.json" / "x").mkdir(parents=True)
+        return tmp_path / "cache.json"
+    (tmp_path / "parent").write_text("")
+    return tmp_path / "parent" / "cache.json"
+
+
+def _temp_files(tmp_path: Path) -> list[Path]:
+    """The store's temp files left anywhere under ``tmp_path``."""
+    return list(tmp_path.rglob(".cache.json.*"))
+
+
+@pytest.mark.parametrize("where", ["target", "parent"])
+async def test_a_cache_file_that_cannot_be_written_is_a_storage_error(
+    tmp_path: Path, where: str
+) -> None:
+    path = _unwritable(tmp_path, where)
+    with pytest.raises(StorageError, match="could not be written") as caught:
+        await JsonFileStore(path).async_save({"a": 1})
+    _assert_names_the_file_once(caught.value, path)
+    assert _temp_files(tmp_path) == []
+
+
+async def test_a_scheduled_save_logs_a_storage_error_once_without_a_traceback(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    path = tmp_path / "cache.json"
+    cache = SessionCache(JsonFileStore(path), "user@example.com")
+    await cache.async_load()
+    (path / "x").mkdir(parents=True)  # the file's place is taken by a directory
+    cache.schedule_save(0)
+    await asyncio.sleep(0.05)
+    records = [r for r in caplog.records if "session cache not saved" in r.getMessage()]
+    assert len(records) == 1
+    assert "could not be written" in records[0].getMessage()
+    assert records[0].exc_info is None
 
 
 async def test_save_hands_the_store_a_snapshot() -> None:
@@ -612,3 +688,16 @@ async def test_stored_devices_hold_only_what_the_library_reads() -> None:
     # … and a fresh list the same way; the params snapshot stays only for on-demand devices.
     cache.set_devices([on_demand, hub])
     assert cache.cached_devices() == [slim_on_demand, slim_hub]
+
+
+@pytest.mark.parametrize(
+    ("err", "reason"),
+    [
+        (PermissionError(13, "Permission denied", "/x"), "Permission denied"),
+        (OSError("disk gone"), "disk gone"),
+        (OSError(), "OSError"),
+        (OSError(5, ""), "[Errno 5] "),
+    ],
+)
+def test_a_storage_error_always_names_a_reason(err: OSError, reason: str) -> None:
+    assert storage._reason(err) == reason

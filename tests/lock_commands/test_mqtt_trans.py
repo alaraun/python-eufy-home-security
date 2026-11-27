@@ -9,6 +9,7 @@ import pytest
 
 from eufy_home_security.exceptions import ProtocolError
 from eufy_home_security.lock_commands import mqtt_trans
+from tests.json_depth import past_the_bound
 
 
 def test_trans_is_base64_of_the_apps_payload_info_json() -> None:
@@ -44,6 +45,10 @@ def test_decode_accepts_wrapped_and_unpadded_base64() -> None:
         base64.b64encode(b'{"cmd": "x", "payload": {}}').decode(),
         base64.b64encode(b'{"cmd": 1940, "payload": "text"}').decode(),
         base64.b64encode(b'{"payload": {}}').decode(),
+        pytest.param(
+            base64.b64encode(past_the_bound({"cmd": 1940, "payload": {}}).encode()).decode(),
+            id="deep",
+        ),
     ],
 )
 def test_decode_refuses_what_is_no_payload_object(trans: str) -> None:

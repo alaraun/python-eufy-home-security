@@ -62,6 +62,7 @@ from eufy_home_security.exceptions import (
 )
 from eufy_home_security.models import E2EKey, E2EKeyType, FrameCipher, GuardMode
 from eufy_home_security.testing import SYNTHETIC
+from tests.json_depth import past_the_bound
 
 
 def test_connection_changed_equality_ignores_the_error() -> None:
@@ -167,8 +168,11 @@ def test_history_record_parses_str_extra() -> None:
     assert rec.raw is not row  # as a defensive copy
 
 
-def test_history_record_tolerates_missing_and_bad_extra() -> None:
-    rec = HistoryRecord.from_row({"str_extra": "not json"})
+@pytest.mark.parametrize(
+    "extra", ["not json", past_the_bound({"arm_mode": 63, "msg_type": 9})], ids=["text", "deep"]
+)
+def test_history_record_tolerates_missing_and_bad_extra(extra: str) -> None:
+    rec = HistoryRecord.from_row({"str_extra": extra})
     assert rec.record_id == 0
     assert rec.arm_mode is None
     assert rec.msg_type is None

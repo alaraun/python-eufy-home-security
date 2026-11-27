@@ -46,6 +46,7 @@ from ..events import (
 )
 from ..models import STATION_CHANNEL, GuardMode, ValueSource
 from ..network import HostSource, LanPath, PathWarning, suggest_local_ports
+from ..p2p._json import parse_json
 
 if TYPE_CHECKING:
     from ..client import ModelStatus
@@ -742,7 +743,7 @@ def _when(value: Any) -> str:
 def describe_station_row(str_extra: Any) -> str:
     """One-line summary of a media-less record (arming, alarms) from its ``str_extra``."""
     try:
-        extra = json.loads(str_extra) if isinstance(str_extra, str) else None
+        extra = parse_json(str_extra) if isinstance(str_extra, str) else None
     except ValueError:
         extra = None
     if not isinstance(extra, dict):
