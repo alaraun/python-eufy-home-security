@@ -25,6 +25,7 @@ from eufy_home_security.devices.recipes import (
     set_picture_zoom,
 )
 from eufy_home_security.exceptions import ProtocolError, UnsupportedError
+from tests.json_depth import past_the_bound
 
 
 @pytest.mark.parametrize(("prefix", "expected"), PARENT_CONNECT_TYPES.items())
@@ -270,6 +271,19 @@ def test_a_picture_in_picture_open_of_one_lens_keeps_the_inset_as_given(video_ty
     payload = _nvr_payload({"stitch_mode": 7, "station_video_type": video_type, "pip_cord": _CORD})
     assert payload["station_video_type"] == video_type
     assert payload["pip_cord"] == _CORD
+
+
+@pytest.mark.parametrize(
+    "player",
+    [
+        {"chn_list": f"[{past_the_bound({'cameraType': 2})}]"},
+        {"stitch_mode": 7, "station_video_type": 9, "pip_cord": past_the_bound(json.loads(_CORD))},
+    ],
+    ids=["chn-list", "pip-cord"],
+)
+def test_a_player_field_nested_past_the_bound_is_a_value_error(player: dict[str, object]) -> None:
+    with pytest.raises(ValueError, match="nested deeper"):
+        open_live_stream_nvr(channel=0, player=player)
 
 
 def test_only_a_picture_in_picture_open_names_the_station_video_type() -> None:

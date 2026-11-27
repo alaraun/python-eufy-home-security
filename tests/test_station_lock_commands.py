@@ -43,6 +43,7 @@ from eufy_home_security.testing import (
     build_eufy_security,
     warm_store,
 )
+from tests.json_depth import past_the_bound
 
 STATION = CloudDevice(
     device_sn=SYNTHETIC.station_sn,
@@ -1223,6 +1224,17 @@ async def test_lock_control_and_the_command_agree_for_every_lock(
     finally:
         await eufy.async_close()
     assert (writable > 0) is not guest  # each non-guest context offers some lock
+
+
+@pytest.mark.parametrize(
+    ("text", "payload"),
+    [('{"seq": 1}', {"seq": 1}), (past_the_bound({"seq": 1}), None)],
+    ids=["object", "deep"],
+)
+def test_a_notify_payload_sent_as_text_is_read_within_the_depth_bound(
+    text: str, payload: dict[str, int] | None
+) -> None:
+    assert lock_control_module._payload({"payload": text}) == payload
 
 
 class _NoBroker:

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 from ..exceptions import ProtocolError
+from ..p2p._json import parse_json
 
 TOPIC_CATEGORY: Final = "eufy_security"
 """The category level of every security device's topics."""
@@ -202,7 +203,7 @@ def parse_message(topic: str, data: bytes) -> MqttMessage:
     if serial is None:
         raise ProtocolError(f"MQTT topic of {topic.count('/') + 1} levels names no device")
     try:
-        body = json.loads(data)
+        body = parse_json(data)
     except (UnicodeDecodeError, ValueError) as err:
         raise ProtocolError(f"MQTT message is not JSON: {err}") from err
     if not isinstance(body, Mapping) or not isinstance(body.get("head"), Mapping):
@@ -210,7 +211,7 @@ def parse_message(topic: str, data: bytes) -> MqttMessage:
     raw = body.get("payload", "")
     raw_payload = raw if isinstance(raw, str) else _compact(raw)
     try:
-        decoded = json.loads(raw_payload)
+        decoded = parse_json(raw_payload)
     except ValueError:
         decoded = None
     return MqttMessage(

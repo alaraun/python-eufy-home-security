@@ -40,6 +40,7 @@ from .cloud.const import (
 )
 from .cloud.models import REGION_KEY, CloudDevice, device_cache_entry
 from .devices.types import connects_on_demand
+from .p2p._json import parse_json
 from .p2p.transport import ConnectPath
 
 CACHE_VERSION = 2
@@ -146,14 +147,14 @@ class JsonFileStore:
 
     def _load(self) -> dict[str, Any] | None:
         try:
-            text = self.path.read_text(encoding="utf-8")
+            content = self.path.read_bytes()
         except FileNotFoundError:
             return None
         try:
-            doc = json.loads(text)
-        except ValueError:  # JSONDecodeError and UnicodeDecodeError both
-            # An empty or truncated file must not wedge every later start: move it
-            # aside (kept for inspection) and start from nothing.
+            doc = parse_json(content)
+        except ValueError:  # not UTF-8, not JSON, or nested past the depth bound
+            # An empty, truncated or damaged file must not wedge every later start: move
+            # it aside (kept for inspection) and start from nothing.
             aside = self.path.with_name(f"{self.path.name}.corrupt")
             os.replace(self.path, aside)
             _LOGGER.warning("cache file was not valid JSON; moved it to %s", aside)

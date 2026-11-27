@@ -530,9 +530,11 @@ Whether a guest (`member_type` 0) is served is untested **[open]**.
 - **Success can carry no data.** `code 0` without `data` is a real answer (for
   example, `get_ciphers` under the wrong user id). Treat it as "nothing", not as a
   parse error.
-- A body that is not JSON text, a non-numeric `code`, or `data` that does not decrypt
-  to JSON of the expected shape is a `ProtocolError`. A device-list success without a
-  `devices` field is one too, and it leaves the cached list untouched.
+- An answer that is no JSON object is a `CommunicationError`; a non-numeric `code`, or `data`
+  that does not decrypt to JSON of the expected shape, is a `ProtocolError`. A device-list
+  success without a `devices` field is one too, and it leaves the cached list untouched.
+  The library reads every body as strict JSON (no NaN or Infinity) nested at most 64
+  levels deep; a deeper one counts as not JSON.
 - A WAF sits in front of `security-app-*`. Under pressure it answers 403 or stalls
   instead of refusing, so bound every request with a timeout (the library uses 30 s).
 

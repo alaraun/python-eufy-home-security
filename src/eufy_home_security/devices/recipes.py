@@ -27,7 +27,7 @@ from types import MappingProxyType
 from typing import Any, Final
 
 from ..exceptions import ProtocolError, UnsupportedError
-from ..p2p._json import json_int
+from ..p2p._json import json_int, parse_json
 from ..p2p.xzyh import FrameType
 
 
@@ -354,7 +354,7 @@ def open_live_stream_nvr(
     if stitch_mode == StitchMode.PIP:
         payload["station_video_type"] = json_int(player.get("station_video_type")) or 0
         if payload["station_video_type"] not in (0, 1) and player.get("pip_cord"):
-            cord = json.loads(player["pip_cord"])
+            cord = parse_json(player["pip_cord"])
             payload["pip_cord"] = {k: math.floor(1000 * cord[k] + 0.5) for k in PIP_CORD_KEYS}
     return Recipe(
         identifier="open_live_stream",
@@ -399,7 +399,7 @@ def _json_list(text: Any) -> list[Any]:
     """A JSON list given as a string, or ``[]`` for an empty or ``"null"`` one."""
     if not isinstance(text, str) or not text or text == "null":
         return []
-    value = json.loads(text)
+    value = parse_json(text)
     return value if isinstance(value, list) else []
 
 

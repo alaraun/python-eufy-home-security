@@ -42,6 +42,7 @@ from eufy_home_security.exceptions import (
 from eufy_home_security.install import InstallState
 from eufy_home_security.storage import MemoryStore, SessionCache
 from eufy_home_security.testing import SYNTHETIC
+from tests.json_depth import past_the_bound
 
 from .conftest import (
     FAKE_AUTH_TOKEN,
@@ -1612,8 +1613,9 @@ async def test_malformed_bodies_are_protocol_errors(
     [
         (lambda shared: "not json", "was not JSON"),
         (lambda shared: json.dumps([0]), "was not an object"),
+        (lambda shared: past_the_bound({"code": 0, "data": []}), "was not JSON"),
     ],
-    ids=["not-json", "not-an-object"],
+    ids=["not-json", "not-an-object", "deep"],
 )
 async def test_an_unreadable_envelope_is_a_communication_error(
     fake_mega: FakeMega, cache: SessionCache, body: Callable[[str], str], match: str
@@ -1627,6 +1629,35 @@ async def test_an_unreadable_envelope_is_a_communication_error(
             await api.async_login()
             with pytest.raises(CommunicationError, match=match):
                 await api.async_get_devices()
+
+
+async def test_decrypted_data_nested_past_the_bound_is_a_protocol_error(
+    cache: SessionCache,
+) -> None:
+    identity = _Identity(key_ident="k" * 32, shared_key="ab" * 32)
+    data = crypto.body_encrypt(past_the_bound({"devices": []}), identity.shared_key)
+    async with aiohttp.ClientSession() as session:
+        with pytest.raises(ProtocolError, match="was not JSON"):
+            _api(session, cache)._decode_data({"data": data}, identity)
+
+
+@pytest.mark.parametrize(
+    ("status", "body", "match"),
+    [
+        (200, {"code": 0, "data": {"domain": "x"}}, "was not JSON"),
+        (500, {"code": 26050}, r"returned HTTP 500$"),
+    ],
+    ids=["answer", "error"],
+)
+async def test_a_plain_answer_nested_past_the_bound_is_a_communication_error(
+    cache: SessionCache, status: int, body: dict[str, object], match: str
+) -> None:
+    host, path = const.mega_host("eu"), const.ESTIMATE_DOMAIN_PATH
+    with aioresponses() as mock:
+        mock.post(f"https://{host}{path}", status=status, body=past_the_bound(body))
+        async with aiohttp.ClientSession() as session:
+            with pytest.raises(CommunicationError, match=match):
+                await _api(session, cache)._post_plain(host, path, {}, region="eu")
 
 
 async def test_a_response_that_is_not_text_is_a_protocol_error(

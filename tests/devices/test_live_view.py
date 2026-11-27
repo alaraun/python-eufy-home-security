@@ -19,6 +19,7 @@ from eufy_home_security.devices.live_view import (
 )
 from eufy_home_security.devices.recipes import StitchMode
 from eufy_home_security.testing import SYNTHETIC
+from tests.json_depth import past_the_bound
 
 GOLDEN = Path(__file__).resolve().parent.parent / "fixtures" / "thing_models" / "T8172.json"
 KEY = "0123456789ABCDEF" * 16
@@ -46,6 +47,7 @@ def _entry(chn: int, index: int, sensor: int) -> dict[str, int]:
         ('[{"type":1,"id":0},3]', ()),
         ('[{"type":1,"id":0},{"type":1,"id":null}]', ()),
         ('[{"type":1,"id":0},{"type":"x","id":1}]', ()),
+        pytest.param(f"[{past_the_bound({'type': 1, 'id': 0})}]", (), id="deep"),
     ],
 )
 def test_the_lens_list_reads_as_the_app_reads_it(value: str | None, lenses: tuple[Lens]) -> None:

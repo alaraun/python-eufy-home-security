@@ -62,6 +62,7 @@ from ..exceptions import (
     SessionReplacedError,
     UnsupportedError,
 )
+from ..p2p._json import parse_json
 from ..storage import INSTALL_IDS_KEY, SessionCache
 from . import arming, const, crypto
 from .arming import ArmingGroupList, ArmingGroupLog, ArmingGroupMember
@@ -1240,7 +1241,7 @@ class EufyCloudApi:
         if status != 200:
             raise classify_refusal(status, _loose_code(text), _message(_loose_object(text)), path)
         try:
-            parsed = json.loads(text)
+            parsed = parse_json(text)
         except ValueError as exc:
             raise CommunicationError(f"cloud response to {path} was not JSON") from exc
         if not isinstance(parsed, dict):
@@ -3833,7 +3834,7 @@ class EufyCloudApi:
         if isinstance(data, str):
             plain = crypto.body_decrypt(data, identity.shared_key)
             try:
-                return json.loads(plain)
+                return parse_json(plain)
             except ValueError as exc:
                 raise ProtocolError("decrypted cloud data was not JSON") from exc
         raise ProtocolError(f"cloud data field was {type(data).__name__}, not an object")
@@ -4142,7 +4143,7 @@ def classify_refusal(
 def _loose_object(text: str) -> Mapping[str, Any]:
     """An error page's JSON object, or an empty one."""
     try:
-        parsed = json.loads(text)
+        parsed = parse_json(text)
     except ValueError:
         return {}
     return parsed if isinstance(parsed, dict) else {}
@@ -4167,7 +4168,7 @@ def _envelope_object(text: str, path: str) -> dict[str, Any]:
     """``text`` of a 200 answer as its JSON object; :class:`CommunicationError` when it
     is no JSON object."""
     try:
-        parsed = json.loads(text)
+        parsed = parse_json(text)
     except ValueError as exc:
         raise CommunicationError(f"cloud response to {path} was not JSON") from exc
     if not isinstance(parsed, dict):

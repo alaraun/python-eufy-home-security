@@ -19,7 +19,6 @@ returns a callable that unsubscribes (the Home Assistant convention).
 
 from __future__ import annotations
 
-import json
 import logging
 import math
 import re
@@ -45,6 +44,7 @@ from .exceptions import (
     RefreshCooldownError,
 )
 from .models import E2EKey, FrameCipher, GuardMode, ValueSource
+from .p2p._json import parse_json
 
 if TYPE_CHECKING:
     from .cloud.status import DeviceListSource
@@ -1060,7 +1060,7 @@ class HistoryRecord:
         raw_extra = row.get("str_extra")
         if isinstance(raw_extra, str) and raw_extra:
             try:
-                parsed = json.loads(raw_extra)
+                parsed = parse_json(raw_extra)
             except ValueError:
                 parsed = None
             if isinstance(parsed, Mapping):

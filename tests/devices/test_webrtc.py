@@ -236,7 +236,13 @@ def test_values_read_as_numbers(text: str, number: int) -> None:
 
 @pytest.mark.parametrize(
     ("text", "codes"),
-    [('["T8223","T8224"]', ["T8223", "T8224"]), ("", []), ('{"a": 1}', []), ("[1]", [])],
+    [
+        ('["T8223","T8224"]', ["T8223", "T8224"]),
+        ("", []),
+        ('{"a": 1}', []),
+        ("[1]", []),
+        pytest.param("[" * 100_000 + "]" * 100_000, [], id="too-deep-to-parse"),
+    ],
 )
 def test_sub_device_lists(text: str, codes: list[str]) -> None:
     assert webrtc._code_list(text) == codes

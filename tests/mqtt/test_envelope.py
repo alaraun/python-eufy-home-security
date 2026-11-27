@@ -24,6 +24,7 @@ from eufy_home_security.mqtt.envelope import (
     serial_of_topic,
 )
 from eufy_home_security.testing import SYNTHETIC
+from tests.json_depth import past_the_bound
 
 _SN = "T85D0P2000054321"
 _CLIENT = f"android-eufy_security-{SYNTHETIC.account_id}-0011223344556677"
@@ -162,7 +163,10 @@ def test_an_answer_parses_into_its_device_head_and_payload() -> None:
     assert message.trans == "abc"
 
 
-@pytest.mark.parametrize("payload", ["not json", "[1, 2]", '"text"'])
+@pytest.mark.parametrize(
+    "payload",
+    ["not json", "[1, 2]", '"text"', pytest.param(past_the_bound({"trans": "abc"}), id="deep")],
+)
 def test_a_payload_that_is_no_json_object_is_kept_raw(payload: str) -> None:
     message = parse_message(response_topic("T85D0", _SN), _answer({"cmd": 8}, payload))
     assert message.payload is None
@@ -179,6 +183,11 @@ def test_a_payload_that_is_no_json_object_is_kept_raw(payload: str) -> None:
         (f"cmd/eufy_security/T85D0/{_SN}/res", b'{"head": {"cmd": "x"}, "payload": ""}'),
         (f"cmd/eufy_security/T85D0/{_SN}/res", b'{"head": {"msg_seq": true}, "payload": ""}'),
         ("not/a/topic", b'{"head": {}, "payload": ""}'),
+        pytest.param(
+            f"cmd/eufy_security/T85D0/{_SN}/res",
+            past_the_bound({"head": {}, "payload": ""}).encode(),
+            id="deep",
+        ),
     ],
 )
 def test_a_malformed_message_is_a_protocol_error(topic: str, data: bytes) -> None:

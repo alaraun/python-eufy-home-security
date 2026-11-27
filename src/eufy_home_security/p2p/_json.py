@@ -1,4 +1,5 @@
-"""Strict JSON helpers shared by the P2P decoders.
+"""Strict JSON helpers: the depth-bounded parser every device, cloud and broker text goes
+through, and the P2P decoders' value helpers.
 
 Kept free of the crypto stack so light modules (parameter dumps, the CLI renderer)
 can use them without importing ``cryptography``.
@@ -74,12 +75,16 @@ def raw_decode_json(text: str) -> tuple[Any, int]:
         raise ValueError("JSON nested too deep to parse") from None
 
 
-def parse_json(text: str) -> Any:
-    """``text`` as one strict JSON document, JSON whitespace around it allowed.
+def parse_json(text: str | bytes) -> Any:
+    """``text`` (bytes: UTF-8) as one strict JSON document, JSON whitespace around it allowed.
 
-    Raises :class:`ValueError` for invalid JSON, NaN/Infinity, trailing data or nesting
-    deeper than :data:`MAX_JSON_DEPTH`, whatever the interpreter's own recursion limit.
+    The parser for every JSON text from a device, the cloud or a broker. Raises
+    :class:`ValueError` (:class:`UnicodeDecodeError` for bytes that are no UTF-8) for
+    invalid JSON, NaN/Infinity, trailing data or nesting deeper than
+    :data:`MAX_JSON_DEPTH`, whatever the interpreter's own recursion limit.
     """
+    if isinstance(text, bytes):
+        text = text.decode("utf-8")
     stripped = text.strip(" \t\n\r")
     obj, end = raw_decode_json(stripped)
     if end != len(stripped):
@@ -88,17 +93,9 @@ def parse_json(text: str) -> Any:
 
 
 def loads_json(text: str | bytes) -> Any:
-    """Parse one JSON document strictly; any failure raises :class:`ProtocolError`.
-
-    Rejects NaN/Infinity and nesting deeper than :data:`MAX_JSON_DEPTH`, so a decoder
-    built on it can only raise :class:`ProtocolError`.
-    """
+    """:func:`parse_json` for the station decoders: any failure raises :class:`ProtocolError`,
+    so a decoder built on it can only raise :class:`ProtocolError`."""
     try:
-        if isinstance(text, bytes):
-            text = text.decode("utf-8")
-        obj, end = raw_decode_json(text.strip())
-        if end != len(text.strip()):
-            raise ValueError("trailing data after the JSON document")
+        return parse_json(text)
     except ValueError as exc:
         raise ProtocolError(f"invalid JSON: {exc}") from None
-    return obj

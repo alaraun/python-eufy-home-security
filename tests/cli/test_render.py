@@ -56,6 +56,7 @@ from eufy_home_security.p2p.storage_info import (
 from eufy_home_security.station import StationState, SubDeviceState
 from eufy_home_security.testing import SYNTHETIC
 from eufy_home_security.testing.station import synthetic_storage_body
+from tests.json_depth import past_the_bound
 
 NOW = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
 
@@ -430,6 +431,11 @@ def test_discovered() -> None:
     assert SYNTHETIC.station_ip in text
     assert SYNTHETIC.did in text
     assert "No station" in render.render_discovered([])
+
+
+def test_a_station_row_nested_past_the_bound_reads_as_a_plain_station_event() -> None:
+    extra = past_the_bound({"msg_type": 9, "arm_mode": 0})
+    assert render.describe_station_row(extra) == "(station event)"
 
 
 def test_events_listing_media_and_station_rows() -> None:

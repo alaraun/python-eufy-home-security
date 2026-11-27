@@ -26,6 +26,7 @@ from eufy_home_security.storage import (
     async_forget_account,
 )
 from eufy_home_security.testing import SYNTHETIC
+from tests.json_depth import past_the_bound
 
 
 async def test_file_store_roundtrip_is_private(tmp_path: Path) -> None:
@@ -439,9 +440,14 @@ async def test_cached_account_is_the_email_of_the_stored_session() -> None:
     assert await async_cached_account(store) == "user@example.com"  # migrated on load
 
 
-async def test_corrupt_cache_file_is_moved_aside(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "content",
+    [b"", past_the_bound({"version": 1}).encode(), b'{"version": "\xff"}'],
+    ids=["empty", "deep", "not-utf-8"],  # empty, as after a crash mid-write without fsync
+)
+async def test_corrupt_cache_file_is_moved_aside(tmp_path: Path, content: bytes) -> None:
     path = tmp_path / "cache.json"
-    path.write_text("")  # empty, as after a crash mid-write on a filesystem without fsync
+    path.write_bytes(content)
     assert await JsonFileStore(path).async_load() is None
     assert (tmp_path / "cache.json.corrupt").exists()
     assert not path.exists()

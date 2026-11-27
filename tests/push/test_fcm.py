@@ -42,6 +42,7 @@ from eufy_home_security.push import fcm as fcm_module
 from eufy_home_security.push.fcm import PushListener, _EufyFcmPushClient, _fcm_config
 from eufy_home_security.storage import CACHE_VERSION, MemoryStore, SessionCache
 from eufy_home_security.testing import SYNTHETIC
+from tests.json_depth import past_the_bound
 
 from .conftest import (
     FAKE_ANDROID_ID,
@@ -270,6 +271,16 @@ async def test_a_raising_callback_does_not_propagate() -> None:
     listener._on_message({"type": "30", "span_id": "x", "payload": _arming_payload()}, "pid", None)
 
 
+_DEEP_INSTALL = past_the_bound(
+    {
+        "authToken": {"token": "t", "expiresIn": "604800s"},
+        "refreshToken": "r",
+        "fid": "f",
+    }
+)
+"""A complete Firebase install reply, nested past the depth bound."""
+
+
 @pytest.mark.parametrize(
     ("setup", "error"),
     [
@@ -282,6 +293,11 @@ async def test_a_raising_callback_does_not_propagate() -> None:
         ),
         (lambda m: m.post(_INSTALL_URL, payload={"nope": 1}, repeat=True), CloudApiError),
         (lambda m: m.post(_INSTALL_URL, body="not json", repeat=True), CloudApiError),
+        pytest.param(
+            lambda m: m.post(_INSTALL_URL, body=_DEEP_INSTALL, repeat=True),
+            CloudApiError,
+            id="install-deep",
+        ),
         (
             lambda m: m.post(GCM_REGISTER_URL, body="Error=AUTHENTICATION_FAILED", repeat=True),
             CloudApiError,

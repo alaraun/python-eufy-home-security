@@ -21,7 +21,6 @@ raises :class:`CommandRejectedError` with code -151.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import secrets
 import time
@@ -59,7 +58,7 @@ from ..lock_commands.control import (
 )
 from ..lock_commands.sequence import LockSequences, SharedSequence
 from ..models import FrameCipher
-from ..p2p._json import json_int
+from ..p2p._json import json_int, parse_json
 from ..p2p.session import CommandOutcome
 
 if TYPE_CHECKING:
@@ -162,7 +161,7 @@ def _payload(obj: Mapping[str, Any]) -> Mapping[str, Any] | None:
     payload = obj.get("payload")
     if isinstance(payload, str):
         try:
-            payload = json.loads(payload)
+            payload = parse_json(payload)
         except ValueError:
             return None
     return payload if isinstance(payload, Mapping) else None
