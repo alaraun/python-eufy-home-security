@@ -127,6 +127,36 @@ async def test_close_during_the_checks_stops_them_and_fails_connect(
 
 
 @needs_aioice
+async def test_close_stops_the_checks_before_and_after_the_sockets_close(
+    loopback_only: None, fast_stun: None, silent_port: int, loop_errors: list[dict[str, Any]]
+) -> None:
+    """None runs while the sockets close; one a request starts meanwhile is stopped too."""
+    client = await checking(silent_port)
+    connect = asyncio.create_task(client.connect(remote_ufrag="wxyz", remote_pwd="q" * 22))
+    await asyncio.sleep(0.2)
+    connection = client._connection
+    assert connection is not None
+    assert check_tasks()
+    real_close = connection.close
+    running_at_close: list[int] = []
+
+    async def closing() -> None:
+        running_at_close.append(len(check_tasks()))
+        pair = connection._check_list[0]
+        pair.task = None
+        connection.check_start_task(pair)  # as an incoming check request would
+        await real_close()
+
+    connection.close = closing  # type: ignore[method-assign]
+    await client.close()
+    assert running_at_close == [0]
+    assert check_tasks() == []
+    with pytest.raises(CommunicationError):
+        await connect
+    await settled(loop_errors)
+
+
+@needs_aioice
 async def test_without_the_check_list_close_warns_once_and_still_closes(
     loopback_only: None, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:

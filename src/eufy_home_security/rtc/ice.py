@@ -153,8 +153,7 @@ class IceTransport:
         if checks.cancelled():
             raise CommunicationError("RTC ICE closed while it connected")
         exc = checks.exception()
-        if exc is not None:
-            await self._stop_checks()
+        if exc is not None:  # aioice cancelled its checks itself
             if isinstance(exc, ConnectionError):
                 raise CommunicationError(f"RTC ICE did not connect: {exc}") from exc
             raise exc
@@ -198,9 +197,7 @@ class IceTransport:
                 )
             return
         tasks = [
-            task
-            for pair in pairs
-            if isinstance(task := getattr(pair, "task", None), asyncio.Task) and not task.done()
+            task for pair in pairs if isinstance(task := getattr(pair, "task", None), asyncio.Task)
         ]
         for task in tasks:
             task.cancel()

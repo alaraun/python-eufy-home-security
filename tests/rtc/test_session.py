@@ -442,8 +442,8 @@ async def test_acks_of_numbers_the_client_never_sent_do_not_stop_its_resends(
     session = make_session()
     await session.start()
     await until(lambda: fake.client_candidates)
-    fake.send_info({"file_candidate_ack": 5})
-    fake.send_info({"file_candidate_ack": 6})
+    for foreign in (5, 6, -1):
+        fake.send_info({"file_candidate_ack": foreign})
     sent = len(fake.client_candidates)
     await until(lambda: len(fake.client_candidates) >= sent + 2)
     assert session._attempt is not None
@@ -891,6 +891,37 @@ async def test_a_start_cancelled_twice_cleans_up_and_starts_again(
     async with asyncio.timeout(3):
         await session.start()
     assert session.connected
+
+
+async def test_a_run_cancelled_twice_while_connecting_leaves_nothing(
+    fake: FakeRtcServer, make_session: Callable[..., RtcSession]
+) -> None:
+    """The second cancel lands while the run waits for its cancelled connect steps."""
+    fake.ice_connects = False
+
+    class SlowToStop(PipeIce):
+        async def connect(self, *, remote_ufrag: str, remote_pwd: str) -> None:
+            try:
+                await super().connect(remote_ufrag=remote_ufrag, remote_pwd=remote_pwd)
+            finally:
+                await asyncio.sleep(0.05)  # its cleanup takes a few loop turns
+
+    def factory() -> PipeIce:
+        pipe = fake.ice_factory()
+        pipe.__class__ = SlowToStop
+        return pipe
+
+    session = make_session(ice_factory=factory)
+    start = asyncio.create_task(session.start())
+    await until(lambda: fake.client_candidates)
+    run = session._run
+    assert run is not None
+    run.cancel()
+    await asyncio.sleep(0)
+    run.cancel()
+    with pytest.raises(CommunicationError):
+        await start
+    assert own_tasks(fake) == set()
 
 
 async def test_close_during_a_reconnect_wait_stops_it(

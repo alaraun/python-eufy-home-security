@@ -470,7 +470,7 @@ class RtcSession:
         own until acknowledged, and report a hang-up as a loss."""
         resends = 0
         while not call.ended:
-            pending = any(n not in attempt.acked for n in range(len(attempt.candidates)))
+            pending = len(attempt.acked) < len(attempt.candidates)  # acked: own numbers only
             wait = (
                 candidate_resend_delay(resends + 1)
                 if pending and resends < CANDIDATE_RESENDS
