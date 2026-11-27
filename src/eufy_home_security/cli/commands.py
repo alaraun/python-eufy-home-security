@@ -908,12 +908,13 @@ def _library_version() -> str | None:
 
 
 def _write_json(path: Path, value: object, *, private: bool) -> None:
-    """Write ``value`` as indented JSON; ``private`` files are readable by the owner only."""
+    """Write ``value`` as indented JSON; ``private`` files are readable by the owner only
+    and never written through a symbolic link (``OSError``)."""
     text = json.dumps(value, indent=2, default=str) + "\n"
     if not private:
         path.write_text(text, encoding="utf-8")
         return
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         os.fchmod(fh.fileno(), 0o600)
         fh.write(text)

@@ -268,7 +268,10 @@ def summary_entry(**changes: Any) -> dict[str, Any]:
             "frames": [{}, {}],
             "watched": 60.0,
             "guard_mode_at": 1.25,
+            "sealed_opened": 0,
+            "sealed_unread": 0,
         },
+        "close": ok,
         "probes": {"login": ok, "kinds": []},
     }
     entry.update(changes)
@@ -279,8 +282,6 @@ def test_the_summary_names_the_caps_source_and_the_guard_mode_time() -> None:
     text = render_rtc_diagnose([summary_entry()])
     assert "transport_caps 0 (pbsdp)" in text
     assert "guard mode after 1.25 s" in text
-    channel = {**summary_entry()["data_channel"], "guard_mode_at": None}
-    assert "guard mode" not in render_rtc_diagnose([summary_entry(data_channel=channel)])
 
 
 def test_the_summary_gives_a_probes_status_and_code_when_it_is_not_ok() -> None:
@@ -293,6 +294,53 @@ def test_the_summary_gives_a_probes_status_and_code_when_it_is_not_ok() -> None:
     probes = {"login": {"status": "ok", "seconds": 0.1}, "kinds": kinds}
     text = render_rtc_diagnose([summary_entry(probes=probes)])
     assert "kind 1: 200, kind 3: 100 timeout, kind 4: failed: RtcCallError 486" in text
+
+
+def test_the_summary_gives_the_probe_logins_timeout() -> None:
+    skipped = {"status": "skipped", "seconds": None, "reason": "run timed out"}
+    kinds: list[dict[str, Any]] = [{"kind": k, "codes": [], "outcome": skipped} for k in (1, 3, 4)]
+    login = {"status": "timeout", "seconds": 2.49, "error": None, "code": None}
+    text = render_rtc_diagnose([summary_entry(probes={"login": login, "kinds": kinds})])
+    assert "6 probes        login timeout, kind 1: skipped: run timed out" in text
+
+
+@pytest.mark.parametrize(
+    ("opened", "unread", "at", "expected"),
+    [
+        (0, 0, None, ", no guard mode frame"),
+        (1, 0, 1.25, ", sealed 1 opened / 0 unread, guard mode after 1.25 s"),
+        (0, 2, None, ", sealed 0 opened / 2 unread, guard mode unknown"),
+        (0, 2, 0.5, ", sealed 0 opened / 2 unread, guard mode after 0.5 s"),
+    ],
+)
+def test_the_summary_tells_an_unknown_guard_mode_from_an_absent_one(
+    opened: int, unread: int, at: float | None, expected: str
+) -> None:
+    channel = {
+        **summary_entry()["data_channel"],
+        "sealed_opened": opened,
+        "sealed_unread": unread,
+        "guard_mode_at": at,
+    }
+    line = render_rtc_diagnose([summary_entry(data_channel=channel)]).splitlines()[5]
+    assert line.endswith(" s" + expected)
+
+
+def test_the_summary_names_a_close_that_timed_out() -> None:
+    close = {"status": "timeout", "seconds": 1.0, "reason": "run timed out while closing"}
+    text = render_rtc_diagnose([summary_entry(close=close)])
+    assert "    close         timeout: run timed out while closing" in text
+    assert "close" not in render_rtc_diagnose([summary_entry()])
+
+
+def test_a_private_file_is_not_written_through_a_symlink(tmp_path: Path) -> None:
+    target = tmp_path / "elsewhere.json"
+    target.write_text("{}")
+    link = tmp_path / "report.secrets.json"
+    link.symlink_to(target)
+    with pytest.raises(OSError, match="symbolic link"):
+        commands._write_json(link, {"secret": 1}, private=True)
+    assert target.read_text() == "{}"
 
 
 DOCS = Path(__file__).resolve().parents[2] / "docs" / "how-to" / "diagnose-rtc.md"

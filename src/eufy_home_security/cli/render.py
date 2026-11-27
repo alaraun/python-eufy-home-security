@@ -1222,6 +1222,7 @@ def _step(outcome: Mapping[str, Any]) -> str:
     if status == "skipped":
         return f"skipped: {outcome.get('reason') or '-'}"
     error = " ".join(str(p) for p in (outcome.get("error"), outcome.get("code")) if p is not None)
+    error = error or outcome.get("reason") or ""
     return f"{status}: {error}" if error else status
 
 
@@ -1232,6 +1233,17 @@ def _probe(probe: Mapping[str, Any]) -> str:
     if outcome["status"] != "ok":
         parts.append(_step(outcome))
     return f"kind {probe['kind']}: " + " ".join(p for p in parts if p)
+
+
+def _guard_mode(channel: Mapping[str, Any]) -> str:
+    """The sealed frames and the guard-mode time of a ``diagnose rtc`` watch: unknown, not
+    absent, when sealed frames did not open."""
+    opened, unread = channel.get("sealed_opened", 0), channel.get("sealed_unread", 0)
+    text = f", sealed {opened} opened / {unread} unread" if opened or unread else ""
+    at = channel.get("guard_mode_at")
+    if at is not None:
+        return f"{text}, guard mode after {at:g} s"
+    return f"{text}, guard mode unknown" if unread else f"{text}, no guard mode frame"
 
 
 def render_rtc_diagnose(stations: Sequence[Mapping[str, Any]]) -> str:
@@ -1265,15 +1277,15 @@ def render_rtc_diagnose(stations: Sequence[Mapping[str, Any]]) -> str:
         lines.append(
             f"  5 data channel  {_step(channel['outcome'])}, {channel['messages']} messages "
             f"({channel['heartbeats']} heartbeats, {len(channel['frames'])} frames) "
-            f"in {channel['watched']:g} s"
-            + (
-                f", guard mode after {channel['guard_mode_at']:g} s"
-                if channel.get("guard_mode_at") is not None
-                else ""
-            )
+            f"in {channel['watched']:g} s{_guard_mode(channel)}"
         )
+        close = entry.get("close")
+        if close is not None and close["status"] not in {"ok", "skipped"}:
+            lines.append(f"    close         {_step(close)}")
         if probes["kinds"]:
             kinds = ", ".join(_probe(p) for p in probes["kinds"])
+            if probes["login"]["status"] != "ok":
+                kinds = f"login {_step(probes['login'])}, {kinds}"
             lines.append(f"  6 probes        {kinds}")
         else:
             lines.append(f"  6 probes        {_step(probes['login'])}")
