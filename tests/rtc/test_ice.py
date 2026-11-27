@@ -278,3 +278,35 @@ def test_remote_candidates_are_capped() -> None:
     for port in range(MAX_REMOTE_CANDIDATES + 3):
         client.add_remote_candidate(f"candidate:1 1 udp 1 127.0.0.1 {port + 1} typ host")
     assert len(client._pending) == MAX_REMOTE_CANDIDATES
+
+
+class _InstantConnection:
+    """An aioice connection stand-in whose checks succeed at once."""
+
+    def __init__(self) -> None:
+        self._check_list: list[Any] = []
+        self.remote_username: str | None = None
+        self.remote_password: str | None = None
+        self.closed = False
+
+    async def connect(self) -> None:
+        return None
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+@needs_aioice
+async def test_a_close_after_the_checks_ended_but_before_connect_returns_fails_it() -> None:
+    client = IceTransport()
+    client._connection = _InstantConnection()  # type: ignore[assignment]
+    connect = asyncio.create_task(client.connect(remote_ufrag="wxyz", remote_pwd="q" * 22))
+    await asyncio.sleep(0)  # connect waits for its checks
+    checks = client._checks
+    assert checks is not None
+    await asyncio.sleep(0)  # the checks ended; connect has not run since
+    assert checks.done()
+    assert not connect.done()
+    await client.close()
+    with pytest.raises(CommunicationError):
+        await connect

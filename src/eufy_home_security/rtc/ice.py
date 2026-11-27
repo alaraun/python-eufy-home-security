@@ -83,6 +83,7 @@ class IceTransport:
         self._remote = 0
         self._tasks: set[asyncio.Task[None]] = set()
         self._checks: asyncio.Task[None] | None = None
+        self._closed = False
         self._throttle = LogThrottle()
 
     async def gather(
@@ -150,7 +151,7 @@ class IceTransport:
         finally:
             if self._checks is checks:
                 self._checks = None
-        if checks.cancelled():
+        if checks.cancelled() or self._closed:
             raise CommunicationError("RTC ICE closed while it connected")
         exc = checks.exception()
         if exc is not None:  # aioice cancelled its checks itself
@@ -173,6 +174,7 @@ class IceTransport:
     async def close(self) -> None:
         """Stop the checks, close every socket; a running :meth:`connect` raises
         :class:`~.exceptions.CommunicationError`."""
+        self._closed = True
         checks = self._checks
         tasks = list(self._tasks)
         if checks is not None:
