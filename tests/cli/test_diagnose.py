@@ -293,3 +293,15 @@ def test_the_summary_gives_a_probes_status_and_code_when_it_is_not_ok() -> None:
     probes = {"login": {"status": "ok", "seconds": 0.1}, "kinds": kinds}
     text = render_rtc_diagnose([summary_entry(probes=probes)])
     assert "kind 1: 200, kind 3: 100 timeout, kind 4: failed: RtcCallError 486" in text
+
+
+DOCS = Path(__file__).resolve().parents[2] / "docs" / "how-to" / "diagnose-rtc.md"
+
+
+def test_the_how_tos_commands_parse_and_pin_a_version() -> None:
+    lines = [ln for ln in DOCS.read_text().splitlines() if ln.startswith("uvx ")]
+    assert len(lines) == 2
+    for line in lines:
+        assert "--from 'eufy-home-security[rtc]>=<version>' eufy-security " in line
+        parse_args(line.split(" eufy-security ", 1)[1].split())
+    assert "--redact-serials" in lines[0]  # login lists the stations' serials
