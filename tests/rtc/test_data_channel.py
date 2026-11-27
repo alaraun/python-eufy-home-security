@@ -7,6 +7,7 @@ zero carry other values there, which the decoder ignores.
 from __future__ import annotations
 
 import asyncio
+import logging
 import struct
 import time
 import zlib
@@ -21,6 +22,7 @@ from eufy_home_security.rtc.data_channel import (
     LINK_HEADER_LEN,
     LINK_HEADER_LEN_OLD,
     MAX_FRAME_LEN,
+    MAX_QUEUED_MESSAGES,
     OUTER_HEAD_MAGIC,
     DataMsgType,
     KcpDataChannel,
@@ -379,3 +381,88 @@ def test_the_older_header_refuses_a_payload_its_u16_cannot_count() -> None:
     assert len(encode_link_frame(bytes(0xFFFF), msg_type=1, seq=0, old=True)) == 20 + 0xFFFF
     with pytest.raises(ValueError, match="65536"):
         encode_link_frame(bytes(0x10000), msg_type=1, seq=0, old=True)
+
+
+async def test_wait_closed_returns_the_failure_or_none_after_close() -> None:
+    inbound: asyncio.Queue[bytes] = asyncio.Queue()
+    failing = KcpDataChannel(_Failing(asyncio.Queue(), inbound))
+    closed = KcpDataChannel(_Pipe(asyncio.Queue(), asyncio.Queue()))
+    try:
+        inbound.put_nowait(b"fail")
+        async with asyncio.timeout(2):
+            assert isinstance(await failing.wait_closed(), OSError)
+        waiter = asyncio.ensure_future(closed.wait_closed())
+        await asyncio.sleep(0)
+        assert not waiter.done()
+        await closed.close()
+        async with asyncio.timeout(2):
+            assert await waiter is None
+    finally:
+        await failing.close()
+        await closed.close()
+
+
+async def test_a_peer_that_stops_acknowledging_ends_the_channel() -> None:
+    """KCP's dead link (a segment sent ``dead_link`` times unacknowledged)."""
+    chan = KcpDataChannel(_Pipe(asyncio.Queue(), asyncio.Queue()))  # nothing comes back
+    chan._kcp.dead_link = 2
+    chan._kcp.rx_minrto = 10
+    chan._kcp.rx_rto = 10
+    try:
+        await chan.send_message(b"hello")
+        async with asyncio.timeout(5):
+            failure = await chan.wait_closed()
+        assert isinstance(failure, CommunicationError)
+        with pytest.raises(CommunicationError):
+            await chan.recv_message()
+        with pytest.raises(CommunicationError):
+            await chan.send_message(b"x")
+    finally:
+        await chan.close()
+
+
+async def test_a_peer_that_acknowledges_keeps_the_channel() -> None:
+    a2b: asyncio.Queue[bytes] = asyncio.Queue()
+    b2a: asyncio.Queue[bytes] = asyncio.Queue()
+    left = KcpDataChannel(_Pipe(a2b, b2a))
+    right = KcpDataChannel(_Pipe(b2a, a2b))
+    left._kcp.dead_link = 2
+    try:
+        for n in range(5):
+            await left.send_message(bytes([n]))
+            await asyncio.wait_for(right.recv_message(), 2)
+        await asyncio.sleep(0.1)
+        waiter = asyncio.ensure_future(left.wait_closed())
+        await asyncio.sleep(0.05)
+        assert not waiter.done()
+        waiter.cancel()
+    finally:
+        await left.close()
+        await right.close()
+
+
+async def test_unread_messages_are_capped(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.DEBUG, logger="eufy_home_security.rtc.data_channel")
+    a2b: asyncio.Queue[bytes] = asyncio.Queue()
+    b2a: asyncio.Queue[bytes] = asyncio.Queue()
+    left = KcpDataChannel(_Pipe(a2b, b2a))
+    right = KcpDataChannel(_Pipe(b2a, a2b))
+    try:
+        for n in range(MAX_QUEUED_MESSAGES + 5):
+            await left.send_message(n.to_bytes(2, "big"))
+        async with asyncio.timeout(5):
+            while right._received.qsize() < MAX_QUEUED_MESSAGES:
+                await asyncio.sleep(0.01)
+        await asyncio.sleep(0.2)
+        assert right._received.qsize() == MAX_QUEUED_MESSAGES
+        first = await right.recv_message()
+        assert first.payload == (0).to_bytes(2, "big")
+    finally:
+        await left.close()
+        await right.close()
+    drops = [
+        r
+        for r in caplog.records
+        if r.name == "eufy_home_security.rtc.data_channel" and "unread" in r.getMessage()
+    ]
+    assert len(drops) == 1

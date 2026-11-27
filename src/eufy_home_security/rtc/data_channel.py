@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Final, Protocol, runtime_checkable
 
+from .._logging import LogThrottle
 from ..exceptions import CommunicationError, ProtocolError, UnsupportedError
 from . import _ikcp
 
@@ -201,6 +202,11 @@ KCP_TICK: Final = 0.01
 MAX_FRAME_LEN: Final = (_ikcp.IKCP_WND_RCV - 1) * (_KCP_MTU - _ikcp.IKCP_OVERHEAD)
 #: The older link header counts the payload in a u16.
 MAX_PAYLOAD_LEN_OLD: Final = 0xFFFF
+#: Inbound messages kept for :meth:`KcpDataChannel.recv_message`; newer ones are dropped
+#: while that many wait.
+MAX_QUEUED_MESSAGES: Final = 256
+#: KCP's state after a segment went unacknowledged ``dead_link`` times.
+_KCP_DEAD: Final = 0xFFFFFFFF
 
 
 class KcpDataChannel:
@@ -212,9 +218,11 @@ class KcpDataChannel:
     :meth:`recv_message` as :class:`LinkMessage`. A task drives KCP's timers. Construct
     it inside a running event loop.
 
-    When the transport fails, the channel stops: :meth:`recv_message` and
+    When the transport fails, or KCP gives up on a segment the peer never acknowledges
+    (a dead link: 20 transmissions), the channel stops: :meth:`recv_message` and
     :meth:`send_message` raise :class:`~.exceptions.CommunicationError`, as they do
-    after :meth:`close`.
+    after :meth:`close`; :meth:`wait_closed` returns. At most
+    :data:`MAX_QUEUED_MESSAGES` inbound messages wait to be read.
     """
 
     def __init__(
@@ -239,7 +247,9 @@ class KcpDataChannel:
         self._seq = 0
         self._failure: BaseException | None = None
         self._closed = False
+        self._throttle = LogThrottle()
         loop = asyncio.get_running_loop()
+        self._ended: asyncio.Future[BaseException | None] = loop.create_future()
         self._tasks = [loop.create_task(self._read_loop()), loop.create_task(self._tick())]
 
     def _on_segment(self, _kcp: _ikcp.KCP, data: bytes) -> None:
@@ -290,11 +300,22 @@ class KcpDataChannel:
             raise CommunicationError("RTC data channel is closed") from self._failure
         return message
 
+    async def wait_closed(self) -> BaseException | None:
+        """Wait until the channel stops; returns the failure that stopped it, None after
+        :meth:`close`."""
+        await asyncio.wait({self._ended})
+        return self._ended.result()
+
+    def _end(self, failure: BaseException | None) -> None:
+        if not self._ended.done():
+            self._ended.set_result(failure)
+
     def _fail(self, exc: BaseException) -> None:
         if self._failure is None and not self._closed:
             _LOGGER.debug("RTC data channel failed: %s", exc)
             self._failure = exc
             self._received.put_nowait(None)
+            self._end(exc)
 
     def _feed(self, datagram: bytes) -> None:
         segment = strip_kcp_prefix(datagram)[1] if self._prefixed else datagram
@@ -303,9 +324,17 @@ class KcpDataChannel:
         while self._kcp.next_packet_available:
             raw = bytes(self._kcp.get_received())
             try:
-                self._received.put_nowait(decode_link_frame(strip_outer_head(raw)))
+                message = decode_link_frame(strip_outer_head(raw))
             except ProtocolError as exc:
                 _LOGGER.debug("RTC data-channel message dropped: %s", exc)
+                continue
+            if self._received.qsize() >= MAX_QUEUED_MESSAGES:
+                if self._throttle.should_log("full"):
+                    _LOGGER.debug(
+                        "RTC data-channel message dropped: %d unread", MAX_QUEUED_MESSAGES
+                    )
+                continue
+            self._received.put_nowait(message)
 
     async def _read_loop(self) -> None:
         try:
@@ -319,6 +348,9 @@ class KcpDataChannel:
         try:
             while True:
                 self._kcp.update()
+                if self._kcp.state == _KCP_DEAD:
+                    self._fail(CommunicationError("RTC data channel peer stopped acknowledging"))
+                    return
                 await self._drain()
                 await asyncio.sleep(KCP_TICK)
         except Exception as exc:
@@ -330,6 +362,7 @@ class KcpDataChannel:
             return
         self._closed = True
         self._received.put_nowait(None)
+        self._end(None)
         for task in self._tasks:
             task.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
