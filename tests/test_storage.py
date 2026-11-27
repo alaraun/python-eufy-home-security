@@ -688,3 +688,16 @@ async def test_stored_devices_hold_only_what_the_library_reads() -> None:
     # … and a fresh list the same way; the params snapshot stays only for on-demand devices.
     cache.set_devices([on_demand, hub])
     assert cache.cached_devices() == [slim_on_demand, slim_hub]
+
+
+@pytest.mark.parametrize(
+    ("err", "reason"),
+    [
+        (PermissionError(13, "Permission denied", "/x"), "Permission denied"),
+        (OSError("disk gone"), "disk gone"),
+        (OSError(), "OSError"),
+        (OSError(5, ""), "[Errno 5] "),
+    ],
+)
+def test_a_storage_error_always_names_a_reason(err: OSError, reason: str) -> None:
+    assert storage._reason(err) == reason

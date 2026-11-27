@@ -198,7 +198,7 @@ class JsonFileStore:
 
 def _reason(err: OSError) -> str:
     """The OS's reason for ``err`` without the paths it names (the message names the file)."""
-    return err.strerror or str(err)
+    return err.strerror or str(err) or type(err).__name__
 
 
 async def async_cached_account(store: Store) -> str | None:
