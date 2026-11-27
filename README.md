@@ -115,6 +115,10 @@ eufy-security monitor               # print events as they arrive
 The password is never a flag: it comes from `$EUFY_PASSWORD`, the session cache or a
 prompt. Every command is in [the CLI reference](https://github.com/alaraun/python-eufy-home-security/blob/main/docs/reference/cli.md).
 
+Own a station the eufy app reaches only over WebRTC (T8N00, T9000, T7000, T8040)? The
+read-only `eufy-security diagnose rtc` helps build its support: see
+[how-to/diagnose-rtc.md](https://github.com/alaraun/python-eufy-home-security/blob/main/docs/how-to/diagnose-rtc.md).
+
 ### Library
 
 ```python

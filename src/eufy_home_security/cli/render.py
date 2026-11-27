@@ -1210,3 +1210,83 @@ def event_json(event: Event) -> dict[str, Any]:
         for name in ("scope", "alarm_phase", "arming_source", "dedupe_key"):
             data[name] = _jsonable(getattr(event, name))
     return data
+
+
+def _step(outcome: Mapping[str, Any]) -> str:
+    """A ``diagnose rtc`` step outcome: ``ok (0.12 s)``, ``failed: Error 486``,
+    ``skipped: call failed``."""
+    status = str(outcome["status"])
+    if status == "ok":
+        seconds = outcome.get("seconds")
+        return f"ok ({seconds:.2f} s)" if isinstance(seconds, float | int) else "ok"
+    if status == "skipped":
+        return f"skipped: {outcome.get('reason') or '-'}"
+    error = " ".join(str(p) for p in (outcome.get("error"), outcome.get("code")) if p is not None)
+    error = error or outcome.get("reason") or ""
+    return f"{status}: {error}" if error else status
+
+
+def _probe(probe: Mapping[str, Any]) -> str:
+    """One ``diagnose rtc`` probe: its answer codes, then its status when not ok."""
+    outcome = probe["outcome"]
+    parts = [" ".join(str(c) for c in probe["codes"])]
+    if outcome["status"] != "ok":
+        parts.append(_step(outcome))
+    return f"kind {probe['kind']}: " + " ".join(p for p in parts if p)
+
+
+def _guard_mode(channel: Mapping[str, Any]) -> str:
+    """The sealed frames and the guard-mode time of a ``diagnose rtc`` watch: unknown, not
+    absent, when sealed frames did not open."""
+    opened, unread = channel.get("sealed_opened", 0), channel.get("sealed_unread", 0)
+    text = f", sealed {opened} opened / {unread} unread" if opened or unread else ""
+    at = channel.get("guard_mode_at")
+    if at is not None:
+        return f"{text}, guard mode after {at:g} s"
+    return f"{text}, guard mode unknown" if unread else f"{text}, no guard mode frame"
+
+
+def render_rtc_diagnose(stations: Sequence[Mapping[str, Any]]) -> str:
+    """The text summary of a ``diagnose rtc`` report: per station, each step's outcome and
+    the facts a maintainer reads first."""
+    lines: list[str] = []
+    for entry in stations:
+        inputs, login, call = entry["inputs"], entry["login"], entry["call"]
+        ice, channel, probes = entry["ice"], entry["data_channel"], entry["probes"]
+        if lines:
+            lines.append("")
+        lines.append(f"{entry['station']} ({entry['reason']})")
+        facts = (
+            f"missing {', '.join(inputs['missing'])}"
+            if inputs["missing"]
+            else f"sdk {inputs['webrtc_sdk_version'] or '?'}, kcp_type {inputs['kcp_type']}"
+        )
+        lines.append(f"  1 inputs        {_step(inputs['outcome'])}, {facts}")
+        lines.append(
+            f"  2 login         discover {_step(login['discover'])}, login {_step(login['login'])}"
+        )
+        answer = ""
+        if call["transport"] is not None:
+            answer = (
+                f", transport_caps {call['transport_caps']} ({call['transport_caps_source']}), "
+                f"pbsdp {call['pbsdp_len']}, {call['transport']}"
+            )
+        lines.append(f"  3 call          {_step(call['outcome'])}{answer}")
+        pair = "/".join(ice["selected"]) if ice["selected"] else "-"
+        lines.append(f"  4 ice           {_step(ice['outcome'])}, pair {pair}")
+        lines.append(
+            f"  5 data channel  {_step(channel['outcome'])}, {channel['messages']} messages "
+            f"({channel['heartbeats']} heartbeats, {len(channel['frames'])} frames) "
+            f"in {channel['watched']:g} s{_guard_mode(channel)}"
+        )
+        close = entry.get("close")
+        if close is not None and close["status"] not in {"ok", "skipped"}:
+            lines.append(f"    close         {_step(close)}")
+        if probes["kinds"]:
+            kinds = ", ".join(_probe(p) for p in probes["kinds"])
+            if probes["login"]["status"] != "ok":
+                kinds = f"login {_step(probes['login'])}, {kinds}"
+            lines.append(f"  6 probes        {kinds}")
+        else:
+            lines.append(f"  6 probes        {_step(probes['login'])}")
+    return "\n".join(lines)

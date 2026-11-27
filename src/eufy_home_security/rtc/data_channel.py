@@ -83,6 +83,8 @@ class LinkMessage:
     msg_type: int
     seq: int
     payload: bytes
+    header_len: int = LINK_HEADER_LEN
+    """The link header's length: :data:`LINK_HEADER_LEN`, or the older 20 bytes."""
 
 
 def encode_link_frame(
@@ -138,7 +140,7 @@ def decode_link_frame(buf: bytes) -> LinkMessage:
         msg_type, seq = buf[12], struct.unpack_from("<I", buf, 16)[0]
     if len(buf) < header_len + payload_len:
         raise ProtocolError("RTC data-channel payload is truncated")
-    return LinkMessage(msg_type, seq, buf[header_len : header_len + payload_len])
+    return LinkMessage(msg_type, seq, buf[header_len : header_len + payload_len], header_len)
 
 
 def strip_outer_head(buf: bytes, *, verify_crc: bool = False) -> bytes:

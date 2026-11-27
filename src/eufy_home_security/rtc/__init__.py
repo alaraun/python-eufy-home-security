@@ -7,8 +7,8 @@ cryptography (:mod:`.crypto`), the station inputs (:mod:`.config`), the private 
 command encryption (:mod:`.command`), the RTCP APP command channel (:mod:`.rtcp_channel`),
 the data channel's framing over KCP (:mod:`.data_channel`) and the RTP depacketizers
 (:mod:`.media`). On the event loop: the signaling client (:mod:`.client`), ICE
-(:mod:`.ice`, the ``rtc`` extra) and the session that brings a station's data channel up
-(:mod:`.session`).
+(:mod:`.ice`, the ``rtc`` extra), the session that brings a station's data channel up
+(:mod:`.session`) and the read-only report of one station's link (:mod:`.diagnostics`).
 
 Internal: nothing here is part of the public API yet, and no station uses it. See
 ``docs/protocol/rtc-signaling.md``.

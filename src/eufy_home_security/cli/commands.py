@@ -7,6 +7,8 @@ import asyncio
 import contextlib
 import getpass
 import json
+import os
+import secrets
 import sys
 import tempfile
 import time
@@ -21,7 +23,7 @@ from ..devices import model_settings
 from ..devices.settings import Scope, scope_for_kind
 from ..devices.types import MODELS, DeviceKind
 from ..events import Event
-from ..exceptions import LoginChallengeError, UnsupportedError
+from ..exceptions import LoginChallengeError, MissingDependencyError, UnsupportedError
 from ..models import STATION_CHANNEL, GuardMode
 from ..p2p.discovery import discover_stations
 from ..storage import JsonFileStore, async_cached_account
@@ -818,6 +820,115 @@ async def cmd_monitor(ctx: Context) -> int:
     return 0  # pragma: no cover - only Ctrl+C ends the wait
 
 
+_SECRETS_WARNING = (
+    "WARNING: {path} holds the raw identifiers and keys of your station and account "
+    "(serial, P2P id and license, contact id, addresses, the device's answer). Never "
+    "post it publicly; send it only to a maintainer who asked for it, privately."
+)
+
+
+async def cmd_diagnose(ctx: Context) -> int:
+    """``diagnose rtc``: the read-only WebRTC report of the account's routed stations
+    (:mod:`~..rtc.diagnostics`). Logs in with the cached session and fetches the device
+    list; registers no push token and starts no station session."""
+    from ..rtc import diagnostics as diag  # noqa: PLC0415 - the rtc package, on demand
+    from ..rtc.ice import require_aioice  # noqa: PLC0415
+
+    seconds = diag.DEFAULT_WATCH if ctx.args.seconds is None else ctx.args.seconds
+    if seconds > diag.MAX_WATCH:
+        raise UsageError(f"--seconds must be at most {diag.MAX_WATCH:g}")
+    try:
+        require_aioice()
+    except MissingDependencyError as err:  # before any login
+        raise UsageError(f"{err}: pip install 'eufy-home-security[rtc]'") from err
+    out: Path = ctx.args.out or Path(f"eufy-rtc-diagnose-{int(time.time())}.json")
+    async with await open_account(ctx) as eufy:
+        await eufy.async_login()
+        # Fetched, not cached: the cache keeps no signaling inputs.
+        devices = await eufy.cloud.async_fetch_devices()
+        targets = diag.rtc_stations(devices, ctx.args.serial)
+        if not targets:
+            raise UsageError(
+                f"no station {render.fmt_serial(ctx.args.serial, False)} on this account"
+                if ctx.args.serial
+                else "no station on this account is reached over WebRTC; name one: "
+                f"{PROG} diagnose rtc SERIAL"
+            )
+        user_id = eufy.cloud.user_id
+        if not user_id:
+            raise UsageError("logged in, but the cloud named no user id; run login again")
+        app_id = secrets.token_hex(8)
+        reports = []
+        for station, reason in targets:
+            print(
+                f"Diagnosing {render.fmt_serial(station.device_sn, False)} ({reason}): "
+                f"up to {diag.station_budget(seconds, ctx.args.probe_kinds):.0f} s ...",
+                file=sys.stderr,
+                flush=True,
+            )
+            reports.append(
+                await diag.async_diagnose_station(
+                    station,
+                    devices,
+                    user_id=user_id,
+                    app_id=app_id,
+                    seconds=seconds,
+                    probe_kinds=ctx.args.probe_kinds,
+                    reason=reason,
+                )
+            )
+    stations = [r.as_dict() for r in reports]
+    document = {
+        "library_version": _library_version(),
+        "options": {
+            "seconds": seconds,
+            "probe_kinds": ctx.args.probe_kinds,
+            "serial": render.fmt_serial(ctx.args.serial, False) if ctx.args.serial else None,
+        },
+        "stations": stations,
+    }
+    await asyncio.to_thread(_write_json, out, document, private=False)
+    print(render.render_rtc_diagnose(stations))
+    print(f"\nReport written to {out}; attach it to your GitHub issue.")
+    if not ctx.args.secrets:
+        return 0
+    secret = out.with_name(f"{out.stem}.secrets.json")
+    raw = {"stations": [r.secrets_dict() for r in reports]}
+    try:
+        await asyncio.to_thread(_write_json, secret, raw, private=True)
+    except OSError as exc:  # a symbolic link there (refused) or no write access
+        print(
+            f"{PROG}: error: secrets file {secret} not written: {exc.strerror or exc} "
+            "(the report above is complete)",
+            file=sys.stderr,
+        )
+        return EXIT_ERROR
+    print(_SECRETS_WARNING.format(path=secret), file=sys.stderr)
+    return 0
+
+
+def _library_version() -> str | None:
+    from importlib.metadata import PackageNotFoundError, version  # noqa: PLC0415
+
+    try:
+        return version("eufy-home-security")
+    except PackageNotFoundError:
+        return None
+
+
+def _write_json(path: Path, value: object, *, private: bool) -> None:
+    """Write ``value`` as indented JSON; ``private`` files are readable by the owner only
+    and never written through a symbolic link (``OSError``)."""
+    text = json.dumps(value, indent=2, default=str) + "\n"
+    if not private:
+        path.write_text(text, encoding="utf-8")
+        return
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        os.fchmod(fh.fileno(), 0o600)
+        fh.write(text)
+
+
 COMMANDS: dict[str, Callable[[Context], Coroutine[Any, Any, int]]] = {
     "discover": cmd_discover,
     "login": cmd_login,
@@ -840,4 +951,5 @@ COMMANDS: dict[str, Callable[[Context], Coroutine[Any, Any, int]]] = {
     "recording": cmd_recording,
     "snapshot": cmd_snapshot,
     "monitor": cmd_monitor,
+    "diagnose": cmd_diagnose,
 }

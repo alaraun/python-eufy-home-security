@@ -41,6 +41,7 @@ def test_new_header_round_trips() -> None:
     assert len(frame) == LINK_HEADER_LEN + len(payload)
     msg = decode_link_frame(frame)
     assert (msg.msg_type, msg.seq, msg.payload) == (DataMsgType.COMMAND, 7, payload)
+    assert msg.header_len == LINK_HEADER_LEN
 
 
 def test_old_header_round_trips() -> None:
@@ -49,6 +50,7 @@ def test_old_header_round_trips() -> None:
     assert len(frame) == LINK_HEADER_LEN_OLD + len(payload)
     msg = decode_link_frame(frame)
     assert (msg.msg_type, msg.seq, msg.payload) == (DataMsgType.NOTIFY, 3, payload)
+    assert msg.header_len == LINK_HEADER_LEN_OLD
 
 
 def test_new_header_bytes() -> None:
@@ -157,7 +159,7 @@ def test_kcp_prefix_layout() -> None:
 def test_old_header_bytes() -> None:
     frame = encode_link_frame(b"\x00" * 40, msg_type=3, seq=5, old=True, now=0x11223344)
     assert frame[:20].hex() == "0900140028000100443322110300000005000000"
-    assert decode_link_frame(frame) == LinkMessage(3, 5, b"\x00" * 40)
+    assert decode_link_frame(frame) == LinkMessage(3, 5, b"\x00" * 40, LINK_HEADER_LEN_OLD)
 
 
 def test_the_timestamp_defaults_to_the_clock() -> None:

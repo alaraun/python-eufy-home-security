@@ -33,6 +33,7 @@ from eufy_home_security.rtc.ice import IceAgent, IceTransport, require_aioice
 from eufy_home_security.rtc.session import (
     FLAG_QUIC,
     CallAnswer,
+    ConnectStep,
     DataTransport,
     RtcSession,
     candidate_resend_delay,
@@ -424,6 +425,71 @@ async def test_a_usable_quick_login_skips_discover(
     second = make_session(config=rtc_config(quick_login=record))
     await second.start()
     assert MessageType.DISCOVER not in fake.kinds()
+
+
+async def test_on_step_names_each_connect_step_as_it_begins(
+    fake: FakeRtcServer, make_session: Callable[..., RtcSession]
+) -> None:
+    steps: list[tuple[ConnectStep, Any]] = []
+    session = make_session(on_step=lambda step, call: steps.append((step, call)))
+    await session.start()
+    assert [step for step, _ in steps] == [
+        ConnectStep.DISCOVER,
+        ConnectStep.LOGIN,
+        ConnectStep.CALL,
+        ConnectStep.ANSWER,
+        ConnectStep.ICE,
+        ConnectStep.DATA_CHANNEL,
+    ]
+    assert [call for _, call in steps[:3]] == [None, None, None]
+    call = steps[3][1]
+    assert call is not None
+    assert all(c is call for _, c in steps[3:])
+    assert call.answer is not None
+    assert "sdp_info" in call.answer
+
+
+async def test_on_step_skips_discover_on_a_quick_login(
+    fake: FakeRtcServer, make_session: Callable[..., RtcSession]
+) -> None:
+    first = make_session()
+    await first.start()
+    record = first.quick_login
+    await first.close()
+    steps: list[ConnectStep] = []
+    second = make_session(
+        config=rtc_config(quick_login=record), on_step=lambda step, _call: steps.append(step)
+    )
+    await second.start()
+    assert steps[:2] == [ConnectStep.LOGIN, ConnectStep.CALL]
+
+
+async def test_on_step_ends_at_the_step_that_failed(
+    fake: FakeRtcServer, make_session: Callable[..., RtcSession]
+) -> None:
+    fake.call_reply = "busy"
+    steps: list[ConnectStep] = []
+    session = make_session(on_step=lambda step, _call: steps.append(step))
+    with pytest.raises(CallRefusedError):
+        await session.start()
+    assert steps == [ConnectStep.DISCOVER, ConnectStep.LOGIN, ConnectStep.CALL]
+
+
+async def test_a_raising_step_callback_is_logged_and_the_session_connects(
+    fake: FakeRtcServer,
+    make_session: Callable[..., RtcSession],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def broken(_step: ConnectStep, _call: object) -> None:
+        raise RuntimeError("observer failed")
+
+    session = make_session(on_step=broken)
+    await session.start()
+    assert session.connected
+    assert any(
+        r.name == session_mod.__name__ and "callback failed" in r.getMessage()
+        for r in caplog.records
+    )
 
 
 @pytest.mark.parametrize(
