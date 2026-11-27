@@ -15,6 +15,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.exceptions import MissingDependencyError
+from eufy_home_security.p2p._json import MAX_JSON_DEPTH
 from eufy_home_security.p2p.xzyh import encode_frame
 from eufy_home_security.rtc import client as client_mod
 from eufy_home_security.rtc import diagnostics as diag
@@ -42,6 +43,7 @@ from eufy_home_security.testing.rtc import (
     FakeRtcServer,
     rtc_config,
 )
+from tests.json_depth import nested_lists
 
 NVR_SN = "T8N00" + SYNTHETIC.station_sn[5:]
 """A synthetic NVR serial (the eufy app reaches a T8N00 only over WebRTC)."""
@@ -277,6 +279,17 @@ async def test_the_report_carries_no_synthetic_identifier(fake: FakeRtcServer, r
     for value in (NVR_SN, SYNTHETIC.did, LICENSE, CONTACT, "127.0.0.1", TURN_PASSWORD):
         assert value in secrets
     assert b"payload-bytes".hex() in secrets
+
+
+async def test_the_secrets_keep_an_answer_nested_to_the_parsers_bound(
+    fake: FakeRtcServer, run: Any
+) -> None:
+    """The secrets copy is the report's own data: an answer the client parsed at the depth
+    bound is copied whole, one level deeper inside the secrets."""
+    fake.answer_extra = {"nested": nested_lists(MAX_JSON_DEPTH - 1)}
+    report = await run(probe_kinds=False)
+    assert report.call.outcome.status is StepStatus.OK
+    assert report.secrets_dict()["answer"]["nested"] == nested_lists(MAX_JSON_DEPTH - 1)
 
 
 async def test_a_run_sends_only_the_allowed_messages(fake: FakeRtcServer, run: Any) -> None:

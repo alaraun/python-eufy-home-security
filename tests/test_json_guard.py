@@ -20,6 +20,7 @@ _ALLOWED: dict[tuple[str, str], int] = {
     ("p2p/_json.py", "<module>"): 1,  # the bounded parser's own decoder
     ("storage.py", "MemoryStore.async_load"): 1,  # a copy of in-memory data
     ("storage.py", "MemoryStore.async_save"): 1,
+    ("rtc/diagnostics.py", "RtcStationReport.secrets_dict"): 1,  # a JSON copy of own data
     ("devices/timezones.py", "_table"): 1,  # bundled package data
     ("devices/model_settings.py", "bundled_codes"): 1,
     ("devices/model_settings.py", "_load"): 1,
