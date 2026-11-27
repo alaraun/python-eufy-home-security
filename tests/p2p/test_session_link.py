@@ -2,7 +2,9 @@
 
 A fake link that speaks clear JSON stands in for the P2P one: the session's requests,
 reply matching, notify dispatch and link-loss handling must work through the
-StationLink members alone.
+StationLink members alone. The P2P link's own duties toward the session (a reconnect
+tears the session down, a teardown closes the transport, a lost transport keeps its
+counters) are checked against a fake station.
 """
 
 from __future__ import annotations
@@ -10,7 +12,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import Sequence
+import time
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
 import pytest
@@ -19,12 +22,13 @@ import eufy_home_security.p2p.session as session_module
 from eufy_home_security._logging import redact_serial
 from eufy_home_security.events import ConnectionChanged, DisconnectCause, Event
 from eufy_home_security.exceptions import CloudError, StationUnreachableError
+from eufy_home_security.p2p.pppp import MsgType, encode_packet
 from eufy_home_security.p2p.session import CommandOutcome, P2PCredentials, StationSession
 from eufy_home_security.p2p.session.core import Inbound
 from eufy_home_security.p2p.session.link import LinkTuning, StationLink
 from eufy_home_security.p2p.transport import SilentLinkError, Wake
 from eufy_home_security.p2p.xzyh import Frame, FrameCipher, FrameType
-from eufy_home_security.testing import SYNTHETIC
+from eufy_home_security.testing import SYNTHETIC, FakeStation
 
 CREDS = P2PCredentials(SYNTHETIC.account_id, "user", "")
 
@@ -223,3 +227,96 @@ async def test_the_p2p_link_logs_under_the_sessions_redacted_name(
         f"{redact_serial(SYNTHETIC.station_sn)}: no wake material (cloud down); "
         "trying LAN discovery only"
     ]
+
+
+# ── the P2P link against a fake station ───────────────────────────────────────
+
+
+@pytest.fixture
+async def station() -> AsyncIterator[FakeStation]:
+    fake = FakeStation()
+    await fake.start()
+    yield fake
+    fake.stop()
+
+
+def _p2p_session(station: FakeStation) -> StationSession:
+    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
+
+    return StationSession(
+        SYNTHETIC.station_sn, provider, host="127.0.0.1", port=station.discovery_port
+    )
+
+
+async def _wait_until(predicate: Any) -> None:
+    async with asyncio.timeout(3):
+        while not predicate():
+            await asyncio.sleep(0.01)
+
+
+async def test_a_p2p_reconnect_ends_the_old_connections_requests_and_announcement(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(session_module, "PARAM_SETTLE", 0.05)
+    station.unanswered_commands = {1234}
+    session = _p2p_session(station)
+    try:
+        await session.async_get_params()  # announced: a parameter read answered
+        assert session.stats().connected
+        session._still_owed.append(("/a/late/still.jpg", time.monotonic() + 60))
+        task = asyncio.create_task(session.async_send_command(1234, channel=0, timeout=5.0))
+        await _wait_until(lambda: session._waiters)
+
+        await session._p2p.connect()
+
+        with pytest.raises(StationUnreachableError, match="reconnecting"):
+            async with asyncio.timeout(3):
+                await task
+        assert not session._still_owed
+        assert session.connected
+        assert not session.announced  # until an application reply on the new link
+        assert station.conn_inits == 2
+    finally:
+        await session.async_close()
+
+
+async def test_a_session_teardown_closes_the_p2p_transport(station: FakeStation) -> None:
+    session = _p2p_session(station)
+    try:
+        await session.async_connect()
+        transport = session._p2p._transport
+        assert transport is not None
+        assert session.connected
+
+        session._teardown("parameter probe unanswered", cause=DisconnectCause.PROBE_UNANSWERED)
+
+        assert not transport.is_open
+        assert session._p2p._transport is None
+    finally:
+        await session.async_close()
+
+
+async def test_a_lost_transports_wrong_port_drops_stay_counted(station: FakeStation) -> None:
+    session = _p2p_session(station)
+    loop = asyncio.get_running_loop()
+    other, _ = await loop.create_datagram_endpoint(
+        asyncio.DatagramProtocol, local_addr=("127.0.0.1", 0)
+    )
+    try:
+        await session.async_connect()
+        transport = session._p2p._transport
+        assert transport is not None
+        assert transport.local_port is not None
+        # The station's host, another port: not this session's traffic.
+        other.sendto(encode_packet(MsgType.CLOSE), ("127.0.0.1", transport.local_port))
+        await _wait_until(lambda: transport.wrong_port_drops == 1)
+        assert session.stats().wrong_port_drops == 1
+
+        station.send_close()
+        await _wait_until(lambda: session._p2p._transport is None)
+
+        assert session.stats().wrong_port_drops == 1
+    finally:
+        other.close()
+        await session.async_close()
