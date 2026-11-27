@@ -40,6 +40,7 @@ async def fake() -> AsyncIterator[FakeRtcServer]:
     server = await FakeRtcServer().start()
     yield server
     await server.close()
+    assert server.refused == []
 
 
 @pytest.fixture
@@ -284,6 +285,20 @@ async def test_a_device_message_is_answered_with_the_clients_own_dynamic_id(
     assert ids == [client.dynamic_id, client.dynamic_id]
 
 
+async def test_a_device_message_on_a_call_socket_is_answered_there(
+    fake: FakeRtcServer, make_client: Callable[..., SignalingClient]
+) -> None:
+    client = await logged_in(make_client)
+    call = await client.call(CallKind.PRIV1, sdp_info=INFO, wake=False)
+    await call.wait_answer(3)
+    addr = fake.of_type(MessageType.CALL)[-1].addr
+    assert addr != fake.of_type(MessageType.LOGIN)[-1].addr
+    fake.device_message(addr)
+    await until(lambda: _responses(fake, MessageType.MESSAGE) or fake.refused)
+    assert fake.refused == []
+    assert _responses(fake, MessageType.MESSAGE)[0].addr == addr
+
+
 async def test_a_datagram_from_another_address_is_dropped(
     fake: FakeRtcServer, make_client: Callable[..., SignalingClient]
 ) -> None:
@@ -416,6 +431,24 @@ async def test_a_call_before_login_is_refused(make_client: Callable[..., Signali
     await client.open()
     with pytest.raises(SignalingError):
         await client.call(CallKind.PRIV1, sdp_info=INFO)
+
+
+async def test_a_second_calls_info_and_hangup_carry_their_sub_ids(
+    fake: FakeRtcServer, make_client: Callable[..., SignalingClient]
+) -> None:
+    """An INFO always carries sub_id 1, a HANGUP its CALL's."""
+    client = await logged_in(make_client)
+    first = await client.call(CallKind.PRIV1, sdp_info=INFO, wake=False)
+    second = await client.call(CallKind.PRIV1, sdp_info=INFO, wake=False)
+    await second.wait_answer(3)
+    assert (first.sub_id, second.sub_id) == (1, 2)
+    client.send_info(second, {"file_candidate_ack": 7})
+    client.hangup(second)
+    await until(
+        lambda: (fake.of_type(MessageType.HANGUP) and 7 in fake.device_acks) or fake.refused
+    )
+    assert fake.refused == []
+    assert fake.of_type(MessageType.HANGUP)[0].header.sub_id == 2
 
 
 async def test_hangup_is_sent_once(

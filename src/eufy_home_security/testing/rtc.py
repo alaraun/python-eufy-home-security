@@ -7,7 +7,11 @@ key exchange and the quick login, the MESSAGE ping, and a CALL with 100 (a TURN 
 then the device's 200 (a synthetic ``sdp_info``, optional ``request_id`` and
 ``transport_caps``), after which it trickles the device's ``file_candidate`` INFOs until
 the client acknowledges them and acknowledges the client's. Its crypto is the real one,
-so every attachment the client sends is decrypted and recorded (:attr:`received`).
+so every attachment the client sends is decrypted and recorded (:attr:`received`). It
+takes the client's CALL, INFO, ACK, HANGUP and MESSAGE answer only with the header fields
+a station expects (a private CALL's mode, INFO sub_id 1, an ACK's or HANGUP's sub_id that
+of its CALL, a MESSAGE answer from the socket the request reached); any other form is
+recorded in :attr:`~FakeRtcServer.refused` and not acted on.
 
 :meth:`FakeRtcServer.ice_factory` gives the session an in-memory ICE connection
 (:class:`PipeIce`) that connects only with the credentials of both ``sdp_info`` and after
@@ -205,6 +209,8 @@ class FakeRtcServer(asyncio.DatagramProtocol):
     client_candidates: list[dict[str, Any]] = field(default_factory=list)
     device_acks: set[int] = field(default_factory=set)
     device_channels: list[KcpDataChannel] = field(default_factory=list)
+    refused: list[str] = field(default_factory=list)
+    """Packets of the client in a form a station does not take (a header field off)."""
     port: int = 0
     tcp_port: int = 0
 
@@ -215,6 +221,8 @@ class FakeRtcServer(asyncio.DatagramProtocol):
         self._tasks: set[asyncio.Task[None]] = set()
         self._pipes: list[PipeIce] = []
         self._calls: list[tuple[CallBody, Header, tuple[str, int]]] = []
+        self._message_to: set[tuple[str, int]] = set()
+        self._call_sub_ids: dict[str, int] = {}
         self._counter = 0
 
     # ── lifecycle ────────────────────────────────────────────────────────────
@@ -309,6 +317,8 @@ class FakeRtcServer(asyncio.DatagramProtocol):
     # ── wire ─────────────────────────────────────────────────────────────────
 
     def send(self, header: Header, body: bytes, addr: tuple[str, int]) -> None:
+        if header.message_type == MessageType.MESSAGE and not header.is_response:
+            self._message_to.add(addr)
         if self.transport is not None and not self.transport.is_closing():
             self.transport.sendto(codec.obfuscate(codec.encode_packet(header, body)), addr)
 
@@ -365,6 +375,9 @@ class FakeRtcServer(asyncio.DatagramProtocol):
             message = MessageBody.decode(body)
             item.payload = self._payload(header, message.contact_id, message.data)
         self.received.append(item)
+        if (problem := self._form(item)) is not None:
+            self.refused.append(problem)
+            return
         if header.is_response:
             return
         if mtype == MessageType.DISCOVER:
@@ -384,6 +397,28 @@ class FakeRtcServer(asyncio.DatagramProtocol):
             self._call(header, CallBody.decode(body), item, reply)
         elif mtype == MessageType.INFO and item.payload is not None:
             self._client_info(CallBody.decode(body), item)
+
+    def _form(self, item: Received) -> str | None:
+        """What is off in the client's packet's header; None when a station takes it."""
+        header = item.header
+        mtype = header.message_type
+        if header.is_response:
+            if mtype == MessageType.MESSAGE and item.addr not in self._message_to:
+                return "MESSAGE 200 from another socket than the request reached"
+            return None
+        if mtype == MessageType.CALL:
+            uuid = CallBody.decode(item.body).uuid
+            self._call_sub_ids[uuid] = header.sub_id
+            mode = codec.WORK_PROTOCOL if uuid else 0
+            if header.mode != mode:
+                return f"CALL mode {header.mode}, not {mode}"
+        if mtype == MessageType.INFO and header.sub_id != 1:
+            return f"INFO sub_id {header.sub_id}, not 1"
+        if mtype in (MessageType.ACK, MessageType.HANGUP) and header.sub_id != (
+            self._call_sub_ids.get(CallBody.decode(item.body).uuid)
+        ):
+            return f"{MessageType(mtype).name} sub_id {header.sub_id}, not the CALL's"
+        return None
 
     def _challenge(self, header: Header, reply: Any) -> None:
         modulus = f"{server_key().public_key().public_numbers().n:0256x}"

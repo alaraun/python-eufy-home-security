@@ -298,7 +298,6 @@ class SignalingClient:
         for future in self._pending.values():
             if not future.done():
                 future.set_exception(SignalingError("RTC signaling client closed"))
-                future.exception()  # read here: a waiter may be gone already
         self._pending.clear()
 
     async def _open_endpoint(self, name: str) -> _Endpoint:

@@ -51,6 +51,7 @@ async def fake() -> AsyncIterator[FakeRtcServer]:
     server = await FakeRtcServer().start()
     yield server
     await server.close()
+    assert server.refused == []
 
 
 @pytest.fixture
