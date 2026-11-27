@@ -418,6 +418,26 @@ async def test_an_unreadable_answer_fails_step_three_with_its_keys_recorded(
     assert "sdp_info" in report.call.answer_keys
     assert report.call.device_sdp is None
     assert report.ice.outcome.status is StepStatus.SKIPPED
+    # no parsed answer, no caps: the session reads none either (pbsdp still listed)
+    assert (report.call.transport_caps, report.call.transport_caps_source) == (None, "none")
+    assert report.call.transport is None
+
+
+async def test_the_caps_are_the_parsed_answers(
+    fake: FakeRtcServer, run: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    parse = session_mod.CallAnswer.parse.__func__  # type: ignore[attr-defined]
+
+    def parse_as_5(cls: type[session_mod.CallAnswer], payload: Any) -> session_mod.CallAnswer:
+        parsed: session_mod.CallAnswer = parse(cls, payload)
+        return dataclasses.replace(parsed, transport_caps=5)
+
+    monkeypatch.setattr(session_mod.CallAnswer, "parse", classmethod(parse_as_5))
+    fake.pbsdp = PBSDP_CAPS_3
+    report = await run()
+    call = report.call
+    assert (call.transport_caps, call.transport_caps_source) == (5, "pbsdp")
+    assert (call.pbsdp_decoded, call.pbsdp_fields) == (True, (1, 3))  # listing: read_pbsdp
 
 
 async def test_a_probe_cut_by_the_run_bound_is_a_timeout_and_the_rest_skipped(

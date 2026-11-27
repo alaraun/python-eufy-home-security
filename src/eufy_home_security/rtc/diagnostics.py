@@ -7,8 +7,9 @@
    routes it and each device paired to it (no network);
 2. **login**: DISCOVER and LOGIN (:class:`~.session.RtcSession`, the library's own session);
 3. **call**: the kind-5 data CALL with the client's KCP-only flag; the answer's key names,
-   the device's ``transport_caps`` as the eufy app reads it (from ``pbsdp``, else the
-   JSON key; :func:`~.sdp.read_pbsdp`) with its source and ``pbsdp``'s field numbers, the
+   the device's ``transport_caps`` as the session reads it
+   (:meth:`~.session.CallAnswer.parse`) with its source and ``pbsdp``'s field numbers
+   (:func:`~.sdp.read_pbsdp`), the
    device's ``sdp_info`` shape;
 4. **ice**: candidate types on each side, the selected pair, the time to connect;
 5. **data channel**: for ``seconds``, every message the station sends unasked: its link type
@@ -213,10 +214,11 @@ class CallReport:
     answer_keys: tuple[str, ...] = ()
     answer_values: dict[str, Any] = field(default_factory=dict)
     transport_caps: int | None = None
-    """The device's ``transport_caps`` as the eufy app reads it (see :attr:`transport_caps_source`)."""
+    """The device's ``transport_caps`` as the session reads it
+    (:meth:`~.session.CallAnswer.parse`); None when the answer does not parse."""
     transport_caps_source: str = "none"
-    """``pbsdp`` (from a non-empty ``pbsdp``, 0 when it does not decode or lacks the
-    field), ``json`` (the ``transport_caps`` key, read only without ``pbsdp``) or ``none``."""
+    """``pbsdp`` (a non-empty ``pbsdp``: 0 when it does not decode or lacks the field),
+    ``json`` (the ``transport_caps`` key, read only without ``pbsdp``) or ``none``."""
     pbsdp_len: int | None = None
     pbsdp_decoded: bool | None = None
     pbsdp_fields: tuple[int, ...] = ()
@@ -227,7 +229,8 @@ class CallReport:
     turn_keys: tuple[str, ...] = ()
     device_sdp: SdpReport | None = None
     transport: str | None = None
-    """``kcp`` or ``quic``: what the answer and the client's flag select."""
+    """``kcp`` or ``quic``: what the answer and the client's flag select; None when the
+    answer does not parse."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -1013,15 +1016,14 @@ def _call_report(run: _Run) -> CallReport:
     if turn is not None:
         run.secrets["turn"] = dict(turn)
     pbsdp = answer.get("pbsdp")
-    reading = read_pbsdp(pbsdp)
-    caps: int | None
-    if reading is not None:
-        caps, source = reading.transport_caps, "pbsdp"
-    else:
-        json_caps = answer.get("transport_caps")
-        valid = isinstance(json_caps, int) and not isinstance(json_caps, bool)
-        caps = json_caps if valid else None
-        source = "json" if valid else "none"
+    reading = read_pbsdp(pbsdp)  # the field listing only; the caps are the session's
+    parsed = _parsed(answer)
+    caps = parsed.transport_caps if parsed is not None else None
+    source = "none"
+    if parsed is not None and parsed.pbsdp:
+        source = "pbsdp"
+    elif caps is not None:
+        source = "json"
     return CallReport(
         outcome=outcome,
         client_flag=flag,
@@ -1041,8 +1043,16 @@ def _call_report(run: _Run) -> CallReport:
         turn_present=turn is not None,
         turn_keys=_key_names(turn) if turn is not None else (),
         device_sdp=_sdp_report(answer.get("sdp_info")),
-        transport=select_transport(flag, caps).value,
+        transport=select_transport(flag, caps).value if parsed is not None else None,
     )
+
+
+def _parsed(answer: Mapping[str, Any]) -> CallAnswer | None:
+    """The answer as the session reads it; None when it does not parse."""
+    try:
+        return CallAnswer.parse(answer)
+    except ProtocolError:
+        return None
 
 
 def _sdp_report(text: object) -> SdpReport | None:
