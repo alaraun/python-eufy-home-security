@@ -159,6 +159,16 @@ class IceTransport:
                 raise CommunicationError(f"RTC ICE did not connect: {exc}") from exc
             raise exc
 
+    def selected_pair(self) -> tuple[str, str] | None:
+        """The candidate types (``host``, ``srflx``, ``relay``, ...) of the selected pair,
+        local first; None before ICE connects or when aioice does not say."""
+        if self._connection is None:
+            return None
+        for stats in self._connection.get_statistics():
+            if stats.selected:
+                return stats.local_candidate.type, stats.remote_candidate.type
+        return None
+
     async def recv(self) -> bytes:
         try:
             return await self._require().recv()

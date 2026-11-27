@@ -83,6 +83,19 @@ FLAG_KCP_MULTI: Final = 0x01
 FLAG_QUIC: Final = 0x02
 
 
+class ConnectStep(StrEnum):
+    """A step of one connect, as :class:`RtcSession` reports it to ``on_step``."""
+
+    DISCOVER = "discover"
+    LOGIN = "login"
+    CALL = "call"
+    ANSWER = "answer"
+    """The device's CALL 200 arrived (reported before it is read)."""
+    ICE = "ice"
+    DATA_CHANNEL = "data_channel"
+    """ICE is up; the KCP data channel starts."""
+
+
 class DataTransport(StrEnum):
     """What runs the data channel inside ICE."""
 
@@ -190,7 +203,9 @@ class RtcSession:
     ``ice_factory`` builds the ICE connection of each attempt (default
     :class:`~.ice.IceTransport`, which needs the ``rtc`` extra). ``on_login`` receives
     every login record for the consumer's quick-login cache, ``on_server_info`` the record
-    of every login server (:func:`~.config.merge_server_info` keeps a list of them); a
+    of every login server (:func:`~.config.merge_server_info` keeps a list of them),
+    ``on_step`` each :class:`ConnectStep` of a connect as it begins, with the data call once
+    it was sent (its ``answer`` and ``turn`` filled in from :attr:`ConnectStep.ANSWER` on); a
     callback that raises is logged and does not stop the session. ``crypto``, ``clock`` and
     ``rng`` exist for tests.
     """
@@ -207,6 +222,7 @@ class RtcSession:
         tcp_ports: tuple[int, ...] | None = None,
         on_login: Callable[[QuickLogin], None] | None = None,
         on_server_info: Callable[[ServerInfo], None] | None = None,
+        on_step: Callable[[ConnectStep, Call | None], None] | None = None,
     ) -> None:
         self._config = config
         self._ice_factory = ice_factory
@@ -217,6 +233,7 @@ class RtcSession:
         self._tcp_ports = tcp_ports
         self._on_login = on_login
         self._on_server_info = on_server_info
+        self._on_step = on_step
         self._quick_login = config.quick_login
         self._lock = asyncio.Lock()
         self._generation = 0
@@ -384,15 +401,18 @@ class RtcSession:
     def _server_used(self, record: ServerInfo) -> None:
         self._notify(self._on_server_info, record)
 
-    def _notify(self, callback: Callable[[Any], None] | None, record: object) -> None:
-        """Hand ``record`` to a consumer's callback; its failure is logged, not raised."""
+    def _notify(self, callback: Callable[..., None] | None, *args: object) -> None:
+        """Hand ``args`` to a consumer's callback; its failure is logged, not raised."""
         if callback is None:
             return
         try:
-            callback(record)
+            callback(*args)
         except Exception:  # the consumer's code: any failure
             level = logging.WARNING if self._warned.should_log("callback") else logging.DEBUG
-            _LOGGER.log(level, "%s: RTC login callback failed", self._log_name, exc_info=True)
+            _LOGGER.log(level, "%s: RTC callback failed", self._log_name, exc_info=True)
+
+    def _step(self, step: ConnectStep, call: Call | None = None) -> None:
+        self._notify(self._on_step, step, call)
 
     async def _connect_once(self) -> _Attempt:
         lost: asyncio.Future[Exception] = asyncio.get_running_loop().create_future()
@@ -433,7 +453,9 @@ class RtcSession:
         await signaling.open()
         record = self._quick_login
         if record is None or not record.usable(self._clock()):
+            self._step(ConnectStep.DISCOVER)
             await signaling.discover()
+        self._step(ConnectStep.LOGIN)
         await signaling.login(record)
         signaling.start_ping()
         flag = client_flag(
@@ -445,12 +467,16 @@ class RtcSession:
             data_channel=bool(flag & FLAG_KCP_MULTI),
             rng=self._rng,
         )
+        self._step(ConnectStep.CALL)
         call = await signaling.call(CallKind.PRIV1, channel=DATA_CALL_CHANNEL, sdp_info=info)
         attempt.call = call
-        answer = CallAnswer.parse(await call.wait_answer(ANSWER_TIMEOUT))
+        payload = await call.wait_answer(ANSWER_TIMEOUT)
+        self._step(ConnectStep.ANSWER, call)
+        answer = CallAnswer.parse(payload)
         attempt.answer = answer
         if select_transport(flag, answer.transport_caps) is DataTransport.QUIC:
             raise UnsupportedError("the station chose QUIC for the RTC data channel")
+        self._step(ConnectStep.ICE, call)
         ice = self._ice_factory() if self._ice_factory else IceTransport()
         attempt.ice = ice
         self._spawn(attempt, self._relay(attempt, call, ice))
@@ -465,6 +491,7 @@ class RtcSession:
                 )
         except TimeoutError as exc:
             raise DeviceTimeoutError("the RTC data channel's ICE did not connect in time") from exc
+        self._step(ConnectStep.DATA_CHANNEL, call)
         attempt.channel = KcpDataChannel(ice, prefixed=answer.sdp_info.data_channel)
         self._spawn(attempt, self._watch(attempt, attempt.channel))
         _LOGGER.debug("%s: RTC data channel up", self._log_name)

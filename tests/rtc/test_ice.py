@@ -159,6 +159,7 @@ async def test_the_controlled_client_connects_to_a_controlling_peer(
                 ),
                 device.connect(),
             )
+        assert client.selected_pair() == ("host", "host")
         await client.send(b"to device")
         async with asyncio.timeout(5):
             assert await device.recv() == b"to device"
@@ -194,6 +195,17 @@ async def test_before_gather_the_connection_is_not_there() -> None:
     with pytest.raises(CommunicationError):
         await client.connect(remote_ufrag="wxyz", remote_pwd="q" * 22)
     await client.close()
+
+
+@needs_aioice
+async def test_no_pair_is_selected_before_ice_connects(loopback_only: None) -> None:
+    client = IceTransport()
+    assert client.selected_pair() is None
+    await client.gather(local_ufrag="abcd", local_pwd="p" * 22, turn=None)
+    try:
+        assert client.selected_pair() is None
+    finally:
+        await client.close()
 
 
 @needs_aioice

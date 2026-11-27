@@ -238,6 +238,12 @@ call, a cancel or close while candidates are gathered leaves aioice's TURN alloc
 running until its request times out, or its socket open when the server answers after
 it. No command is sent over the channel yet.
 
+`on_step` reports each connect step as it begins (`ConnectStep`: discover, login, call,
+answer, ice, data_channel), with the data call from the answer on, so a caller can tell
+which step an error belongs to; `IceTransport.selected_pair()` names the candidate types
+of the pair ICE nominated, and each received data-channel message carries its link
+header's length (`LinkMessage.header_len`).
+
 ## Media plane
 
 The app builds a remote SDP from a fixed template for the event path (`sdp.py`
