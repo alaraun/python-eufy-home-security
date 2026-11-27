@@ -19,6 +19,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Self
 
+from .._logging import redact_serial
 from ..devices import model_settings
 from ..devices.settings import Scope, scope_for_kind
 from ..devices.types import MODELS, DeviceKind
@@ -849,7 +850,7 @@ async def cmd_diagnose(ctx: Context) -> int:
         targets = diag.rtc_stations(devices, ctx.args.serial)
         if not targets:
             raise UsageError(
-                f"no station {ctx.args.serial!r} on this account"
+                f"no station {redact_serial(ctx.args.serial)} on this account"
                 if ctx.args.serial
                 else "no station on this account is reached over WebRTC; name one: "
                 f"{PROG} diagnose rtc SERIAL"

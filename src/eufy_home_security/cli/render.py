@@ -1225,6 +1225,15 @@ def _step(outcome: Mapping[str, Any]) -> str:
     return f"{status}: {error}" if error else status
 
 
+def _probe(probe: Mapping[str, Any]) -> str:
+    """One ``diagnose rtc`` probe: its answer codes, then its status when not ok."""
+    outcome = probe["outcome"]
+    parts = [" ".join(str(c) for c in probe["codes"])]
+    if outcome["status"] != "ok":
+        parts.append(_step(outcome))
+    return f"kind {probe['kind']}: " + " ".join(p for p in parts if p)
+
+
 def render_rtc_diagnose(stations: Sequence[Mapping[str, Any]]) -> str:
     """The text summary of a ``diagnose rtc`` report: per station, each step's outcome and
     the facts a maintainer reads first."""
@@ -1247,8 +1256,8 @@ def render_rtc_diagnose(stations: Sequence[Mapping[str, Any]]) -> str:
         answer = ""
         if call["transport"] is not None:
             answer = (
-                f", transport_caps {call['transport_caps']}, pbsdp {call['pbsdp_len']}, "
-                f"{call['transport']}"
+                f", transport_caps {call['transport_caps']} ({call['transport_caps_source']}), "
+                f"pbsdp {call['pbsdp_len']}, {call['transport']}"
             )
         lines.append(f"  3 call          {_step(call['outcome'])}{answer}")
         pair = "/".join(ice["selected"]) if ice["selected"] else "-"
@@ -1257,13 +1266,14 @@ def render_rtc_diagnose(stations: Sequence[Mapping[str, Any]]) -> str:
             f"  5 data channel  {_step(channel['outcome'])}, {channel['messages']} messages "
             f"({channel['heartbeats']} heartbeats, {len(channel['frames'])} frames) "
             f"in {channel['watched']:g} s"
+            + (
+                f", guard mode after {channel['guard_mode_at']:g} s"
+                if channel.get("guard_mode_at") is not None
+                else ""
+            )
         )
         if probes["kinds"]:
-            kinds = ", ".join(
-                f"kind {p['kind']}: "
-                + (" ".join(str(c) for c in p["codes"]) or str(p["outcome"]["status"]))
-                for p in probes["kinds"]
-            )
+            kinds = ", ".join(_probe(p) for p in probes["kinds"])
             lines.append(f"  6 probes        {kinds}")
         else:
             lines.append(f"  6 probes        {_step(probes['login'])}")

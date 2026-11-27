@@ -18,6 +18,7 @@ import pytest
 
 from eufy_home_security.cli import app, commands
 from eufy_home_security.cli.config import EXIT_USAGE, parse_args
+from eufy_home_security.cli.render import render_rtc_diagnose
 from eufy_home_security.exceptions import MissingDependencyError
 from eufy_home_security.p2p.xzyh import encode_frame
 from eufy_home_security.push import fcm as fcm_module
@@ -170,12 +171,19 @@ async def test_a_named_station_runs_whatever_its_route(
 
 
 async def test_a_serial_no_station_has_is_a_usage_error(
-    station: FakeRtcServer, cloud: FakeCloud, no_push: None, tmp_path: Path
+    station: FakeRtcServer,
+    cloud: FakeCloud,
+    no_push: None,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     out = tmp_path / "report.json"
     code = await run("diagnose", "rtc", "T8030P0000000000", "--out", str(out))
     assert code == EXIT_USAGE
     assert not out.exists()
+    err = capsys.readouterr().err
+    assert "T8030***0000" in err
+    assert "T8030P0000000000" not in err
 
 
 async def test_without_the_extra_it_says_how_to_install_before_logging_in(
@@ -236,3 +244,52 @@ def test_the_defaults() -> None:
         False,
         None,
     )
+
+
+def summary_entry(**changes: Any) -> dict[str, Any]:
+    ok = {"status": "ok", "seconds": 0.1, "error": None, "code": None, "reason": None}
+    entry: dict[str, Any] = {
+        "station": "T8N00***2345",
+        "reason": "station",
+        "inputs": {"outcome": ok, "missing": [], "webrtc_sdk_version": "1.1.0", "kcp_type": 1},
+        "login": {"discover": ok, "login": ok},
+        "call": {
+            "outcome": ok,
+            "transport": "kcp",
+            "transport_caps": 0,
+            "transport_caps_source": "pbsdp",
+            "pbsdp_len": 12,
+        },
+        "ice": {"outcome": ok, "selected": ["host", "srflx"]},
+        "data_channel": {
+            "outcome": ok,
+            "messages": 3,
+            "heartbeats": 1,
+            "frames": [{}, {}],
+            "watched": 60.0,
+            "guard_mode_at": 1.25,
+        },
+        "probes": {"login": ok, "kinds": []},
+    }
+    entry.update(changes)
+    return entry
+
+
+def test_the_summary_names_the_caps_source_and_the_guard_mode_time() -> None:
+    text = render_rtc_diagnose([summary_entry()])
+    assert "transport_caps 0 (pbsdp)" in text
+    assert "guard mode after 1.25 s" in text
+    channel = {**summary_entry()["data_channel"], "guard_mode_at": None}
+    assert "guard mode" not in render_rtc_diagnose([summary_entry(data_channel=channel)])
+
+
+def test_the_summary_gives_a_probes_status_and_code_when_it_is_not_ok() -> None:
+    failed = {"status": "failed", "seconds": None, "error": "RtcCallError", "code": 486}
+    kinds = [
+        {"kind": 1, "codes": [200], "outcome": {"status": "ok", "seconds": 0.2}},
+        {"kind": 3, "codes": [100], "outcome": {"status": "timeout", "seconds": 8.0}},
+        {"kind": 4, "codes": [], "outcome": failed},
+    ]
+    probes = {"login": {"status": "ok", "seconds": 0.1}, "kinds": kinds}
+    text = render_rtc_diagnose([summary_entry(probes=probes)])
+    assert "kind 1: 200, kind 3: 100 timeout, kind 4: failed: RtcCallError 486" in text
