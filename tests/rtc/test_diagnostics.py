@@ -489,6 +489,35 @@ async def test_the_run_bound_during_the_probe_login_is_a_probe_timeout(
     ]
 
 
+async def test_the_run_bound_during_the_close_is_the_closes_timeout(
+    fake: FakeRtcServer, run: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(diag, "station_budget", lambda seconds, probes: 1.0)
+    close = RtcSession.close
+
+    async def held_close(self: RtcSession) -> None:
+        await asyncio.sleep(2.0)  # a slow TURN release, say
+        await close(self)
+
+    monkeypatch.setattr(RtcSession, "close", held_close)
+    report = await run(seconds=0.2, probe_kinds=True)
+    assert report.data_channel.outcome.status is StepStatus.OK
+    assert report.close.status is StepStatus.TIMEOUT
+    assert report.close.reason == "run timed out while closing"
+    assert report.close.seconds is not None
+    assert report.close.seconds > 0.3
+    assert report.probes.login == diag.StepOutcome(
+        StepStatus.SKIPPED, reason="run timed out while closing"
+    )
+    assert fake.call_kinds() == [CallKind.PRIV1]
+
+
+async def test_the_close_after_the_watch_is_recorded(fake: FakeRtcServer, run: Any) -> None:
+    report = await run()
+    assert report.close.status is StepStatus.OK
+    assert report.as_dict()["close"]["status"] == "ok"
+
+
 async def test_ice_that_never_connects_is_a_step_four_failure(
     fake: FakeRtcServer, run: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:

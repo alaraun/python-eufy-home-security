@@ -119,6 +119,8 @@ _SHORT_TEXT: Final = re.compile(r"^[A-Za-z0-9_.-]{1,32}$")
 _KEY_NAME: Final = re.compile(rf"^[a-z_]{{1,{MAX_KEY_LEN}}}$")
 _CANDIDATE_TYPE: Final = re.compile(r"\btyp\s+([A-Za-z]+)")
 _SHARED: Final = ipaddress.IPv4Network("100.64.0.0/10")
+#: The close's and the probes' reason when the run's bound ended the close.
+CLOSE_TIMED_OUT: Final = "run timed out while closing"
 #: The steps of one run, in order.
 STEPS: Final = ("inputs", "discover", "login", "call", "ice", "data_channel")
 
@@ -314,6 +316,8 @@ class RtcStationReport:
     call: CallReport
     ice: IceReport
     data_channel: DataChannelReport
+    close: StepOutcome
+    """The session's close after the watch, before the probes."""
     probes: ProbesReport
     secrets: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
@@ -565,6 +569,9 @@ class _Run:
     probe_results: list[ProbeReport] = field(default_factory=list)
     probe_current: int | None = None
     probe_started: float | None = None
+    closing_started: float | None = None
+    """When the session's close after the watch began (None before)."""
+    close_outcome: StepOutcome | None = None
     """When the probe client began (None before step 6)."""
 
     # step bookkeeping
@@ -689,7 +696,11 @@ async def async_diagnose_station(
         async with asyncio.timeout(station_budget(seconds, probe_kinds)):
             await _connect_and_watch(run, seconds, ice_factory, signaling_port, tcp_ports)
             if run.session is not None:  # closed before the probes: it never reconnects
+                run.closing_started = loop.time()
                 await _close(run.session.close())
+                run.close_outcome = StepOutcome(
+                    StepStatus.OK, round(loop.time() - run.closing_started, 3)
+                )
             if probe_kinds:
                 await _probe(run, signaling_port, tcp_ports)
     except TimeoutError:
@@ -700,6 +711,9 @@ async def async_diagnose_station(
         elif run.probe_started is not None:
             seconds = round(loop.time() - run.probe_started, 3)
             run.probe_login = StepOutcome(StepStatus.TIMEOUT, seconds)
+        elif run.closing_started is not None and run.close_outcome is None:
+            seconds = round(loop.time() - run.closing_started, 3)
+            run.close_outcome = StepOutcome(StepStatus.TIMEOUT, seconds, reason=CLOSE_TIMED_OUT)
         else:
             run.fail(None, StepStatus.TIMEOUT)
     finally:
@@ -983,6 +997,8 @@ def _report(
     channel = run.channel_report or DataChannelReport(outcome=run.outcome("data_channel"))
     if not probe_kinds:
         probes = ProbesReport(StepOutcome(StepStatus.SKIPPED, reason="not asked"))
+    elif run.close_outcome is not None and run.close_outcome.status is StepStatus.TIMEOUT:
+        probes = ProbesReport(StepOutcome(StepStatus.SKIPPED, reason=CLOSE_TIMED_OUT))
     elif run.probe_login is None:
         probes = ProbesReport(run.outcome("probes", unused="login failed"))
     else:
@@ -1001,6 +1017,7 @@ def _report(
         call=_call_report(run),
         ice=ice,
         data_channel=channel,
+        close=run.close_outcome or StepOutcome(StepStatus.SKIPPED, reason="no session"),
         probes=probes,
         secrets=run.secrets,
     )
