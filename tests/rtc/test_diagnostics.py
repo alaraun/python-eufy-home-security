@@ -724,7 +724,7 @@ async def test_without_the_extra_the_run_raises_before_any_socket(
     assert fake.received == []
 
 
-#: ``PbMessageSdpUnit`` {1: 1, 3: {16: 3}}: tag 0x08 (field 1 varint), tag 0x1a (field 3
+#: A ``pbsdp`` message {1: 1, 3: {16: 3}}: tag 0x08 (field 1 varint), tag 0x1a (field 3
 #: bytes) of 3 bytes: tag 0x80 0x01 (field 16 varint), value 3.
 PBSDP_CAPS_3 = base64.b64encode(bytes([0x08, 0x01, 0x1A, 0x03, 0x80, 0x01, 0x03])).decode()
 
