@@ -10,7 +10,7 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
-from .._logging import redact_serial
+from .._logging import LogThrottle, redact_serial
 from ..cloud.models import CloudDevice
 from ..devices.capabilities import Capability, profile_for_serial
 from ..devices.locks import PUSH_STATES, LockReading, LockState, LockStateSource, state_of_code
@@ -61,6 +61,16 @@ _MOVING: Final[Mapping[LockAction, LockState]] = {
 }
 
 
+@dataclass(frozen=True, slots=True)
+class _Report:
+    """The lock's latest dated parameter report or own status report."""
+
+    at: int
+    """Epoch ms it dates from (its arrival, or the cloud's upload time of a copy)."""
+    state: LockState
+    source: LockStateSource
+
+
 @dataclass(slots=True)
 class _Move:
     """A command of this client the lock took."""
@@ -101,8 +111,9 @@ class LockStates:
       the last push taken, or older than the lock's last own status report or dated
       parameter report by more than :data:`LOCK_REPORT_SLACK_SECONDS` (those are dated by
       their arrival or the cloud, a push by the lock's or the cloud's clock). A push of
-      another state dated no later than the report it replaces may be older or newer than
-      it: the reading is unsettled (:meth:`settled`) until the next report taken;
+      another state than that last report, dated no later than it, may be older or newer
+      than it: the reading is unsettled (:meth:`unsettled`) until a report taken settles
+      it; it neither skips a command nor ends a command's wait;
     * the lock's own status report is always taken.
 
     A command of this client the lock took makes it read locking or unlocking
@@ -124,11 +135,11 @@ class LockStates:
         """Per lock, the time of the last push or own status report taken (epoch ms)."""
         self._pushed_ms: dict[str, int] = {}
         """Per lock, the event time of the last push taken (epoch ms)."""
-        self._report_ms: dict[str, int] = {}
-        """Per lock, the latest time a dated parameter report or an own status report dates
-        from (epoch ms)."""
+        self._last_report: dict[str, _Report] = {}
+        """Per lock, its latest dated parameter report or own status report."""
         self._unsettled: set[str] = set()
-        """Locks whose reading is a push that may be older than the report it replaced."""
+        """Locks whose reading is a push that may be older than the lock's last report."""
+        self._unsettled_log = LogThrottle()
         self._watchers: dict[str, list[Callable[[LockReading], None]]] = {}
         self._moving: dict[str, _Move] = {}
         """Per lock, locking or unlocking: a command of this client the lock took, while it
@@ -166,10 +177,15 @@ class LockStates:
     def settled(self, device_sn: str, state: LockState) -> bool:
         """Whether the lock's reading is ``state`` and no report taken may be newer than it:
         a lock command for ``state`` then has nothing to do. False while the reading is a
-        push of another state dated no later than the report it replaced (the order of the
-        two is unknown), so the command is sent."""
+        push of another state than the lock's last dated report, dated no later than it
+        (the order of the two is unknown), so the command is sent."""
         reading = self.reading(device_sn)
-        return reading is not None and reading.state is state and device_sn not in self._unsettled
+        return reading is not None and reading.state is state and not self.unsettled(device_sn)
+
+    def unsettled(self, device_sn: str) -> bool:
+        """Whether the lock's reading is a push that may be older than its last report (see
+        :meth:`settled`): it neither skips nor ends a command's wait."""
+        return device_sn in self._unsettled
 
     def serves(self, device_sn: str) -> bool:
         """Whether ``device_sn`` is one of the devices these states are kept for (its own
@@ -209,7 +225,8 @@ class LockStates:
             device_sn = device.device_sn
             at = _ms(report.at)
             if at is not None:
-                self._report_ms[device_sn] = max(at, self._report_ms.get(device_sn, at))
+                source = _SOURCES.get(report.source, LockStateSource.P2P)
+                self._dated(device_sn, _Report(at, state_of_code(report.value), source))
             if self._raw.get(device_sn) == report.value:
                 if not self._after_push(device_sn, at):
                     continue
@@ -225,6 +242,12 @@ class LockStates:
                     observed_at=report.at,
                 ),
             )
+
+    def _dated(self, device_sn: str, report: _Report) -> None:
+        """Keep ``report`` as the lock's last dated report unless one dates from later."""
+        last = self._last_report.get(device_sn)
+        if last is None or report.at >= last.at:
+            self._last_report[device_sn] = report
 
     def _after_push(self, device_sn: str, at: int | None) -> bool:
         """Whether a report dated ``at`` replaces the push the lock's state came from."""
@@ -259,12 +282,12 @@ class LockStates:
         if (
             now - at > LOCK_PUSH_MAX_AGE_SECONDS * 1000
             or at < self._pushed_ms.get(device_sn, at)
-            or at < self._report_ms.get(device_sn, at) - LOCK_REPORT_SLACK_SECONDS * 1000
+            or at < self._report_at(device_sn, at) - LOCK_REPORT_SLACK_SECONDS * 1000
         ):
             _LOGGER.debug("%s: dropping a lock push older than its state", redact_serial(device_sn))
             return False
         state = PUSH_STATES[event_type]
-        unsettled = self._order_unknown(device_sn, at, state)
+        unsettled = self._predates_report(device_sn, at, state)
         self._push_ms[device_sn] = self._pushed_ms[device_sn] = at
         self._set(
             device_sn,
@@ -278,13 +301,28 @@ class LockStates:
         )
         return True
 
-    def _order_unknown(self, device_sn: str, at: int, state: LockState) -> bool:
-        """Whether a push of ``state`` dated ``at`` may be older than the report it replaces:
-        another state, dated no later than that report (on another clock)."""
-        replaced = self._readings.get(device_sn)
-        if replaced is None or (held := _ms(replaced.observed_at)) is None:
+    def _report_at(self, device_sn: str, default: int) -> int:
+        last = self._last_report.get(device_sn)
+        return default if last is None else last.at
+
+    def _predates_report(self, device_sn: str, at: int, state: LockState) -> bool:
+        """Whether a push of ``state`` dated ``at`` may be older than the lock's last dated
+        report: another state than that report's, dated no later (on another clock)."""
+        last = self._last_report.get(device_sn)
+        if last is None or not (at <= last.at and state is not last.state):
             return False
-        return at <= held and state is not replaced.state
+        if self._unsettled_log.should_log(device_sn):
+            _LOGGER.debug(
+                "%s: lock push (%s) dated %d ms, last report (%s: %s) dated %d ms: order "
+                "unknown, the next lock command is sent",
+                redact_serial(device_sn),
+                state.value,
+                at,
+                last.source.value,
+                last.state.value,
+                last.at,
+            )
+        return True
 
     def on_report(self, device_sn: str, state_code: int) -> None:
         """Take the lock's own status report (a lock-state code), news from now; its code
@@ -292,7 +330,7 @@ class LockStates:
         news."""
         now = self._now_ms()
         self._push_ms[device_sn] = now
-        self._report_ms[device_sn] = max(now, self._report_ms.get(device_sn, now))
+        self._dated(device_sn, _Report(now, state_of_code(state_code), LockStateSource.LOCK))
         self._raw[device_sn] = str(state_code)
         self._set(
             device_sn,
@@ -312,9 +350,12 @@ class LockStates:
         else:
             self._unsettled.discard(device_sn)
         move = self._moving.get(device_sn)
-        # A command's own wait goes on past a report that does not end it (a stale dump);
-        # a failed or cancelled command's hold ends at the lock's next report.
-        if move is not None and (not move.waiting or ends_wait(reading.state, move.target)):
+        # A command's own wait goes on past a report that does not end it (a stale dump, a
+        # push that may predate the last report); a failed or cancelled command's hold ends
+        # at the lock's next report.
+        if move is not None and (
+            not move.waiting or (not unsettled and ends_wait(reading.state, move.target))
+        ):
             del self._moving[device_sn]
             self._end_hold(device_sn)
         for watcher in list(self._watchers.get(device_sn, ())):

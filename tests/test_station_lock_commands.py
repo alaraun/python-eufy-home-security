@@ -187,15 +187,16 @@ async def test_a_lock_already_in_the_asked_state_sends_nothing(
     assert lock_1940.received == []
 
 
-def _push_ms(station: Station, offset_ms: int) -> SecurityEvent:
-    """An unlock push about the 1940 lock, dated ``offset_ms`` from its reading's report."""
+def _push_ms(station: Station, offset_ms: int, event_type: int = 259) -> SecurityEvent:
+    """A push about the 1940 lock (default: unlocked by code), dated ``offset_ms`` from its
+    reading's report."""
     reading = station.lock_state(LOCK_1940)
     assert reading is not None
     assert reading.observed_at is not None
     return SecurityEvent(
         source=EventSource.CLOUD,
         device_sn=LOCK_1940,
-        event_type=259,
+        event_type=event_type,
         event_time_ms=int(reading.observed_at * 1000) + offset_ms,
     )
 
@@ -217,6 +218,53 @@ async def test_a_push_of_another_state_dated_before_the_report_sends_either_comm
     finally:
         await station.async_close()
     assert [a for _, a, _ in lock_1940.received] == [LockAction.UNLOCK]
+
+
+async def test_a_second_push_of_the_same_state_before_the_report_keeps_the_order_unknown(
+    fake: FakeStation, lock_1940: FakeLock
+) -> None:
+    """Two lock pushes dated before the station's unlocked report may both predate it: the
+    second does not settle the reading, so a lock command is sent."""
+    lock_1940.state_code = 3
+    station = await _hub(fake, _lock(LOCK_1940), lock_1940)
+    try:
+        first, second = _push_ms(station, -500, 262), _push_ms(station, -400, 262)
+        assert station.note_lock_push(first) is True
+        assert station.note_lock_push(second) is True
+        assert _state(station) is LockState.LOCKED
+        assert await station.async_lock(LOCK_1940) is LockState.LOCKED
+    finally:
+        await station.async_close()
+    assert [a for _, a, _ in lock_1940.received] == [LockAction.LOCK]
+
+
+@pytest.mark.parametrize(
+    ("offset_ms", "ends"), [(-3_000, False), (1, True)], ids=["unsettled", "settled"]
+)
+async def test_only_a_settled_push_ends_a_commands_wait(
+    fake: FakeStation, lock_1940: FakeLock, offset_ms: int, ends: bool
+) -> None:
+    """An unlock the lock took waits for its state: a push of that state dated before the
+    station's last report does not end the wait, the next report does; a push dated after
+    the report ends it."""
+    lock_1940.state_code = 4
+    lock_1940.report = False
+    station = await _hub(fake, _lock(LOCK_1940), lock_1940)
+    try:
+        push = _push_ms(station, offset_ms)
+        unlocking = asyncio.create_task(station.async_unlock(LOCK_1940, timeout=5))
+        await _until(lambda: _state(station) is LockState.UNLOCKING)
+        assert station.note_lock_push(push) is True
+        await asyncio.sleep(0.1)
+        assert unlocking.done() is ends
+        if not ends:
+            assert _state(station) is LockState.UNLOCKING
+            fake.params[lock_1940.channel][1912] = "3"
+            fake.send_param_dump()
+        async with asyncio.timeout(5):
+            assert await unlocking is LockState.UNLOCKED
+    finally:
+        await station.async_close()
 
 
 async def test_a_push_of_the_same_state_dated_before_the_report_keeps_the_shortcut(

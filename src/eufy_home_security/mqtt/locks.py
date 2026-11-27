@@ -250,7 +250,8 @@ class MqttLocks:
         state: asyncio.Future[LockState] = loop.create_future()
 
         def on_reading(taken: LockReading) -> None:
-            if not state.done() and ends_wait(taken.state, target):
+            # A push that may predate the lock's last report does not confirm the command.
+            if not state.done() and not states.unsettled(serial) and ends_wait(taken.state, target):
                 state.set_result(taken.state)
 
         unwatch = states.watch(serial, on_reading)

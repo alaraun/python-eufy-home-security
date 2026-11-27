@@ -183,8 +183,8 @@ acknowledgement alone never counts. In order:
    `MqttAccountRequiredError`; a command still waiting for the same lock raises
    `DeviceBusyError`. A lock whose reading already is the asked state returns it at once
    and sends nothing (the app's lock card offers lock only for a lock it shows open,
-   unlock otherwise), unless that reading is a push that may be older than the report it
-   replaced (another state, dated no later, on another clock): then the command is sent.
+   unlock otherwise), unless that reading is a push that may be older than the lock's last
+   report (another state, dated no later, on another clock): then the command is sent.
    The reading is the lock's one merged reading of every source (its station's reports,
    pushes, its status reports over the station or MQTT; the newest report wins,
    [events.md](events.md#lock-pushes-declared-app)) on both paths, never the MQTT reports

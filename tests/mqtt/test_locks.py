@@ -8,6 +8,7 @@ import base64
 import dataclasses
 import gc
 import json
+import logging
 import secrets
 import time
 from collections.abc import Callable, Iterator
@@ -753,6 +754,66 @@ async def test_a_push_inside_the_slack_before_an_mqtt_report_is_taken_and_comman
         with pytest.raises(DeviceTimeoutError):
             await locks.async_command(device, action, control=control, timeout=5)
     assert len(account.waits) == 2
+
+
+async def test_a_second_push_of_the_same_state_before_an_mqtt_report_keeps_the_order_unknown(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Two lock pushes dated before an unlocked MQTT report (inside the slack) may both
+    predate it: the second one does not settle the reading, so a lock command is sent.
+    The unknown order is logged once per lock (throttled)."""
+    caplog.set_level(logging.DEBUG, logger="eufy_home_security.station.locks")
+    now = 1_700_000_000_000
+    device = lock()
+    states = ListedLocks(EventBus(), lambda: [device], now_ms=lambda: now)
+    account = _Recording()
+    locks = _listed_lock_commands(account, device, states=states)
+    states.on_report(LOCK_SN, 3)
+    assert states.on_push(_push(262, now - 500)) is True
+    assert states.on_push(_push(262, now - 400)) is True
+    assert states.reading(LOCK_SN).state is LockState.LOCKED  # type: ignore[union-attr]
+    with pytest.raises(DeviceTimeoutError):
+        await locks.async_command(
+            device, LockAction.LOCK, control=mqtt_lock_control(device), timeout=5
+        )
+    assert len(account.waits) == 1
+    unknown = [r.getMessage() for r in caplog.records if "order unknown" in r.getMessage()]
+    assert unknown == [
+        f"T85D0***4321: lock push (locked) dated {now - 500} ms, last report (lock: unlocked) "
+        f"dated {now} ms: order unknown, the next lock command is sent"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("offset_ms", "ends"), [(-3_000, False), (1, True)], ids=["unsettled", "settled"]
+)
+async def test_only_a_settled_push_ends_an_mqtt_commands_wait(
+    rig: Rig, wifi_lock: FakeMqttLock, offset_ms: int, ends: bool
+) -> None:
+    """An unlock the lock took waits for its state: a push of that state dated before the
+    lock's last report (the order of the two unknown) does not end the wait, the lock's
+    own report does; a push dated after the report ends it."""
+    account = await _served(rig)
+    try:
+        await wifi_lock.async_report(4)
+        await until(lambda: rig.eufy.lock_state(LOCK_SN) is not None)
+        reported = rig.eufy.lock_state(LOCK_SN).observed_at  # type: ignore[union-attr]
+        assert reported is not None
+        wifi_lock.report = False
+        unlocking = asyncio.create_task(rig.eufy.async_unlock(LOCK_SN, timeout=5))
+        await until(
+            lambda: rig.eufy.lock_state(LOCK_SN).state is LockState.UNLOCKING  # type: ignore[union-attr]
+        )
+        rig.eufy._deliver(_push(257, int(reported * 1000) + offset_ms))
+        await asyncio.sleep(0.1)
+        assert unlocking.done() is ends
+        if not ends:
+            assert rig.eufy.lock_state(LOCK_SN).state is LockState.UNLOCKING  # type: ignore[union-attr]
+            await wifi_lock.async_report(3)
+        async with asyncio.timeout(5):
+            assert await unlocking is LockState.UNLOCKED
+    finally:
+        await account.async_stop()
 
 
 @pytest.mark.parametrize("keep", [False, True], ids=["call-ended", "hold-expired"])

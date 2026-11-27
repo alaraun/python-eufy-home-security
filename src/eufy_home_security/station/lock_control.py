@@ -412,7 +412,12 @@ class StationLockControl:
         )
 
         def on_reading(reading: LockReading) -> None:
-            if not pending.state.done() and ends_wait(reading.state, target):
+            # A push that may predate the lock's last report does not confirm the command.
+            if (
+                not pending.state.done()
+                and not self._locks.unsettled(serial)
+                and ends_wait(reading.state, target)
+            ):
                 pending.state.set_result(reading.state)
 
         if form in (LockForm.P2P_1940, LockForm.P2P_1940_HKDF):

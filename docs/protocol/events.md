@@ -653,9 +653,11 @@ per lock, and the newest report wins, with the guard mode's bounds:
 - a push (dated by its event time, by its arrival without one) is dropped when it is more
   than 300 s old, older than the last push taken for that lock, or more than 30 s older
   than the lock's last status report or dated parameter report (its arrival over P2P or
-  MQTT, the cloud's upload time of its copy). A push of another state dated no later than
-  the report it replaces is taken, but the two clocks leave their order unknown: until the
-  next report taken, a lock command is sent whatever the reading says
+  MQTT, the cloud's upload time of its copy). A push of another state than that last
+  report, dated no later than it, is taken, but the two clocks leave their order unknown:
+  until a report that settles it (a later push, a push of the report's state, the lock's
+  own report, a parameter report taken), a lock command is sent whatever the reading says
+  and such a push does not end a command's wait for its state
   ([locks.md](locks.md#commands));
 - the lock's own status report (dated by its arrival) is always taken, and its code
   becomes the lock's last value;
