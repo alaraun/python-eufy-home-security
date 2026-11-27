@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import struct
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
@@ -379,12 +379,65 @@ def test_an_e2e_record_wrapped_for_another_cipher_is_foreign() -> None:
     assert decoder.aes_key == b""
 
 
-def test_an_e2e_record_with_a_broken_tag_raises_protocol_error() -> None:
+def test_an_e2e_record_with_a_broken_tag_under_a_confirmed_key_raises_protocol_error() -> None:
+    """A wrap whose key string already opened a record: a tag failure is a corrupt record."""
     decoder = _e2e_decoder(c7=_E2E_CIPHER)
-    record = bytearray(_e2e_video(_PICTURE))
-    record[media.E2E_VIDEO_HEADER_LEN] ^= 1  # the tag's first byte
-    with pytest.raises(ProtocolError, match="GCM tag"):
-        decoder.decode(FrameType.VIDEO_FRAME, bytes(record), _E2E_SUB)
+    record = _e2e_video(_PICTURE)
+    assert decoder.decode(FrameType.VIDEO_FRAME, record, _E2E_SUB) is not None
+    broken = bytearray(record)
+    broken[media.E2E_VIDEO_HEADER_LEN] ^= 1  # the tag's first byte
+    with pytest.raises(ProtocolError, match="GCM tag") as err:
+        decoder.decode(FrameType.VIDEO_FRAME, bytes(broken), _E2E_SUB)
+    assert not isinstance(err.value, media._ForeignKeyframeError)
+
+
+class _WrongUnwrap:
+    """A cipher key whose unwrap gives 47 bytes that are not the record's key string, as an
+    RSA unwrap under another key with implicit rejection does about once in a hundred."""
+
+    def decrypt(self, _ciphertext: bytes, _padding: object) -> bytes:
+        return bytes(range(65, 65 + 47))
+
+
+def test_an_e2e_key_string_whose_first_tag_fails_is_foreign_and_not_kept() -> None:
+    """An unwrap no record has confirmed, failing its tag, is another cipher's wrap: the
+    record is foreign, and neither the key string nor the wrap is kept for the next one."""
+    decoder = _e2e_decoder(c7=cast(rsa.RSAPrivateKey, _WrongUnwrap()))
+    record = _e2e_video(_PICTURE)
+    with pytest.raises(media._ForeignKeyframeError, match="failed its GCM tag"):
+        decoder.decode(FrameType.VIDEO_FRAME, record, _E2E_SUB)
+    assert decoder.aes_key == b""
+    assert decoder.decode(FrameType.AUDIO_FRAME, _e2e_audio(b"\xff\xf1AAC"), _E2E_SUB) is None
+    decoder.add_e2e_key(7, _E2E_CIPHER)
+    frame = decoder.decode(FrameType.VIDEO_FRAME, record, _E2E_SUB)  # the same wrap
+    assert frame is not None
+    assert frame.data == _PICTURE
+
+
+@pytest.mark.parametrize(
+    "wrapped_plain",
+    [b"\x01" * 16, bytes(range(65, 65 + 47))],
+    ids=["other-length", "47-bytes-failing-its-tag"],
+)
+def test_a_foreign_e2e_record_mid_stream_leaves_the_kept_key_string(
+    wrapped_plain: bytes,
+) -> None:
+    """A record of another wrap that does not decode is foreign, whether its key string
+    has another length or 47 bytes that fail the tag: the kept key string stays, so audio
+    and the next record under the kept wrap still decode."""
+    decoder = _e2e_decoder(c7=_E2E_CIPHER)
+    good = _e2e_video(_PICTURE)
+    assert decoder.decode(FrameType.VIDEO_FRAME, good, _E2E_SUB) is not None
+    foreign = _e2e_video(_PICTURE, wrapped_plain=wrapped_plain)
+    with pytest.raises(media._ForeignKeyframeError):
+        decoder.decode(FrameType.VIDEO_FRAME, foreign, _E2E_SUB)
+    assert decoder.aes_key == _E2E_SECRET[:32]
+    audio = decoder.decode(FrameType.AUDIO_FRAME, _e2e_audio(b"\xff\xf1AAC"), _E2E_SUB)
+    assert audio is not None
+    assert audio.data == b"\xff\xf1AAC"
+    frame = decoder.decode(FrameType.VIDEO_FRAME, good, _E2E_SUB)
+    assert frame is not None
+    assert frame.data == _PICTURE
 
 
 def test_an_e2e_record_too_short_for_its_tag_raises_protocol_error() -> None:
@@ -449,6 +502,104 @@ def test_an_e2e_record_of_the_users_pin_key_is_refused_naming_it() -> None:
 
 def test_a_record_that_is_not_e2e_needs_no_e2e_key() -> None:
     assert _e2e_decoder().e2e_refusal(bytes([1, 0, 0, 1, 10, 0])) is None
+
+
+# ── version-9 records: the user's PIN key on a recording ────────────────────
+
+#: A version-9 record's key and a wrap no key the client holds opens.
+_V9_KEY = testing_station.EccMediaKey(bytes(range(32)), bytes(range(129)))
+_V9_PICTURE = b"\x00\x00\x00\x01\x40\x01" + bytes(64)
+
+
+def _v9_sub(key_id: int, version: int = 9) -> bytes:
+    return bytes([version, 0, 1, key_id, 10, 0])
+
+
+def _ecc_record(key: testing_station.EccMediaKey = _V9_KEY, *, keyframe: bool = True) -> bytes:
+    record = testing_station.video_record(_V9_PICTURE, keyframe=keyframe, timestamp_ms=40)
+    return testing_station.ecc_video_record(record, key)
+
+
+def _recording_decoder(offer: media.MediaKeyType) -> media.MediaDecoder:
+    if offer is media.MediaKeyType.RSA:
+        return media.MediaDecoder(media.generate_media_rsa_key()[1], e2e_keys={})
+    return media.MediaDecoder(ecc_private_key=media.generate_media_ecc_key()[1], e2e_keys={})
+
+
+@pytest.mark.parametrize("offer", list(media.MediaKeyType))
+def test_a_version_9_recording_record_is_refused_as_the_users_pin_key(
+    offer: media.MediaKeyType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Version 9 on a recording is wrapped for the user's PIN key whatever the open
+    offered: refused naming byte 3 as the key id, before any unwrap."""
+
+    def no_unwrap(*_args: object) -> bytes:
+        raise AssertionError("a record of the PIN key is not unwrapped")
+
+    monkeypatch.setattr(media, "ecies_decrypt", no_unwrap)
+    decoder = _recording_decoder(offer)
+    with pytest.raises(PinProtectedKeyError, match=r"key id 12\)") as err:
+        decoder.decode(FrameType.VIDEO_FRAME, _ecc_record(), _v9_sub(12))
+    assert (err.value.key_type, err.value.key_id) == (E2EKeyType.PIN, 12)
+    assert decoder.aes_key == b""
+    assert isinstance(decoder.e2e_refusal(_v9_sub(12)), PinProtectedKeyError)
+
+
+def test_a_version_9_record_without_a_key_id_names_the_latest_one() -> None:
+    """Byte 3 below 2 names no key: the record uses the key of the latest version-9
+    record with one, or byte 3 itself when none came before."""
+    decoder = _recording_decoder(media.MediaKeyType.RSA)
+    ids = []
+    for key_id in (1, 2, 0, 13, 1):
+        refusal = decoder.e2e_refusal(_v9_sub(key_id))
+        assert isinstance(refusal, PinProtectedKeyError)
+        ids.append(refusal.key_id)
+    assert ids == [1, 2, 2, 13, 13]
+    assert decoder.e2e_refusal(_v9_sub(10, version=4)) is not None
+    refusal = decoder.e2e_refusal(_v9_sub(0))
+    assert refusal is not None
+    assert refusal.key_id == 13, "a version-4 record names no version-9 key"
+
+
+def test_a_version_9_live_record_decodes_under_the_stream_key() -> None:
+    decoder, key = _ecc_decoder()
+    assert decoder.e2e_refusal(_v9_sub(12)) is None
+    frame = decoder.decode(FrameType.VIDEO_FRAME, _ecc_record(key), _v9_sub(12))
+    assert frame is not None
+    assert frame.data == _V9_PICTURE
+    assert decoder.aes_key == key.key
+
+
+def test_a_version_8_recording_record_decodes_under_the_stream_key() -> None:
+    public_hex, priv = media.generate_media_ecc_key()
+    decoder = media.MediaDecoder(ecc_private_key=priv, e2e_keys={})
+    key = testing_station.EccMediaKey.for_offer(public_hex)
+    assert decoder.e2e_refusal(_v9_sub(1, version=8)) is None
+    frame = decoder.decode(FrameType.VIDEO_FRAME, _ecc_record(key), _v9_sub(1, version=8))
+    assert frame is not None
+    assert frame.data == _V9_PICTURE
+
+
+def test_version_9_audio_on_a_recording_is_dropped() -> None:
+    """A recording's version-9 audio needs the PIN key too; version 8 audio after it still
+    decodes under the stream key."""
+    public_hex, priv = media.generate_media_ecc_key()
+    decoder = media.MediaDecoder(ecc_private_key=priv, e2e_keys={})
+    key = testing_station.EccMediaKey.for_offer(public_hex)
+    decoder.decode(FrameType.VIDEO_FRAME, _ecc_record(key), _v9_sub(1, version=8))
+    audio = testing_station.ecc_audio_record(
+        testing_station.audio_record(b"\xff\xf1AAC", timestamp_ms=5), key
+    )
+    assert decoder.decode(FrameType.AUDIO_FRAME, audio, _v9_sub(12)) is None
+    frame = decoder.decode(FrameType.AUDIO_FRAME, audio, _v9_sub(1, version=8))
+    assert frame is not None
+    assert frame.data == b"\xff\xf1AAC"
+    live, live_key = _ecc_decoder()
+    live.decode(FrameType.VIDEO_FRAME, _ecc_record(live_key), _v9_sub(12))
+    live_audio = testing_station.ecc_audio_record(
+        testing_station.audio_record(b"\xff\xf1AAC", timestamp_ms=5), live_key
+    )
+    assert live.decode(FrameType.AUDIO_FRAME, live_audio, _v9_sub(12)) is not None
 
 
 def test_a_live_decoder_decodes_no_e2e_record() -> None:

@@ -55,7 +55,9 @@ def test_rssi_param_alias_names_the_wifi_signal() -> None:
         (84, None),  # a P2P cipher id: no end-to-end encryption
         (0x00FFFFFF, None),
         (0x01000002, None),  # a type the app does not know
-        (0x09000002, None),
+        (0x0900000C, E2EKey(E2EKeyType.PIN, 12)),  # type 9: the PIN key, as type 4
+        (0x09000002, E2EKey(E2EKeyType.PIN, 2)),
+        (0x0800000C, None),  # type 8: the owner's cipher, which the station names per record
         (-1, None),
         (None, None),
     ],

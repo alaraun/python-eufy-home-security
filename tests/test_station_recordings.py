@@ -898,6 +898,15 @@ async def test_a_record_its_row_names_under_a_cloud_cipher_plays_with_the_key_fe
             },
             "PIN-protected key \\(key id 10\\)",
         ),
+        (  # the same key named by a type-9 row
+            {
+                "record_id": 1,
+                "device_sn": SYNTHETIC.camera_sn,
+                "storage_path": "/zx/a.zxvideo",
+                "cipher_id": 0x0900000C,
+            },
+            "PIN-protected key \\(key id 12\\)",
+        ),
     ],
 )
 @pytest.mark.parametrize("transfer", ["async_download_recording", "async_play_recording"])

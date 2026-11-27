@@ -38,6 +38,7 @@ from eufy_home_security.p2p.media import (
     MediaKeyType,
     MediaKind,
     VideoVariant,
+    generate_media_ecc_key,
     generate_media_rsa_key,
 )
 from eufy_home_security.p2p.messages import (
@@ -56,10 +57,12 @@ from eufy_home_security.testing.station import (
     MEDIA_KEYFRAME,
     MEDIA_RECORDING_PFRAME,
     E2EMediaKey,
+    EccMediaKey,
     FakeStation,
     audio_record,
     e2e_audio_record,
     e2e_video_record,
+    ecc_video_record,
     video_record,
 )
 
@@ -1049,6 +1052,44 @@ async def test_a_held_record_that_fails_the_stream_ends_the_replay(e2e_hb2: Fake
     finally:
         await stream.aclose()
         await session.async_close()
+
+
+@pytest.mark.parametrize("offer", list(MediaKeyType))
+async def test_a_version_9_record_fails_a_recording_with_the_users_pin_key(
+    e2e_hb2: FakeStation, offer: MediaKeyType
+) -> None:
+    """Version 9 on a recording is wrapped for the user's PIN key: the stream fails before
+    its first keyframe naming it, on an RSA and an ECC offer alike, and fetches nothing."""
+    keys = _Keys()
+    session = _session(e2e_hb2, keys)
+    decoder = (
+        MediaDecoder(generate_media_rsa_key()[1], e2e_keys={})
+        if offer is MediaKeyType.RSA
+        else MediaDecoder(ecc_private_key=generate_media_ecc_key()[1], e2e_keys={})
+    )
+    stream = MediaStream(
+        session,
+        command=CMD_RECORD_VIEW,
+        channel=CAMERA,
+        decoder=decoder,
+        stop_body=None,
+        first_frame_timeout=5.0,
+        idle_timeout=5.0,
+    )
+    record = ecc_video_record(
+        video_record(MEDIA_KEYFRAME, keyframe=True, timestamp_ms=1000),
+        EccMediaKey(bytes(range(32)), bytes(range(129))),
+    )
+    try:
+        stream._feed(FrameType.VIDEO_FRAME, record, subheader=bytes([9, 0, CAMERA, 12, 1, 0]))
+        async with asyncio.timeout(5):
+            with pytest.raises(PinProtectedKeyError, match=r"key id 12\)") as err:
+                await anext(stream)
+    finally:
+        await stream.aclose()
+        await session.async_close()
+    assert (err.value.key_type, err.value.key_id) == (E2EKeyType.PIN, 12)
+    assert keys.asked == []
 
 
 async def test_a_key_fetch_past_the_first_frame_wait_ends_the_stream_naming_the_cipher(
