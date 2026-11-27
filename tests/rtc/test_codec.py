@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import struct
 
 import pytest
 
@@ -254,3 +255,13 @@ def test_a_header_only_datagram_is_not_taken_for_a_wrapper() -> None:
 def test_the_discover_answer_keeps_the_current_server_for_an_empty_one() -> None:
     for body in (b'{"server_addr": ""}', b"{}", b'{"server_addr": 5}'):
         assert DiscoverAnswer.decode(body).login_address("203.0.113.1") == "203.0.113.1"
+
+
+def test_a_pad_byte_past_the_declared_total_is_refused() -> None:
+    # total 5, pad 10: the packet length would be negative.
+    datagram = (
+        struct.pack("<HH", codec.OBFUSCATION_MAGIC, 5) + bytes(16) + bytes([10, 0]) + bytes(5)
+    )
+    assert codec.is_obfuscated(datagram)
+    with pytest.raises(ProtocolError, match="shorter than it declares"):
+        codec.deobfuscate(datagram)
