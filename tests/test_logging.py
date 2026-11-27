@@ -211,6 +211,32 @@ def test_payload_masks_a_numeric_location() -> None:
     assert "59.4372" in str(Payload(body))
 
 
+_PREFIXED_COORDINATES = {
+    "gps_latitude": 12.3456,
+    "sw_lng": "-45.6789",
+    "neLat": 7.0625,
+    "filter_gps": 1,
+    "alarm_time_long": 30,
+}
+
+
+@pytest.mark.usefixtures("_secrets_restored")
+def test_payload_and_hexdump_mask_a_coordinate_by_its_last_word() -> None:
+    """A prefixed coordinate key is masked like ``lat``, in a payload and in a hexdump;
+    ``filter_gps`` and ``alarm_time_long`` hold no coordinate and stay."""
+    result = str(Payload(_PREFIXED_COORDINATES))
+    hidden = _hidden_bytes(json.dumps(_PREFIXED_COORDINATES).encode())
+    for shown in ("12.3456", "45.6789", "7.0625"):
+        assert shown not in result
+        assert shown.encode() not in hidden
+    for kept in ('"filter_gps": 1', '"alarm_time_long": 30'):
+        assert kept in result
+        assert kept.encode() in hidden
+
+    set_secret_logging(True)
+    assert "12.3456" in str(Payload(_PREFIXED_COORDINATES))
+
+
 _LIGHT_AT_HOME = {
     "enable": 1,
     "sunset2rise": {"latitude": 59.4372, "longtitude": "24.7536", "lng": -2.25},
@@ -388,7 +414,9 @@ def test_the_location_keys_are_the_identifying_keys_that_locate_the_house() -> N
         "address", "houseaddress", "location", "latitude", "longitude", "longtitude", "lat",
         "lng", "lon",
     } == LOCATION_KEYS  # fmt: skip
-    assert {"address", "addr"} == LOCATION_KEY_SUFFIXES
+    assert {
+        "address", "addr", "latitude", "longitude", "longtitude", "lat", "lng", "lon",
+    } == LOCATION_KEY_SUFFIXES  # fmt: skip
     assert LOCATION_KEYS <= IDENTIFYING_KEYS
     assert LOCATION_KEY_SUFFIXES <= IDENTIFYING_KEY_SUFFIXES
 
@@ -419,8 +447,22 @@ def test_redact_location_matches_keys_as_the_logs_do(key: str) -> None:
 
 @pytest.mark.parametrize(
     "key",
+    ["gps_lat", "gps_latitude", "GPS_LONGITUDE", "sw_lat", "ne_lng", "neLng", "home-lon",
+     "neLat", "ecl_mow_gps_info_robot_position_longitude", "GPSLatitude", "point1Lat",
+     "sunset_longtitude", "latLng", "lat_lng"],
+)  # fmt: skip
+def test_redact_location_drops_a_key_whose_last_word_is_a_coordinate(key: str) -> None:
+    """A coordinate word after any prefix: a photo's ``gps_latitude``, a map corner's
+    ``sw_lat``, a mower's
+    ``ecl_mow_gps_info_robot_position_longitude``."""
+    assert redact_location({key: 12.3456, "enable": 1}) == {"enable": 1}
+
+
+@pytest.mark.parametrize(
+    "key",
     ["name", "path", "s", "sn", "ip", "mac", "table_name", "address_book", "relation",
-     "sun_set", "flat"],
+     "sun_set", "flat", "filter_gps", "coordinates", "click_coord", "img_sn_location",
+     "preset_position", "alarm_time_long", "lat_count", "latest_ts", "platform"],
 )  # fmt: skip
 def test_redact_location_keeps_members_that_locate_nothing(key: str) -> None:
     """Other identifying keys and keys merely containing a location word stay."""
