@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import gc
 import importlib.util
+import inspect
 import logging
 import sys
 from collections.abc import AsyncIterator
@@ -92,6 +93,8 @@ def test_the_aioice_internals_the_transport_stops_are_there(aioice: Any) -> None
     pair = aioice.ice.CandidatePair(None, candidate)
     assert pair.task is None
     assert aioice.Connection.check_start.__qualname__ == "Connection.check_start"
+    gather = inspect.signature(aioice.Connection.get_component_candidates)
+    assert gather.parameters["timeout"].default == ice_mod.AIOICE_GATHER_TIMEOUT
 
 
 @needs_aioice

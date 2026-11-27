@@ -24,6 +24,7 @@ from eufy_home_security.exceptions import (
 )
 from eufy_home_security.rtc import _ikcp
 from eufy_home_security.rtc import client as client_mod
+from eufy_home_security.rtc import ice as ice_mod
 from eufy_home_security.rtc import session as session_mod
 from eufy_home_security.rtc.codec import MessageType
 from eufy_home_security.rtc.config import KCP_TYPE_MULTI, KCP_TYPE_SINGLE, QuickLogin, ServerInfo
@@ -240,15 +241,20 @@ class _Largest:
 
 
 def test_the_first_start_bound_covers_a_slow_but_working_connect() -> None:
-    """DISCOVER, the first LOGIN wait, the CALL's wake re-sends, the answer and ICE."""
+    """DISCOVER, a refused quick login's LOGIN wait and the key exchange's, gathering,
+    the CALL's wake re-sends and TCP connect, the answer and ICE."""
+    first_login_wait = login_retry_delays(_Largest())[0]  # type: ignore[arg-type]
     steps = (
         client_mod.DISCOVER_ATTEMPTS * client_mod.DISCOVER_TIMEOUT
-        + login_retry_delays(_Largest())[0]  # type: ignore[arg-type]
+        + 2 * first_login_wait
+        + ice_mod.AIOICE_GATHER_TIMEOUT
         + client_mod.CALL_REPLY_TIMEOUT * client_mod.WAKE_ATTEMPTS
+        + client_mod.TCP_CONNECT_TIMEOUT
         + session_mod.ANSWER_TIMEOUT
         + session_mod.ICE_TIMEOUT
     )
-    assert steps < session_mod.START_TIMEOUT == 150.0
+    assert steps == 157.0
+    assert steps + 20 < session_mod.START_TIMEOUT == 180.0
 
 
 def test_candidates_are_resent_on_the_apps_schedule() -> None:
@@ -495,7 +501,9 @@ async def test_acks_of_numbers_the_client_never_sent_do_not_stop_its_resends(
     session = make_session()
     await session.start()
     await until(lambda: fake.client_candidates)
-    for foreign in (5, 6, -1):
+    assert session._attempt is not None
+    own = len(session._attempt.candidates)
+    for foreign in (5, 6, -1, own):  # ``own``: one past the client's last number
         fake.send_info({"file_candidate_ack": foreign})
     sent = len(fake.client_candidates)
     await until(lambda: len(fake.client_candidates) >= sent + 2)
@@ -553,6 +561,7 @@ async def test_real_ice_that_times_out_leaves_nothing_running(
             await session.start()
         assert ice_checks() == []
         await settled(handler_errors)
+        assert server.refused == []
     finally:
         await session.close()
         await server.close()
@@ -574,6 +583,7 @@ async def test_close_during_real_ice_checks_leaves_nothing_running(
         with pytest.raises(CommunicationError):
             await start
         await settled(handler_errors)
+        assert server.refused == []
     finally:
         await session.close()
         await server.close()

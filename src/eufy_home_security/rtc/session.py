@@ -62,8 +62,9 @@ DATA_CALL_CHANNEL: Final = 0
 #: How long the data channel's ICE may take once the answer is in (the eufy app's wait).
 ICE_TIMEOUT: Final = 20.0
 #: How long the first :meth:`RtcSession.start` waits for a connection, all steps and
-#: retries together; it covers a slow but working connect (a library bound).
-START_TIMEOUT: Final = 150.0
+#: retries together; it covers a slow but working connect with a margin (a library
+#: bound). The cleanup after it runs outside it.
+START_TIMEOUT: Final = 180.0
 #: How long the CALL waits for the device's answer.
 ANSWER_TIMEOUT: Final = 60.0
 #: After a loss: wait, close everything, wait, connect again (the eufy app's schedule).

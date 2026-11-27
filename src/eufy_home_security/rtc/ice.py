@@ -11,8 +11,9 @@ are taken per connection.
 aioice stops its connectivity checks only when its connect finishes. A connect that is
 cancelled or times out, or a close while the checks run, therefore cancels and awaits
 every check of the connection's check list here, so no STUN retry is left to fire on a
-closed socket. With a TURN server, a cancel during gathering (or an allocation slower
-than aioice's 5 s gathering bound) leaves aioice's TURN socket to the garbage collector.
+closed socket. With a TURN server, a cancel during gathering, or an allocation slower
+than aioice's 5 s gathering bound (an unreachable TURN server), leaves aioice's TURN
+socket to the garbage collector.
 
 :mod:`aioice` is imported on first use; without the extra the constructor raises
 :class:`~.exceptions.MissingDependencyError`. See ``docs/protocol/rtc-signaling.md``
@@ -36,6 +37,9 @@ _LOGGER = logging.getLogger(__name__)
 
 #: Remote candidates taken per connection; more are dropped.
 MAX_REMOTE_CANDIDATES: Final = 16
+
+#: aioice's own bound on gathering STUN and TURN candidates, in seconds.
+AIOICE_GATHER_TIMEOUT: Final = 5.0
 
 #: The aioice connection's list of candidate pairs; each pair's ``task`` runs its check.
 _CHECK_LIST: Final = "_check_list"
