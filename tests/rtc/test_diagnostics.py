@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator, Callable
 from typing import Any
 
 import pytest
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.exceptions import MissingDependencyError
@@ -28,6 +29,7 @@ from eufy_home_security.rtc.diagnostics import (
     placeholder,
     rtc_stations,
 )
+from eufy_home_security.rtc.sdp import read_pbsdp
 from eufy_home_security.rtc.session import ConnectStep, RtcSession
 from eufy_home_security.testing import SYNTHETIC
 from eufy_home_security.testing.rtc import (
@@ -99,12 +101,12 @@ def run(fake: FakeRtcServer) -> Callable[..., Any]:
         listed = listed or (station_entry(),)
         found = devices(*listed)
         kwargs.setdefault("seconds", 0.3)
+        kwargs.setdefault("ice_factory", fake.ice_factory)
         return await async_diagnose_station(
             found[0],
             found,
             user_id=SYNTHETIC.account_id,
             app_id=APP_ID,
-            ice_factory=fake.ice_factory,
             signaling_port=fake.port,
             tcp_ports=(fake.tcp_port,),
             **kwargs,
@@ -239,6 +241,7 @@ async def test_a_full_run_records_every_step(fake: FakeRtcServer, run: Any) -> N
         "turn",
     )
     assert call.answer_values["transport_caps"] == 3
+    assert (call.transport_caps, call.transport_caps_source) == (3, "json")
     assert call.answer_values["call_type"] == "scall"
     assert call.answer_values["request_id"] == "<request_id:17>"
     assert call.answer_values["sdp_info"].startswith("<sdp_info:")
@@ -564,7 +567,9 @@ def test_answer_values_keep_only_allowed_short_values(
 def test_answer_key_names_are_bounded() -> None:
     names = diag._key_names({f"{'k' * 50}{i:03d}": i for i in range(100)})
     assert len(names) == diag.MAX_ANSWER_KEYS
-    assert all(len(n) == diag.MAX_KEY_LEN for n in names)
+    assert set(names) == {"<key:53>"}
+    longest = "k" * diag.MAX_KEY_LEN
+    assert diag._key_names({longest: 1, longest + "k": 1}) == (f"<key:{len(longest) + 1}>", longest)
 
 
 def test_the_budget_covers_the_session_bound_the_watch_and_the_probes() -> None:
@@ -669,9 +674,149 @@ async def test_without_the_extra_the_run_raises_before_any_socket(
     assert fake.received == []
 
 
-async def test_a_pbsdp_answer_is_recorded_by_length(fake: FakeRtcServer, run: Any) -> None:
-    fake.pbsdp = base64.b64encode(struct.pack("<BB", 0x10, 3)).decode()
+#: ``PbMessageSdpUnit`` {1: 1, 3: {16: 3}}: tag 0x08 (field 1 varint), tag 0x1a (field 3
+#: bytes) of 3 bytes: tag 0x80 0x01 (field 16 varint), value 3.
+PBSDP_CAPS_3 = base64.b64encode(bytes([0x08, 0x01, 0x1A, 0x03, 0x80, 0x01, 0x03])).decode()
+
+
+@pytest.mark.parametrize(
+    ("pbsdp", "json_caps", "caps", "source", "decoded", "fields"),
+    [
+        (PBSDP_CAPS_3, 1, 3, "pbsdp", True, (1, 3)),  # pbsdp wins over the JSON key
+        (base64.b64encode(struct.pack("<BB", 0x10, 3)).decode(), 3, 0, "pbsdp", True, (2,)),
+        ("not base64!", 3, 0, "pbsdp", False, ()),  # undecodable: 0, never the JSON key
+        ("", 1, 1, "json", None, ()),  # empty pbsdp: the JSON key
+        (None, 3, 3, "json", None, ()),
+        (None, None, None, "none", None, ()),
+    ],
+)
+async def test_transport_caps_come_from_pbsdp_else_the_json_key(  # noqa: PLR0917
+    fake: FakeRtcServer,
+    run: Any,
+    pbsdp: str | None,
+    json_caps: int | None,
+    caps: int | None,
+    source: str,
+    decoded: bool | None,
+    fields: tuple[int, ...],
+) -> None:
+    fake.pbsdp = pbsdp
+    fake.transport_caps = json_caps
     report = await run()
-    assert report.call.pbsdp_len == 4
-    assert report.call.transport_caps is None
-    assert report.call.answer_values["pbsdp"] == "<pbsdp:4>"
+    call = report.call
+    assert (call.transport_caps, call.transport_caps_source) == (caps, source)
+    assert (call.pbsdp_decoded, call.pbsdp_fields) == (decoded, fields)
+    assert call.transport == "kcp"
+    if pbsdp:
+        assert call.pbsdp_len == len(pbsdp)
+        assert call.answer_values["pbsdp"] == f"<pbsdp:{len(pbsdp)}>"
+
+
+def test_the_sdp_unit_fields_are_recorded() -> None:
+    reading = read_pbsdp(PBSDP_CAPS_3)
+    assert reading is not None
+    assert reading.sdp_fields == (16,)
+
+
+def guard_mode_frame(sealed: bool) -> bytes:
+    """A PARAM_NOTIFY frame naming param 1224, clear or sealed as a station seals it."""
+    body = json.dumps({"params": [{"param_type": "1224", "param_value": "1"}]}).encode()
+    if not sealed:
+        return encode_frame(0x044F, body, bytes(6))
+    iv = bytes(range(12))
+    sealed_body = AESGCM(DEVICE_INFO.content_key.encode()[:16]).encrypt(iv, body, b"eufy security")
+    payload = sealed_body[-16:] + iv + sealed_body[:-16]  # tag | iv | ciphertext
+    return encode_frame(0x044F, payload, bytes([10, 0, 0, 0, 0, 0]))
+
+
+@pytest.mark.parametrize("sealed", [False, True])
+async def test_the_first_frame_naming_the_guard_mode_param_is_timed(
+    fake: FakeRtcServer, run: Any, sealed: bool
+) -> None:
+    other = encode_frame(0x044F, json.dumps({"params": []}).encode(), bytes(6))
+    fake.unasked = [(DataMsgType.NOTIFY, other), (DataMsgType.NOTIFY, guard_mode_frame(sealed))]
+    report = await run()
+    channel = report.data_channel
+    assert channel.guard_mode_at is not None
+    assert 0 <= channel.guard_mode_at < 0.3
+    assert (channel.sealed_opened, channel.sealed_unread) == ((1, 0) if sealed else (0, 0))
+    assert "1224" not in json.dumps(report.as_dict()["data_channel"]["frames"])
+
+
+async def test_a_sealed_frame_that_does_not_open_is_counted(fake: FakeRtcServer, run: Any) -> None:
+    junk = encode_frame(0x044F, bytes(40), bytes([10, 0, 0, 0, 0, 0]))
+    fake.unasked = [(DataMsgType.NOTIFY, junk)]
+    report = await run()
+    channel = report.data_channel
+    assert (channel.sealed_opened, channel.sealed_unread, channel.guard_mode_at) == (0, 1, None)
+
+
+async def test_without_a_guard_mode_frame_none_is_timed(fake: FakeRtcServer, run: Any) -> None:
+    fake.unasked = [(DataMsgType.NOTIFY, encode_frame(0x0514, b"x", bytes(6)))]
+    report = await run()
+    assert report.data_channel.guard_mode_at is None
+
+
+@pytest.mark.parametrize(
+    ("key", "kept"),
+    [
+        ("transport_caps", True),
+        ("eufy_p2p_type", True),  # a known answer key keeps its digit
+        ("p2p_did", False),
+        ("T8N00ABCDEF12345", False),
+        ("deadbeef01", False),
+    ],
+)
+def test_only_plain_key_names_are_kept(key: str, kept: bool) -> None:
+    names = diag._key_names({key: 1})
+    assert names == ((key,) if kept else (f"<key:{len(key)}>",))
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "expected"),
+    [
+        ("port", "SyntheticWifiNet", "<port:16>"),
+        ("transport_caps", "3", "<transport_caps:1>"),
+        ("ftv", "20", "<ftv:2>"),
+        ("call_type", 5, "<call_type:1>"),
+    ],
+)
+def test_numbers_and_type_names_are_kept_only_in_their_own_type(
+    key: str, value: object, expected: str
+) -> None:
+    assert diag._answer_value(key, value) == expected
+
+
+async def test_an_answer_key_that_is_no_plain_name_is_not_kept(
+    fake: FakeRtcServer, run: Any
+) -> None:
+    fake.answer_extra = {"T8N00ABCDEF12345": "x", "port": "SyntheticWifiNet"}
+    report = await run()
+    text = json.dumps(report.as_dict())
+    assert "T8N00ABCDEF12345" not in text
+    assert "SyntheticWifiNet" not in text
+    assert "<key:16>" in report.call.answer_keys
+
+
+class _BrokenIce:
+    """An ICE agent whose connect fails with an error that is no library error."""
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+    async def connect(self, *, remote_ufrag: str, remote_pwd: str) -> None:
+        raise RuntimeError("an ICE library failure naming 192.0.2.10")
+
+
+async def test_an_error_of_another_library_is_the_steps_failure(
+    fake: FakeRtcServer, run: Any
+) -> None:
+    report = await run(ice_factory=lambda: _BrokenIce(fake.ice_factory()), probe_kinds=True)
+    assert report.ice.outcome.status is StepStatus.FAILED
+    assert report.ice.outcome.error == "RuntimeError"
+    assert "192.0.2.10" not in json.dumps(report.as_dict())
+    assert "192.0.2.10" in json.dumps(report.secrets_dict())
+    assert report.probes.login.status is StepStatus.OK  # the next steps still run

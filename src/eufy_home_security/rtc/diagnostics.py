@@ -7,25 +7,32 @@
    routes it and each device paired to it (no network);
 2. **login**: DISCOVER and LOGIN (:class:`~.session.RtcSession`, the library's own session);
 3. **call**: the kind-5 data CALL with the client's KCP-only flag; the answer's key names,
-   ``transport_caps`` or ``pbsdp``, the device's ``sdp_info`` shape;
+   the device's ``transport_caps`` as the eufy app reads it (from ``pbsdp``, else the
+   JSON key; :func:`~.sdp.read_pbsdp`) with its source and ``pbsdp``'s field numbers, the
+   device's ``sdp_info`` shape;
 4. **ice**: candidate types on each side, the selected pair, the time to connect;
 5. **data channel**: for ``seconds``, every message the station sends unasked: its link type
-   and header length, and for an XZYH frame its type, length, subheader and channel;
+   and header length, and for an XZYH frame its type, length, subheader and channel; the
+   time to the first frame naming the guard-mode parameter (1224), clear or sealed (opened
+   with the answer's content key, its contents never kept), and how many sealed frames
+   opened;
 6. with ``probe_kinds``, after the session closed: a fresh login and one CALL of kinds 1,
    3 and 4 each, their answer codes only.
 
 Nothing is sent on the data channel and no command, setting or mode is touched; on the
 wire go only DISCOVER, LOGIN, the MESSAGE ping and its answers, the CALLs with their ACK,
 INFO (ICE candidates) and HANGUP, ICE checks and KCP acknowledgements. A failed step is
-recorded and the steps that need it are skipped; the run never raises for a station's
-answer and is bounded by :func:`station_budget`. The session closes when the watch ends,
+recorded (by error class, and code for a library error) and the steps that need it are
+skipped; the run never raises for a station's answer or another library's error (only a
+cancel ends it) and is bounded by :func:`station_budget`. The session closes when the watch ends,
 at once when its link is lost and always before the probes (which use a client of their
 own), so the data CALL is placed once per run.
 
 The report is redacted as it is built (:meth:`RtcStationReport.as_dict`): serials by
 :func:`~._logging.redact_serial`, addresses by their class (:func:`ip_class`), identifiers
 and keys by their field name and length (:func:`placeholder`); of the device's answer only
-the values of :data:`ANSWER_VALUE_KEYS` are kept. :meth:`RtcStationReport.secrets_dict`
+the key names that are plain names and the values of :data:`ANSWER_INT_KEYS` (ints) and
+:data:`ANSWER_TEXT_KEYS` (short text) are kept. :meth:`RtcStationReport.secrets_dict`
 holds the raw values for a separate file. See ``docs/how-to/diagnose-rtc.md``.
 """
 
@@ -50,12 +57,15 @@ from .._logging import redact_serial
 from ..cloud.models import CloudDevice
 from ..devices.model_settings import product_code_of
 from ..devices.webrtc import app_uses_webrtc, app_webrtc_only, route_device
-from ..exceptions import CommunicationError, EufySecurityError
+from ..exceptions import CommunicationError, EufySecurityError, ProtocolError
+from ..p2p._json import MAX_JSON_DEPTH, json_int, loads_json
+from ..p2p.params import GUARD_MODE_PARAM
 from ..p2p.xzyh import HEADER_LEN as XZYH_HEADER_LEN
 from ..p2p.xzyh import MAGIC as XZYH_MAGIC
 from . import session as rtc_session
 from .client import Call, SignalingClient
 from .codec import CallKind, ResponseCode
+from .command import decrypt_notification, is_sealed, media_key
 from .config import (
     KCP_TYPE_MULTI,
     KCP_TYPE_SINGLE,
@@ -72,8 +82,8 @@ from .config import (
 from .data_channel import DataMsgType, LinkMessage
 from .ice import IceAgent, IceTransport, require_aioice
 from .media import TurnServer
-from .sdp import SdpInfo
-from .session import ConnectStep, RtcSession, _finish, client_flag, select_transport
+from .sdp import SdpInfo, read_pbsdp
+from .session import CallAnswer, ConnectStep, RtcSession, _finish, client_flag, select_transport
 from .signaling import CallEventKind
 
 _LOGGER = logging.getLogger(__name__)
@@ -93,16 +103,19 @@ SECRET_FRAME_BYTES: Final = 64
 _WATCH_SLICE: Final = 0.25
 #: Time left for closing and bookkeeping in :func:`station_budget`.
 _SLACK: Final = 10.0
-#: Answer keys whose value is kept: non-identifying numbers and type names.
-ANSWER_VALUE_KEYS: Final = frozenset(
-    {"transport_caps", "ftv", "port", "call_type", "eufy_p2p_type"}
-)
+#: Answer keys whose value is kept: numbers (as ints only) and type names (short text).
+ANSWER_INT_KEYS: Final = frozenset({"transport_caps", "ftv", "port"})
+ANSWER_TEXT_KEYS: Final = frozenset({"call_type", "eufy_p2p_type"})
 #: Answer keys whose value is an address: kept as its class.
 ANSWER_ADDRESS_KEYS: Final = frozenset({"addr", "srflx"})
+_NAMED_KEYS: Final = ANSWER_INT_KEYS | ANSWER_TEXT_KEYS | ANSWER_ADDRESS_KEYS
 #: Limits on the answer's key names, so a peer cannot fill the report.
 MAX_ANSWER_KEYS: Final = 64
 MAX_KEY_LEN: Final = 40
 _SHORT_TEXT: Final = re.compile(r"^[A-Za-z0-9_.-]{1,32}$")
+#: An answer key name kept as it is (as are the keys named above); any other shows as
+#: ``<key:len>``.
+_KEY_NAME: Final = re.compile(rf"^[a-z_]{{1,{MAX_KEY_LEN}}}$")
 _CANDIDATE_TYPE: Final = re.compile(r"\btyp\s+([A-Za-z]+)")
 _SHARED: Final = ipaddress.IPv4Network("100.64.0.0/10")
 #: The steps of one run, in order.
@@ -200,7 +213,15 @@ class CallReport:
     answer_keys: tuple[str, ...] = ()
     answer_values: dict[str, Any] = field(default_factory=dict)
     transport_caps: int | None = None
+    """The device's ``transport_caps`` as the eufy app reads it (see :attr:`transport_caps_source`)."""
+    transport_caps_source: str = "none"
+    """``pbsdp`` (from a non-empty ``pbsdp``, 0 when it does not decode or lacks the
+    field), ``json`` (the ``transport_caps`` key, read only without ``pbsdp``) or ``none``."""
     pbsdp_len: int | None = None
+    pbsdp_decoded: bool | None = None
+    pbsdp_fields: tuple[int, ...] = ()
+    """The field numbers of ``pbsdp`` (no values), and of its field 3."""
+    pbsdp_sdp_fields: tuple[int, ...] = ()
     request_id_present: bool = False
     turn_present: bool = False
     turn_keys: tuple[str, ...] = ()
@@ -249,6 +270,12 @@ class DataChannelReport:
     header_lens: tuple[int, ...] = ()
     frames: tuple[FrameRecord, ...] = ()
     frames_dropped: int = 0
+    guard_mode_at: float | None = None
+    """Seconds after the watch began to the first frame naming the guard-mode parameter
+    (1224), clear or opened with the answer's content key; None when none came."""
+    sealed_opened: int = 0
+    """Sealed frames (subheader version 10) that opened with the answer's content key."""
+    sealed_unread: int = 0
     ended: str | None = None
     """What ended the link during the watch (its error class), None when it held."""
 
@@ -345,18 +372,27 @@ def placeholder(name: str, value: object) -> str:
 
 
 def _answer_value(key: str, value: object) -> Any:
-    if key in ANSWER_VALUE_KEYS and (
-        (isinstance(value, int) and not isinstance(value, bool))
-        or (isinstance(value, str) and _SHORT_TEXT.match(value))
-    ):
+    if key in ANSWER_INT_KEYS and isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if key in ANSWER_TEXT_KEYS and isinstance(value, str) and _SHORT_TEXT.match(value):
         return value
     if key in ANSWER_ADDRESS_KEYS and isinstance(value, str):
         return ip_class(value)
     return placeholder(key, value)
 
 
+def _key_name(key: object) -> str:
+    """``key`` when it is a plain lower-case name or a key named here, else ``<key:len>``."""
+    text = str(key)
+    return text if _plain_key(text) else placeholder("key", text)
+
+
+def _plain_key(key: str) -> bool:
+    return bool(_KEY_NAME.match(key)) or key in _NAMED_KEYS
+
+
 def _key_names(value: Mapping[Any, Any]) -> tuple[str, ...]:
-    return tuple(sorted(str(k)[:MAX_KEY_LEN] for k in value))[:MAX_ANSWER_KEYS]
+    return tuple(sorted(_key_name(k) for k in value))[:MAX_ANSWER_KEYS]
 
 
 def _candidate_type(line: str) -> str:
@@ -365,7 +401,8 @@ def _candidate_type(line: str) -> str:
 
 
 def _error_fields(exc: BaseException) -> tuple[str, int | None]:
-    code = getattr(exc, "code", None)
+    """The class name of ``exc`` and, for a library error, its code; never its text."""
+    code = getattr(exc, "code", None) if isinstance(exc, EufySecurityError) else None
     return type(exc).__name__, code if isinstance(code, int) else None
 
 
@@ -702,7 +739,7 @@ async def _connect_and_watch(
     run.session = session
     try:
         await session.start()
-    except (EufySecurityError, OSError) as exc:
+    except Exception as exc:
         run.fail(exc)
         return
     run.channel_report = await _watch(run, session, seconds)
@@ -716,7 +753,9 @@ async def _watch(run: _Run, session: RtcSession, seconds: float) -> DataChannelR
     if answer is not None:
         kcp_type = KCP_TYPE_MULTI if answer.sdp_info.data_channel else KCP_TYPE_SINGLE
     began = run.loop.time()
-    messages = heartbeats = dropped = 0
+    messages = heartbeats = dropped = sealed_opened = sealed_unread = 0
+    guard_mode_at: float | None = None
+    key = _notify_key(answer)
     header_lens: set[int] = set()
     frames: list[FrameRecord] = []
     heads: list[str] = []
@@ -733,7 +772,7 @@ async def _watch(run: _Run, session: RtcSession, seconds: float) -> DataChannelR
                 message = await channel.recv_message()
         except TimeoutError:
             continue
-        except CommunicationError as exc:
+        except Exception as exc:
             ended = session.last_error or exc
             break
         messages += 1
@@ -741,10 +780,18 @@ async def _watch(run: _Run, session: RtcSession, seconds: float) -> DataChannelR
         if message.msg_type == DataMsgType.HEARTBEAT:
             heartbeats += 1
             continue
+        at = run.loop.time() - began
+        names = _names_guard_mode(message.payload, key)
+        if names is None:
+            sealed_unread += 1
+        elif names[0]:
+            sealed_opened += 1
+        if names is not None and names[1] and guard_mode_at is None:
+            guard_mode_at = round(at, 3)
         if len(frames) >= MAX_FRAMES:
             dropped += 1
             continue
-        frames.append(_frame(message, run.loop.time() - began))
+        frames.append(_frame(message, at))
         heads.append(message.payload[:SECRET_FRAME_BYTES].hex())
     watched = round(run.loop.time() - began, 3)
     if heads:
@@ -763,8 +810,59 @@ async def _watch(run: _Run, session: RtcSession, seconds: float) -> DataChannelR
         header_lens=tuple(sorted(header_lens)),
         frames=tuple(frames),
         frames_dropped=dropped,
+        guard_mode_at=guard_mode_at,
+        sealed_opened=sealed_opened,
+        sealed_unread=sealed_unread,
         ended=type(ended).__name__ if ended is not None else None,
     )
+
+
+def _notify_key(answer: CallAnswer | None) -> bytes | None:
+    """The key a sealed notification is opened with: the answer's content key."""
+    if answer is None:
+        return None
+    try:
+        return media_key(answer.sdp_info.content_key)
+    except ProtocolError:
+        return None
+
+
+def _names_guard_mode(payload: bytes, key: bytes | None) -> tuple[bool, bool] | None:
+    """``(sealed, names the guard-mode parameter)`` of an XZYH frame; None for a sealed
+    frame that does not open. A frame names it by its type or a ``param_type`` /
+    ``commandType`` of :data:`~..p2p.params.GUARD_MODE_PARAM` in its JSON body."""
+    if len(payload) < XZYH_HEADER_LEN or payload[:4] != XZYH_MAGIC:
+        return False, False
+    frame_type = struct.unpack_from("<H", payload, 4)[0]
+    body = payload[XZYH_HEADER_LEN:]
+    sealed = is_sealed(payload)
+    if sealed:
+        if key is None:
+            return None
+        try:
+            body = decrypt_notification(key, body)
+        except ProtocolError:
+            return None
+    if frame_type == GUARD_MODE_PARAM:
+        return sealed, True
+    try:
+        obj = loads_json(body)
+    except ProtocolError:
+        return sealed, False
+    return sealed, _json_names(obj, GUARD_MODE_PARAM, MAX_JSON_DEPTH)
+
+
+def _json_names(obj: object, param: int, depth: int) -> bool:
+    if depth <= 0:
+        return False
+    if isinstance(obj, Mapping):
+        for name in ("param_type", "commandType"):
+            if name in obj and json_int(obj[name]) == param:
+                return True
+        obj = list(obj.values())
+    if isinstance(obj, list):
+        return any(_json_names(item, param, depth - 1) for item in obj)
+    return False
 
 
 def _frame(message: LinkMessage, at: float) -> FrameRecord:
@@ -801,7 +899,7 @@ async def _probe(run: _Run, port: int | None, tcp_ports: tuple[int, ...] | None)
         try:
             await client.open()
             await client.login(run.quick_login)
-        except (EufySecurityError, OSError) as exc:
+        except Exception as exc:
             error, code = _error_fields(exc)
             run.probe_login = StepOutcome(StepStatus.FAILED, None, error, code)
             run.secrets.setdefault("errors", {})["probe_login"] = f"{error}: {exc}"
@@ -821,7 +919,7 @@ async def _probe_kind(run: _Run, client: SignalingClient, kind: CallKind) -> Pro
     hung_up = False
     try:
         call = await client.call(kind, wake=False)
-    except (EufySecurityError, OSError) as exc:
+    except Exception as exc:
         error, code = _error_fields(exc)
         return ProbeReport(int(kind), StepOutcome(StepStatus.FAILED, None, error, code))
     status = StepStatus.OK
@@ -841,7 +939,7 @@ async def _probe_kind(run: _Run, client: SignalingClient, kind: CallKind) -> Pro
     finally:
         try:
             client.hangup(call)
-        except (EufySecurityError, OSError) as exc:
+        except Exception as exc:
             _LOGGER.debug("RTC probe hang-up not sent: %s", exc)
     seconds = round(run.loop.time() - began, 3)
     return ProbeReport(int(kind), StepOutcome(status, seconds), tuple(codes), hung_up)
@@ -911,19 +1009,31 @@ def _call_report(run: _Run) -> CallReport:
     turn = call.turn
     if turn is not None:
         run.secrets["turn"] = dict(turn)
-    caps = answer.get("transport_caps")
-    caps = caps if isinstance(caps, int) and not isinstance(caps, bool) else None
     pbsdp = answer.get("pbsdp")
+    reading = read_pbsdp(pbsdp)
+    caps: int | None
+    if reading is not None:
+        caps, source = reading.transport_caps, "pbsdp"
+    else:
+        json_caps = answer.get("transport_caps")
+        valid = isinstance(json_caps, int) and not isinstance(json_caps, bool)
+        caps = json_caps if valid else None
+        source = "json" if valid else "none"
     return CallReport(
         outcome=outcome,
         client_flag=flag,
         answer_keys=_key_names(answer),
         answer_values={
-            str(k)[:MAX_KEY_LEN]: _answer_value(str(k), v)
+            str(k): _answer_value(str(k), v)
             for k, v in list(answer.items())[:MAX_ANSWER_KEYS]
+            if _plain_key(str(k))
         },
         transport_caps=caps,
+        transport_caps_source=source,
         pbsdp_len=len(pbsdp) if isinstance(pbsdp, str | bytes | list) else None,
+        pbsdp_decoded=reading.decoded if reading is not None else None,
+        pbsdp_fields=reading.fields if reading is not None else (),
+        pbsdp_sdp_fields=reading.sdp_fields if reading is not None else (),
         request_id_present=answer.get("request_id") not in (None, ""),
         turn_present=turn is not None,
         turn_keys=_key_names(turn) if turn is not None else (),
@@ -954,7 +1064,8 @@ def _sdp_report(text: object) -> SdpReport | None:
 
 
 __all__ = [
-    "ANSWER_VALUE_KEYS",
+    "ANSWER_INT_KEYS",
+    "ANSWER_TEXT_KEYS",
     "DEFAULT_WATCH",
     "MAX_WATCH",
     "CallReport",
