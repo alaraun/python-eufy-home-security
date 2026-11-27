@@ -73,7 +73,9 @@ with `await eufy.async_discover(refresh=True)`. Keep the file private: after a
 successful login it also holds the account password, so later runs may pass `None`
 and still log in again by themselves when the session expires. `password` may also
 be an async callable: it is awaited only when a login really happens and no password
-is cached, so an interactive program can prompt just in time.
+is cached, so an interactive program can prompt just in time. A damaged cache file is
+moved aside to `<name>.corrupt` and the cache starts empty; one that cannot be read or
+moved aside (its permissions, a read-only disk) raises `StorageError`.
 
 ## Arm, change a setting
 

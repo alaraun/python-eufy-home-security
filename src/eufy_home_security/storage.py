@@ -40,6 +40,7 @@ from .cloud.const import (
 )
 from .cloud.models import REGION_KEY, CloudDevice, device_cache_entry
 from .devices.types import connects_on_demand
+from .exceptions import StorageError
 from .p2p._json import parse_json
 from .p2p.transport import ConnectPath
 
@@ -134,7 +135,11 @@ class MemoryStore:
 
 
 class JsonFileStore:
-    """A JSON file, written atomically and readable only by its owner."""
+    """A JSON file, written atomically and readable only by its owner.
+
+    One process per file: a load that finds the file damaged moves aside whatever is at
+    the path then, a good file another process has just written included.
+    """
 
     def __init__(self, path: str | os.PathLike[str]) -> None:
         self.path = Path(path).expanduser()
@@ -150,13 +155,20 @@ class JsonFileStore:
             content = self.path.read_bytes()
         except FileNotFoundError:
             return None
+        except OSError as err:
+            raise StorageError(f"cache file {self.path} could not be read: {err}") from err
         try:
             doc = parse_json(content)
         except ValueError:  # not UTF-8, not JSON, or nested past the depth bound
             # An empty, truncated or damaged file must not wedge every later start: move
             # it aside (kept for inspection) and start from nothing.
             aside = self.path.with_name(f"{self.path.name}.corrupt")
-            os.replace(self.path, aside)
+            try:
+                os.replace(self.path, aside)
+            except OSError as err:
+                raise StorageError(
+                    f"damaged cache file {self.path} could not be moved aside: {err}"
+                ) from err
             _LOGGER.warning("cache file was not valid JSON; moved it to %s", aside)
             return None
         return doc if isinstance(doc, dict) else None

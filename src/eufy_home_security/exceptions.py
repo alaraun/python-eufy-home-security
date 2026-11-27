@@ -635,6 +635,12 @@ class ModelDataError(EufySecurityError):
     """A bundled model settings file is malformed; the message names the file."""
 
 
+class StorageError(EufySecurityError):
+    """The session cache file could not be read or moved aside (its permissions, a
+    read-only or failing disk); the message names the file, the :class:`OSError` is the
+    cause. A damaged file is no error: it is moved aside and the cache starts empty."""
+
+
 class MissingDependencyError(EufySecurityError):
     """A feature needs an optional dependency that is not installed.
 

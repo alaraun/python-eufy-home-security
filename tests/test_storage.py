@@ -14,7 +14,7 @@ from aioresponses import aioresponses
 from eufy_home_security import storage
 from eufy_home_security.cloud.api import EufyCloudApi
 from eufy_home_security.cloud.const import KEY_REFRESH_SLOW_RETRY
-from eufy_home_security.exceptions import LoginLimitedError
+from eufy_home_security.exceptions import LoginLimitedError, StorageError
 from eufy_home_security.p2p.transport import ConnectPath
 from eufy_home_security.storage import (
     CACHE_VERSION,
@@ -451,6 +451,27 @@ async def test_corrupt_cache_file_is_moved_aside(tmp_path: Path, content: bytes)
     assert await JsonFileStore(path).async_load() is None
     assert (tmp_path / "cache.json.corrupt").exists()
     assert not path.exists()
+
+
+async def test_a_cache_file_that_cannot_be_read_is_a_storage_error(tmp_path: Path) -> None:
+    path = tmp_path / "cache.json"
+    path.mkdir()  # reading it fails as a permission or disk error would
+    with pytest.raises(StorageError, match="could not be read") as caught:
+        await JsonFileStore(path).async_load()
+    assert isinstance(caught.value.__cause__, OSError)
+
+
+async def test_a_damaged_cache_file_that_cannot_be_moved_aside_is_a_storage_error(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "cache.json"
+    path.write_text("{")
+    (tmp_path / "cache.json.corrupt").mkdir()
+    (tmp_path / "cache.json.corrupt" / "x").write_text("")  # a target os.replace refuses
+    with pytest.raises(StorageError, match="could not be moved aside") as caught:
+        await JsonFileStore(path).async_load()
+    assert isinstance(caught.value.__cause__, OSError)
+    assert path.read_text() == "{"
 
 
 async def test_save_hands_the_store_a_snapshot() -> None:
