@@ -94,9 +94,10 @@ any message content. Read it before you share it: it is plain JSON.
 It writes the raw values (serial, P2P id and license, contact id, addresses, the
 station's full answer, the first bytes of each message) to a second file,
 `<name>.secrets.json`, readable by you only, and prints a warning; the report itself stays
-the same. It never writes that file through a symbolic link: then, after the report and
-the summary, it names the file it refused and exits with an error. And, as for every command, with
-`-vv` it logs passwords, tokens and keys in clear: never share such a log.
+the same. It never writes that file through a symbolic link: when the path is a link, or
+the file cannot be written, it names the file after the report and the summary and exits
+with an error. And, as for every command, with `-vv` it logs passwords, tokens and keys in
+clear: never share such a log.
 
 ## Send it
 

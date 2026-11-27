@@ -1028,8 +1028,10 @@ def _report(
         probes = ProbesReport(run.outcome("probes", unused="login failed"))
     else:
         done = {p.kind for p in run.probe_results}
+        # Kinds stop early only on a failed login or the run bound.
+        why = "login failed" if run.probe_login.status is StepStatus.FAILED else "run timed out"
         skipped = tuple(
-            ProbeReport(int(k), StepOutcome(StepStatus.SKIPPED, reason="run timed out"))
+            ProbeReport(int(k), StepOutcome(StepStatus.SKIPPED, reason=why))
             for k in PROBE_KINDS
             if int(k) not in done
         )

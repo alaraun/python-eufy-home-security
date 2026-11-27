@@ -14,7 +14,7 @@ import pytest
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from eufy_home_security.cloud.models import CloudDevice
-from eufy_home_security.exceptions import MissingDependencyError
+from eufy_home_security.exceptions import CommunicationError, MissingDependencyError
 from eufy_home_security.p2p._json import MAX_JSON_DEPTH
 from eufy_home_security.p2p.xzyh import encode_frame
 from eufy_home_security.rtc import client as client_mod
@@ -496,6 +496,22 @@ async def test_the_run_bound_during_the_probe_login_is_a_probe_timeout(
     assert report.probes.login.status is StepStatus.TIMEOUT
     assert [(p.kind, p.outcome.status, p.outcome.reason) for p in report.probes.kinds] == [
         (k, StepStatus.SKIPPED, "run timed out") for k in (1, 3, 4)
+    ]
+
+
+async def test_a_refused_probe_login_skips_the_kinds_as_login_failed(
+    fake: FakeRtcServer, run: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Refused(client_mod.SignalingClient):
+        async def login(self, *args: Any, **kwargs: Any) -> Any:
+            raise CommunicationError("refused")
+
+    monkeypatch.setattr(diag, "SignalingClient", Refused)
+    report = await run(seconds=0.2, probe_kinds=True)
+    assert report.data_channel.outcome.status is StepStatus.OK
+    assert report.probes.login.status is StepStatus.FAILED
+    assert [(p.kind, p.outcome.status, p.outcome.reason) for p in report.probes.kinds] == [
+        (k, StepStatus.SKIPPED, "login failed") for k in (1, 3, 4)
     ]
 
 
