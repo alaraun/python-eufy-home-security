@@ -33,7 +33,7 @@ The report is redacted as it is built (:meth:`RtcStationReport.as_dict`): serial
 :func:`~._logging.redact_serial`, addresses by their class (:func:`ip_class`), identifiers
 and keys by their field name and length (:func:`placeholder`); of the device's answer only
 the key names that are plain names and the values of :data:`ANSWER_INT_KEYS` (ints) and
-:data:`ANSWER_TEXT_KEYS` (short text) are kept. :meth:`RtcStationReport.secrets_dict`
+of :data:`ANSWER_TEXT_VALUES` (the known call type names) are kept. :meth:`RtcStationReport.secrets_dict`
 holds the raw values for a separate file. See ``docs/how-to/diagnose-rtc.md``.
 """
 
@@ -65,7 +65,7 @@ from ..p2p.xzyh import HEADER_LEN as XZYH_HEADER_LEN
 from ..p2p.xzyh import MAGIC as XZYH_MAGIC
 from . import session as rtc_session
 from .client import Call, SignalingClient
-from .codec import CallKind, ResponseCode
+from .codec import CALL_TYPES, CallKind, ResponseCode
 from .command import decrypt_notification, is_sealed, media_key
 from .config import (
     KCP_TYPE_MULTI,
@@ -104,19 +104,23 @@ SECRET_FRAME_BYTES: Final = 64
 _WATCH_SLICE: Final = 0.25
 #: Time left for closing and bookkeeping in :func:`station_budget`.
 _SLACK: Final = 10.0
-#: Answer keys whose value is kept: numbers (as ints only) and type names (short text).
+#: Answer keys whose value is kept: numbers (as ints only) and the call's type names (only
+#: the values a call carries, :data:`~.codec.CALL_TYPES`).
 ANSWER_INT_KEYS: Final = frozenset({"transport_caps", "ftv", "port"})
-ANSWER_TEXT_KEYS: Final = frozenset({"call_type", "eufy_p2p_type"})
+ANSWER_TEXT_VALUES: Final[Mapping[str, frozenset[str]]] = {
+    "call_type": frozenset(call_type for call_type, _ in CALL_TYPES.values()),
+    "eufy_p2p_type": frozenset(p2p for _, p2p in CALL_TYPES.values() if p2p is not None),
+}
+ANSWER_TEXT_KEYS: Final = frozenset(ANSWER_TEXT_VALUES)
 #: Answer keys whose value is an address: kept as its class.
 ANSWER_ADDRESS_KEYS: Final = frozenset({"addr", "srflx"})
 _NAMED_KEYS: Final = ANSWER_INT_KEYS | ANSWER_TEXT_KEYS | ANSWER_ADDRESS_KEYS
 #: Limits on the answer's key names, so a peer cannot fill the report.
 MAX_ANSWER_KEYS: Final = 64
 MAX_KEY_LEN: Final = 40
-_SHORT_TEXT: Final = re.compile(r"^[A-Za-z0-9_.-]{1,32}$")
 #: An answer key name kept as it is (as are the keys named above); any other shows as
 #: ``<key:len>``.
-_KEY_NAME: Final = re.compile(rf"^[a-z_]{{1,{MAX_KEY_LEN}}}$")
+_KEY_NAME: Final = re.compile(rf"[a-z_]{{1,{MAX_KEY_LEN}}}")
 _CANDIDATE_TYPE: Final = re.compile(r"\btyp\s+([A-Za-z]+)")
 _SHARED: Final = ipaddress.IPv4Network("100.64.0.0/10")
 #: The close's and the probes' reason when the run's bound ended the close.
@@ -277,7 +281,9 @@ class DataChannelReport:
     frames_dropped: int = 0
     guard_mode_at: float | None = None
     """Seconds after the watch began to the first frame naming the guard-mode parameter
-    (1224), clear or opened with the answer's content key; None when none came."""
+    (1224): by its type (in the clear header, also of a sealed frame that did not open), or
+    in a clear body or one opened with the answer's content key; None when none came
+    (unknown, not absent, when :attr:`sealed_unread` is not 0)."""
     sealed_opened: int = 0
     """Sealed frames (subheader version 10) that opened with the answer's content key."""
     sealed_unread: int = 0
@@ -332,8 +338,25 @@ class RtcStationReport:
     def secrets_dict(self) -> dict[str, Any]:
         """The raw values the report leaves out (serial, DID, license, contact id, the
         answer, candidates, error messages, frame heads), JSON-safe."""
-        plain: dict[str, Any] = json.loads(json.dumps(self.secrets, default=str))
-        return plain
+        return {str(k): _json_ready(v) for k, v in self.secrets.items()}
+
+
+def _json_ready(value: object) -> Any:
+    """A JSON-ready copy of ``value``: mappings as dicts with text keys, sequences as
+    lists, anything else not JSON as its text (as ``json.dumps(default=str)``)."""
+    if isinstance(value, Mapping):
+        return {_json_key(k): _json_ready(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [_json_ready(v) for v in value]
+    if value is None or isinstance(value, str | int | float):
+        return value
+    return str(value)
+
+
+def _json_key(key: object) -> str:
+    if isinstance(key, bool) or key is None:
+        return json.dumps(key)
+    return str(key)
 
 
 def _plain(value: object) -> Any:
@@ -381,7 +404,7 @@ def placeholder(name: str, value: object) -> str:
 def _answer_value(key: str, value: object) -> Any:
     if key in ANSWER_INT_KEYS and isinstance(value, int) and not isinstance(value, bool):
         return value
-    if key in ANSWER_TEXT_KEYS and isinstance(value, str) and _SHORT_TEXT.match(value):
+    if isinstance(value, str) and value in ANSWER_TEXT_VALUES.get(key, ()):
         return value
     if key in ANSWER_ADDRESS_KEYS and isinstance(value, str):
         return ip_class(value)
@@ -395,7 +418,7 @@ def _key_name(key: object) -> str:
 
 
 def _plain_key(key: str) -> bool:
-    return bool(_KEY_NAME.match(key)) or key in _NAMED_KEYS
+    return bool(_KEY_NAME.fullmatch(key)) or key in _NAMED_KEYS
 
 
 def _key_names(value: Mapping[Any, Any]) -> tuple[str, ...]:
@@ -800,12 +823,10 @@ async def _watch(run: _Run, session: RtcSession, seconds: float) -> DataChannelR
             heartbeats += 1
             continue
         at = _frame_time(began, run.loop.time())
-        names = _names_guard_mode(message.payload, key)
-        if names is None:
-            sealed_unread += 1
-        elif names[0]:
-            sealed_opened += 1
-        if names is not None and names[1] and guard_mode_at is None:
+        form, names_guard_mode = _names_guard_mode(message.payload, key)
+        sealed_unread += form == "unread"
+        sealed_opened += form == "opened"
+        if names_guard_mode and guard_mode_at is None:
             guard_mode_at = round(at, 3)
         if len(frames) >= MAX_FRAMES:
             dropped += 1
@@ -849,29 +870,37 @@ def _notify_key(answer: CallAnswer | None) -> bytes | None:
         return None
 
 
-def _names_guard_mode(payload: bytes, key: bytes | None) -> tuple[bool, bool] | None:
-    """``(sealed, names the guard-mode parameter)`` of an XZYH frame; None for a sealed
-    frame that does not open. A frame names it by its type or a ``param_type`` /
+def _names_guard_mode(payload: bytes, key: bytes | None) -> tuple[str, bool]:
+    """``(form, names the guard-mode parameter)`` of an XZYH frame, its form ``clear``,
+    ``opened`` (sealed, opened with ``key``) or ``unread`` (sealed, not opened). A frame
+    names it by its type (in the clear header, so also when unread) or a ``param_type`` /
     ``commandType`` of :data:`~..p2p.params.GUARD_MODE_PARAM` in its JSON body."""
     if len(payload) < XZYH_HEADER_LEN or payload[:4] != XZYH_MAGIC:
-        return False, False
-    frame_type = struct.unpack_from("<H", payload, 4)[0]
+        return "clear", False
+    by_type = struct.unpack_from("<H", payload, 4)[0] == GUARD_MODE_PARAM
     body = payload[XZYH_HEADER_LEN:]
-    sealed = is_sealed(payload)
-    if sealed:
-        if key is None:
-            return None
-        try:
-            body = decrypt_notification(key, body)
-        except ProtocolError:
-            return None
-    if frame_type == GUARD_MODE_PARAM:
-        return sealed, True
+    form = "clear"
+    if is_sealed(payload):
+        opened = _open_sealed(body, key)
+        if opened is None:
+            return "unread", by_type
+        body, form = opened, "opened"
+    if by_type:
+        return form, True
     try:
         obj = loads_json(body)
     except ProtocolError:
-        return sealed, False
-    return sealed, _json_names(obj, GUARD_MODE_PARAM, MAX_JSON_DEPTH)
+        return form, False
+    return form, _json_names(obj, GUARD_MODE_PARAM, MAX_JSON_DEPTH)
+
+
+def _open_sealed(body: bytes, key: bytes | None) -> bytes | None:
+    if key is None:
+        return None
+    try:
+        return decrypt_notification(key, body)
+    except ProtocolError:
+        return None
 
 
 def _json_names(obj: object, param: int, depth: int) -> bool:

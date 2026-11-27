@@ -292,6 +292,16 @@ async def test_the_secrets_keep_an_answer_nested_to_the_parsers_bound(
     assert report.secrets_dict()["answer"]["nested"] == nested_lists(MAX_JSON_DEPTH - 1)
 
 
+async def test_the_secrets_copy_is_json_ready_and_detached(fake: FakeRtcServer, run: Any) -> None:
+    inner = {"k": [1, (2, b"\x01")], 3: None}
+    report = dataclasses.replace(await run(), secrets={"answer": inner, "when": 1.5})
+    copy = report.secrets_dict()
+    assert copy == {"answer": {"k": [1, [2, "b'\\x01'"]], "3": None}, "when": 1.5}
+    copy["answer"]["k"].append(9)
+    assert inner["k"] == [1, (2, b"\x01")]
+    assert json.loads(json.dumps(copy)) == copy
+
+
 async def test_a_run_sends_only_the_allowed_messages(fake: FakeRtcServer, run: Any) -> None:
     fake.unasked = [(DataMsgType.NOTIFY, encode_frame(0x0473, b"x", bytes(6)))]
     await run(probe_kinds=False)
@@ -620,6 +630,12 @@ async def test_the_watch_is_capped(
         ("transport_caps", True, "<transport_caps:4>"),
         ("call_type", "x" * 33, "<call_type:33>"),
         ("call_type", "a b", "<call_type:3>"),
+        ("call_type", "scall", "scall"),
+        ("call_type", "cmd", "cmd"),
+        ("eufy_p2p_type", "priv1", "priv1"),
+        ("eufy_p2p_type", "channel_p2p", "channel_p2p"),
+        ("call_type", "volunteer.synthetic", "<call_type:19>"),  # short text, not a known value
+        ("eufy_p2p_type", "scall", "<eufy_p2p_type:5>"),  # another key's value
         ("port", 5062, 5062),
         ("ftv", 20, 20),
         ("token", "abc", "<token:3>"),
@@ -848,6 +864,17 @@ async def test_only_the_first_guard_mode_frame_is_timed(
     assert report.data_channel.guard_mode_at == 0.5
 
 
+async def test_a_sealed_guard_mode_frame_counts_by_its_clear_type(
+    fake: FakeRtcServer, run: Any
+) -> None:
+    sealed = encode_frame(1224, bytes(40), bytes([10, 0, 0, 0, 0, 0]))  # body does not open
+    fake.unasked = [(DataMsgType.NOTIFY, sealed)]
+    report = await run()
+    channel = report.data_channel
+    assert (channel.sealed_opened, channel.sealed_unread) == (0, 1)
+    assert channel.guard_mode_at is not None
+
+
 async def test_a_sealed_frame_that_does_not_open_is_counted(fake: FakeRtcServer, run: Any) -> None:
     junk = encode_frame(0x044F, bytes(40), bytes([10, 0, 0, 0, 0, 0]))
     fake.unasked = [(DataMsgType.NOTIFY, junk)]
@@ -870,6 +897,7 @@ async def test_without_a_guard_mode_frame_none_is_timed(fake: FakeRtcServer, run
         ("p2p_did", False),
         ("T8N00ABCDEF12345", False),
         ("deadbeef01", False),
+        ("ssid\n", False),  # a trailing newline is no plain name
     ],
 )
 def test_only_plain_key_names_are_kept(key: str, kept: bool) -> None:
