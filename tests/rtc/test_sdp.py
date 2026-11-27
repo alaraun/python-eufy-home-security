@@ -73,6 +73,7 @@ def test_without_the_field_the_caps_are_0(unit: bytes) -> None:
     "value",
     [
         text(tag(3, 2) + varint(10) + b"short"),  # length past the end
+        text(tag(1, 2) + varint(10) + uint(1, 1)),  # the same, a valid message if cut
         text(b"\x80"),  # a varint that never ends
         text(tag(1, 0) + b"\xff" * 10 + b"\x01"),  # a varint over 10 bytes
         text(tag(1, 3)),  # a group (wire type 3)
@@ -80,9 +81,10 @@ def test_without_the_field_the_caps_are_0(unit: bytes) -> None:
         text(tag(3, 0) + varint(5)),  # field 3 not a message
         text(nested(3, tag(16, 2) + varint(1) + b"x")),  # field 16 not a varint
         text(tag(1, 5) + b"\x01"),  # a cut fixed32
-        text(varint(0)),  # field number 0
+        text(varint(0) + varint(1)),  # field number 0
         "not base64!",
-        "A" * (MAX_PBSDP_TEXT + 4),
+        text(UNIT)[:4] + "!" + text(UNIT)[4:],  # a character outside base64
+        text(nested(1, b"x" * (MAX_PBSDP_TEXT * 3 // 4))),  # valid, but too long
         text(uint(1, 1) * (MAX_PBSDP_FIELDS + 1)),
     ],
 )

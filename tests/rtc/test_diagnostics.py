@@ -19,6 +19,7 @@ from eufy_home_security.p2p.xzyh import encode_frame
 from eufy_home_security.rtc import client as client_mod
 from eufy_home_security.rtc import diagnostics as diag
 from eufy_home_security.rtc import session as session_mod
+from eufy_home_security.rtc.client import Call
 from eufy_home_security.rtc.codec import CallKind, MessageType
 from eufy_home_security.rtc.data_channel import LINK_HEADER_LEN, LINK_HEADER_LEN_OLD, DataMsgType
 from eufy_home_security.rtc.diagnostics import (
@@ -532,6 +533,10 @@ def test_steps_reported_after_the_first_link_are_ignored() -> None:
         state.on_step(ConnectStep.LOGIN, None)  # a reconnect's login: ignored
         assert state.outcome("login") == diag.StepOutcome(StepStatus.OK, 1.0)
         assert state.current == "call"
+        first, later = (Call(CallKind.PRIV1, 0, "", n, n, True) for n in (1, 2))
+        state.on_step(ConnectStep.ANSWER, first)
+        state.on_step(ConnectStep.ANSWER, later)  # a reconnect's answer: ignored
+        assert state.call is first
     finally:
         loop.close()
 
@@ -743,6 +748,32 @@ async def test_the_first_frame_naming_the_guard_mode_param_is_timed(
     assert "1224" not in json.dumps(report.as_dict()["data_channel"]["frames"])
 
 
+@pytest.mark.parametrize(
+    "frame",
+    [
+        encode_frame(1224, b"", bytes(6)),  # the frame's own type
+        encode_frame(0x044F, json.dumps({"commandType": 1224}).encode(), bytes(6)),
+        encode_frame(0x044F, json.dumps({"a": [{"b": {"param_type": 1224}}]}).encode(), bytes(6)),
+    ],
+)
+async def test_a_frame_names_the_guard_mode_by_type_or_json_field(
+    fake: FakeRtcServer, run: Any, frame: bytes
+) -> None:
+    fake.unasked = [(DataMsgType.NOTIFY, frame)]
+    report = await run()
+    assert report.data_channel.guard_mode_at is not None
+
+
+async def test_only_the_first_guard_mode_frame_is_timed(
+    fake: FakeRtcServer, run: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    times = iter([0.5, 1.5])
+    monkeypatch.setattr(diag, "_frame_time", lambda began, now: next(times))
+    fake.unasked = [(DataMsgType.NOTIFY, guard_mode_frame(False))] * 2
+    report = await run()
+    assert report.data_channel.guard_mode_at == 0.5
+
+
 async def test_a_sealed_frame_that_does_not_open_is_counted(fake: FakeRtcServer, run: Any) -> None:
     junk = encode_frame(0x044F, bytes(40), bytes([10, 0, 0, 0, 0, 0]))
     fake.unasked = [(DataMsgType.NOTIFY, junk)]
@@ -808,7 +839,11 @@ class _BrokenIce:
         return getattr(self._inner, name)
 
     async def connect(self, *, remote_ufrag: str, remote_pwd: str) -> None:
-        raise RuntimeError("an ICE library failure naming 192.0.2.10")
+        raise _CodedError("an ICE library failure naming 192.0.2.10")
+
+
+class _CodedError(RuntimeError):
+    code = 7  # not a library error: its code is not kept
 
 
 async def test_an_error_of_another_library_is_the_steps_failure(
@@ -816,7 +851,7 @@ async def test_an_error_of_another_library_is_the_steps_failure(
 ) -> None:
     report = await run(ice_factory=lambda: _BrokenIce(fake.ice_factory()), probe_kinds=True)
     assert report.ice.outcome.status is StepStatus.FAILED
-    assert report.ice.outcome.error == "RuntimeError"
+    assert (report.ice.outcome.error, report.ice.outcome.code) == ("_CodedError", None)
     assert "192.0.2.10" not in json.dumps(report.as_dict())
     assert "192.0.2.10" in json.dumps(report.secrets_dict())
     assert report.probes.login.status is StepStatus.OK  # the next steps still run

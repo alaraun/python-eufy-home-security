@@ -780,7 +780,7 @@ async def _watch(run: _Run, session: RtcSession, seconds: float) -> DataChannelR
         if message.msg_type == DataMsgType.HEARTBEAT:
             heartbeats += 1
             continue
-        at = run.loop.time() - began
+        at = _frame_time(began, run.loop.time())
         names = _names_guard_mode(message.payload, key)
         if names is None:
             sealed_unread += 1
@@ -815,6 +815,10 @@ async def _watch(run: _Run, session: RtcSession, seconds: float) -> DataChannelR
         sealed_unread=sealed_unread,
         ended=type(ended).__name__ if ended is not None else None,
     )
+
+
+def _frame_time(began: float, now: float) -> float:
+    return now - began
 
 
 def _notify_key(answer: CallAnswer | None) -> bytes | None:
