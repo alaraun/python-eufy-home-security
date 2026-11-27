@@ -393,8 +393,9 @@ class RtcSession:
         """Run the connect steps; a loss meanwhile (a socket error, a hang-up) ends them
         and raises it, as a :class:`~.exceptions.CommunicationError` when it is an OS error."""
         steps = asyncio.get_running_loop().create_task(self._connect(attempt))
+        either: set[asyncio.Future[Any]] = {steps, attempt.lost}
         try:
-            await asyncio.wait({steps, attempt.lost}, return_when=asyncio.FIRST_COMPLETED)
+            await asyncio.wait(either, return_when=asyncio.FIRST_COMPLETED)
         finally:
             if not steps.done():
                 steps.cancel()
