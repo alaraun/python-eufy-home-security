@@ -146,6 +146,92 @@ def missing_inputs(raw: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(missing)
 
 
+#: How many server records are kept per server type and protocol.
+SERVER_INFO_LIMIT: Final = 8
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ServerInfo:
+    """One signaling server a station's client used, kept per station for later starts.
+
+    ``server_type`` and ``protocol`` are the client's own labels (the client writes 0
+    for its UDP signaling server); the rtt fields are milliseconds, the timestamps
+    seconds.
+    """
+
+    domain: str
+    server_type: int
+    ip: str
+    port: int
+    protocol: int
+    last_fail_timestamp: int = 0
+    last_used_timestamp: int = 0
+    avg_rtt: int = 0
+    max_rtt: int = 0
+
+    def as_json(self) -> dict[str, Any]:
+        """The record as a JSON object for a cache."""
+        return {name: getattr(self, name) for name in self.__dataclass_fields__}
+
+    @classmethod
+    def from_json(cls, value: Mapping[str, Any]) -> ServerInfo | None:
+        """A record read back from :meth:`as_json`; None when a field is missing or of
+        the wrong type."""
+        fields = cls.__dataclass_fields__
+        try:
+            data = {name: value[name] for name in fields if name in value}
+            record = cls(**data)
+        except TypeError:
+            return None
+        texts = (record.domain, record.ip)
+        numbers = [getattr(record, name) for name in fields if name not in ("domain", "ip")]
+        if not all(isinstance(t, str) for t in texts) or not all(
+            isinstance(n, int) and not isinstance(n, bool) for n in numbers
+        ):
+            return None
+        return record
+
+
+def merge_server_info(
+    stored: Sequence[ServerInfo], update: Sequence[ServerInfo], server_type: int
+) -> tuple[ServerInfo, ...]:
+    """The cached list after the client reports ``update`` for ``server_type``, as the
+    eufy app keeps it: a stored record of that type with the same ip and protocol as an
+    update is replaced; the updates come first; when more than :data:`SERVER_INFO_LIMIT`
+    records of that type share the first update's protocol, the one of that type with the
+    highest average rtt (the last of equals) is dropped."""
+    if not update:
+        return tuple(stored)
+    kept = [
+        old
+        for old in stored
+        if not any(
+            old.server_type == server_type and old.ip == new.ip and old.protocol == new.protocol
+            for new in update
+        )
+    ]
+    merged = [*update, *kept]
+    protocol = merged[0].protocol
+    same = [s for s in merged if s.server_type == server_type and s.protocol == protocol]
+    if len(same) > SERVER_INFO_LIMIT:
+        worst: ServerInfo | None = None
+        worst_rtt = 0
+        for record in merged:
+            if record.server_type == server_type and worst_rtt <= record.avg_rtt:
+                worst, worst_rtt = record, record.avg_rtt
+        if worst is not None:
+            merged.remove(worst)
+    return tuple(merged)
+
+
+def servers_for_domain(stored: Sequence[ServerInfo], domain: str | None) -> tuple[ServerInfo, ...]:
+    """The records of ``stored`` for the station's signaling ``domain`` (any case); all of
+    them when the station names no domain."""
+    if not domain:
+        return tuple(stored)
+    return tuple(s for s in stored if s.domain.lower() == domain.lower())
+
+
 @dataclass(frozen=True, slots=True)
 class QuickLogin:
     """What a LOGIN 200 leaves for the next start: the session key, the contact id,

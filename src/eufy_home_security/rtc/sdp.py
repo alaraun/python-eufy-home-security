@@ -9,10 +9,32 @@ SSRCs), not an SDP text offer; :meth:`SdpInfo.decode` reads it. Verified on a Ho
 :class:`CompactOffer` / :func:`expand_offer` build a full SDP from a device's compact
 offer (``ice-u``, ``asc``, ...) and the fixed media template. That is the event path,
 not the live CALL answer. Declared (eufy app), not verified.
+
+The answer may also carry ``pbsdp``: base64 of a protobuf message whose field 3 (the
+answer's session description) carries the device's ``transport_caps`` in its field 16;
+the eufy app reads the JSON ``transport_caps`` only when ``pbsdp`` is absent or empty, and
+takes 0 from a ``pbsdp`` that does not decode or lacks the field (:func:`read_pbsdp`, a
+bounded reader of just what that needs). Declared (eufy app), not verified.
+
+:func:`read_pbsdp` is not a full decoder of that message, so for some malformed input its
+``transport_caps`` can differ from the app's strict decode, which reads 0 where it fails:
+
+- fields larger than the app's decoder holds (a long ICE username or password, many
+  candidates, a field 16 over 32 bits) are read here, not refused;
+- a field other than 3 and 16 with an unexpected wire type is skipped here, not refused;
+- a repeated field 3 is merged by the app; here field 16 of the last field 3 that has
+  one is read (the same value) and only that field 3's field numbers are listed;
+- base64 is read strictly here (no line breaks, padding required); the app's decoder
+  may accept such text.
+
+The transport choice is unaffected while the client offers KCP only (QUIC needs bit 1 in
+both the client's flag and ``transport_caps``).
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
 import random
 import string
 import struct
@@ -261,3 +283,112 @@ def answer_attributes(sdp: str) -> str:
     attributes, CRLF-separated."""
     lines = [line for line in sdp.splitlines() if line.startswith(ANSWER_PREFIXES)]
     return "".join(f"{line}\r\n" for line in lines)
+
+
+#: Longest ``pbsdp`` text read, and most fields read per message; a longer or fuller
+#: one reads as undecodable.
+MAX_PBSDP_TEXT: Final = 4096
+MAX_PBSDP_FIELDS: Final = 64
+#: Field 3 of ``pbsdp`` (the answer's session description), and its field 16, the device's
+#: ``transport_caps``. Declared (eufy app).
+PBSDP_SDP_FIELD: Final = 3
+PBSDP_CAPS_FIELD: Final = 16
+_VARINT, _FIXED64, _BYTES, _FIXED32 = 0, 1, 2, 5
+_MAX_VARINT_LEN: Final = 10
+
+
+@dataclass(frozen=True, slots=True)
+class PbsdpReading:
+    """What a ``pbsdp`` answer field says: its ``transport_caps`` as the eufy app reads
+    it (0 when it does not decode or lacks the field) and the field numbers present."""
+
+    transport_caps: int
+    decoded: bool
+    fields: tuple[int, ...] = ()
+    """The field numbers of the outer message."""
+    sdp_fields: tuple[int, ...] = ()
+    """The field numbers of its field 3."""
+
+
+def _varint(data: bytes, pos: int) -> tuple[int, int] | None:
+    value = 0
+    for i in range(_MAX_VARINT_LEN):
+        if pos + i >= len(data):
+            return None
+        byte = data[pos + i]
+        value |= (byte & 0x7F) << (7 * i)
+        if not byte & 0x80:
+            return value, pos + i + 1
+    return None
+
+
+def _fields(data: bytes) -> list[tuple[int, int, int | bytes]] | None:
+    """``(number, wire type, value)`` of every field of a protobuf message: an int for a
+    varint, the bytes of a length-delimited field, 0 for a fixed-width one (not read);
+    None for any malformation or more than :data:`MAX_PBSDP_FIELDS` fields."""
+    found: list[tuple[int, int, int | bytes]] = []
+    pos = 0
+    while pos < len(data):
+        if len(found) >= MAX_PBSDP_FIELDS:
+            return None
+        key = _varint(data, pos)
+        if key is None or key[0] >> 3 == 0:
+            return None
+        (number, wire), pos = divmod(key[0], 8), key[1]
+        if wire == _VARINT:
+            read = _varint(data, pos)
+            if read is None:
+                return None
+            found.append((number, wire, read[0]))
+            pos = read[1]
+        elif wire == _BYTES:
+            size = _varint(data, pos)
+            if size is None or size[1] + size[0] > len(data):
+                return None
+            found.append((number, wire, data[size[1] : size[1] + size[0]]))
+            pos = size[1] + size[0]
+        elif wire in (_FIXED32, _FIXED64):
+            width = 4 if wire == _FIXED32 else 8
+            if pos + width > len(data):
+                return None
+            found.append((number, wire, 0))
+            pos += width
+        else:
+            return None
+    return found
+
+
+def read_pbsdp(value: object) -> PbsdpReading | None:
+    """The ``pbsdp`` field of a CALL answer (base64 of a protobuf message, see the module
+    docstring); None when it is absent, not text or empty (the eufy app then reads the
+    JSON ``transport_caps``). Never raises: a malformed one reads as caps 0, not decoded,
+    as the app reads it."""
+    if not isinstance(value, str) or not value:
+        return None
+    failed = PbsdpReading(transport_caps=0, decoded=False)
+    if len(value) > MAX_PBSDP_TEXT:
+        return failed
+    try:
+        raw = base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError):
+        return failed
+    outer = _fields(raw)
+    if outer is None:
+        return failed
+    caps = 0
+    inner_numbers: tuple[int, ...] = ()
+    for number, wire, field in outer:
+        if number != PBSDP_SDP_FIELD:
+            continue
+        if wire != _BYTES or not isinstance(field, bytes):
+            return failed
+        inner = _fields(field)
+        if inner is None:
+            return failed
+        inner_numbers = tuple(sorted({n for n, _, _ in inner}))
+        for sub, sub_wire, sub_value in inner:
+            if sub == PBSDP_CAPS_FIELD:
+                if sub_wire != _VARINT or not isinstance(sub_value, int):
+                    return failed
+                caps = sub_value
+    return PbsdpReading(caps, True, tuple(sorted({n for n, _, _ in outer})), inner_numbers)

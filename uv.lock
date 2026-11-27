@@ -139,6 +139,19 @@ wheels = [
 ]
 
 [[package]]
+name = "aioice"
+version = "0.15.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "dnspython" },
+    { name = "ifaddr" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/20/6f/84961dbeecaed4f298c762556748303da302b5823dc3cdcf2434ba88c6f5/aioice-0.15.1.tar.gz", hash = "sha256:c585e0cfa66646a617153d5f111814a4ec47dfbe1ccfa4d7c1f6158866dee78f", size = 72498, upload-time = "2026-11-25T09:30:21.579Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/af/37/66a9f0298c5e4012bc5f71ef05b541d3d33eed76999db4e78fc7507f5282/aioice-0.15.1-py3-none-any.whl", hash = "sha256:f1830fde71051f2cd91405c8a306a263be55967c65da248495380f53c56aca55", size = 31023, upload-time = "2026-11-25T09:30:20.337Z" },
+]
+
+[[package]]
 name = "aiomqtt"
 version = "2.5.1"
 source = { registry = "https://pypi.org/simple" }
@@ -478,6 +491,15 @@ wheels = [
 ]
 
 [[package]]
+name = "dnspython"
+version = "2.9.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/76/49/900383b471c645a3c397f47b3211d1fcecb3a540c98f683494cdf86b33de/dnspython-2.9.2.tar.gz", hash = "sha256:8d4d39a513e649d634004ce4d39ade2352efcea472a0247535a5c2d18a9d7ba9", size = 455484, upload-time = "2026-11-03T23:56:53.601Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1e/0c/5346358b3a20275d256978c35203ddc2c8617f78c1b23795b79ba22ced6d/dnspython-2.9.2-py3-none-any.whl", hash = "sha256:af15f7d385a6ae2fb35a796fde2138004c8c42c7389090e2addc83e3b3340fd8", size = 360455, upload-time = "2026-11-03T23:56:52.088Z" },
+]
+
+[[package]]
 name = "eufy-home-security"
 version = "0.4.21"
 source = { editable = "." }
@@ -493,9 +515,13 @@ dependencies = [
 mqtt = [
     { name = "aiomqtt" },
 ]
+rtc = [
+    { name = "aioice" },
+]
 
 [package.dev-dependencies]
 dev = [
+    { name = "aioice" },
     { name = "aiomqtt" },
     { name = "aioresponses" },
     { name = "hypothesis" },
@@ -512,16 +538,18 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.11" },
+    { name = "aioice", marker = "extra == 'rtc'", specifier = ">=0.15.1,<0.16" },
     { name = "aiomqtt", marker = "extra == 'mqtt'", specifier = ">=2.2,<3" },
     { name = "cryptography", specifier = ">=44" },
     { name = "firebase-messaging", specifier = ">=0.4" },
     { name = "protobuf", specifier = ">=5" },
     { name = "tzdata", specifier = ">=2025.2" },
 ]
-provides-extras = ["mqtt"]
+provides-extras = ["mqtt", "rtc"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "aioice", specifier = ">=0.15.1,<0.16" },
     { name = "aiomqtt", specifier = ">=2.2,<3" },
     { name = "aioresponses", specifier = ">=0.7.8" },
     { name = "hypothesis", specifier = ">=6.130" },
@@ -717,6 +745,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/5f/f7/abb373e5757eaec4b922b92f97ec8d6d7e057cf06778247604fbc4e7c3f3/idna-3.19.tar.gz", hash = "sha256:5e0811a4383b21dc5838069f801c4fb62113b7447663d2530d2bd6e77b49bf15", size = 215237, upload-time = "2026-08-18T05:14:24.27Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/57/b0/0e52c878c53f245edd3a11020f20979b3f490f245af532c7cae3027754b5/idna-3.19-py3-none-any.whl", hash = "sha256:815e7be7a7806d54abb586dc943addc79e8b2ee16915059658cbeff4b1b43bf4", size = 68550, upload-time = "2026-08-18T05:14:22.343Z" },
+]
+
+[[package]]
+name = "ifaddr"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e8/ac/fb4c578f4a3256561548cd825646680edcadb9440f3f68add95ade1eb791/ifaddr-0.2.0.tar.gz", hash = "sha256:cc0cbfcaabf765d44595825fb96a99bb12c79716b73b44330ea38ee2b0c4aed4", size = 10485, upload-time = "2022-06-15T21:40:27.561Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9c/1f/19ebc343cc71a7ffa78f17018535adc5cbdd87afb31d7c34874680148b32/ifaddr-0.2.0-py3-none-any.whl", hash = "sha256:085e0305cfe6f16ab12d72e2024030f5d52674afad6911bb1eee207177b8a748", size = 12314, upload-time = "2022-06-15T21:40:25.756Z" },
 ]
 
 [[package]]

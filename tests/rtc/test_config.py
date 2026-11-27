@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import random
 import string
 
@@ -12,12 +13,16 @@ from eufy_home_security.rtc.config import (
     KCP_TYPE_MULTI,
     KCP_TYPE_SINGLE,
     QUICK_LOGIN_LIFETIME,
+    SERVER_INFO_LIMIT,
     QuickLogin,
     RtcConfig,
+    ServerInfo,
     commands_encrypted,
     data_channel_kcp_type,
     firmware_number,
+    merge_server_info,
     missing_inputs,
+    servers_for_domain,
     signaling_domain,
     signaling_ipv4,
 )
@@ -320,3 +325,113 @@ def test_a_ten_digit_ssrc_is_read() -> None:
 def test_a_boolean_ssrc_is_not_a_number() -> None:
     offer = CompactOffer.from_json({"asc": True, "vsc": 7})
     assert (offer.audio_ssrc, offer.video_ssrc) == (None, 7)
+
+
+# ── server list ──────────────────────────────────────────────────────────────
+
+
+def _server(ip: str, *, rtt: int = 0, server_type: int = 0, protocol: int = 0) -> ServerInfo:
+    return ServerInfo(
+        domain="Signal.example.com",
+        server_type=server_type,
+        ip=ip,
+        port=5062,
+        protocol=protocol,
+        avg_rtt=rtt,
+    )
+
+
+def test_a_reported_server_replaces_its_stored_record_and_comes_first() -> None:
+    old = (_server("192.0.2.1", rtt=9), _server("192.0.2.2"))
+    new = _server("192.0.2.2", rtt=5)
+    assert merge_server_info(old, [new], 0) == (new, old[0])
+
+
+def test_a_record_of_another_type_or_protocol_is_kept() -> None:
+    other_type = _server("192.0.2.2", server_type=1)
+    other_protocol = _server("192.0.2.2", protocol=1)
+    new = _server("192.0.2.2")
+    assert merge_server_info((other_type, other_protocol), [new], 0) == (
+        new,
+        other_type,
+        other_protocol,
+    )
+
+
+def test_an_empty_report_keeps_the_list() -> None:
+    old = (_server("192.0.2.1"),)
+    assert merge_server_info(old, [], 0) == old
+
+
+def test_past_the_limit_the_slowest_of_the_type_is_dropped() -> None:
+    stored = tuple(_server(f"192.0.2.{n}", rtt=n) for n in range(1, SERVER_INFO_LIMIT + 1))
+    new = _server("192.0.2.100", rtt=3)
+    merged = merge_server_info(stored, [new], 0)
+    assert len(merged) == SERVER_INFO_LIMIT
+    assert _server(f"192.0.2.{SERVER_INFO_LIMIT}", rtt=SERVER_INFO_LIMIT) not in merged
+    assert merged[0] == new
+
+
+def test_at_the_limit_nothing_is_dropped() -> None:
+    stored = tuple(_server(f"192.0.2.{n}", rtt=n) for n in range(1, SERVER_INFO_LIMIT))
+    assert len(merge_server_info(stored, [_server("192.0.2.100")], 0)) == SERVER_INFO_LIMIT
+
+
+def test_the_last_of_equally_slow_records_is_dropped() -> None:
+    stored = tuple(_server(f"192.0.2.{n}", rtt=7) for n in range(1, SERVER_INFO_LIMIT + 1))
+    merged = merge_server_info(stored, [_server("192.0.2.100", rtt=7)], 0)
+    assert stored[-1] not in merged
+    assert stored[0] in merged
+
+
+def test_records_of_other_types_do_not_count_toward_the_limit() -> None:
+    stored = tuple(
+        _server(f"192.0.2.{n}", rtt=n, server_type=1) for n in range(1, SERVER_INFO_LIMIT + 1)
+    )
+    assert len(merge_server_info(stored, [_server("192.0.2.100")], 0)) == SERVER_INFO_LIMIT + 1
+
+
+def test_records_of_another_protocol_do_not_count_toward_the_limit() -> None:
+    stored = tuple(
+        _server(f"192.0.2.{n}", rtt=n, protocol=1) for n in range(1, SERVER_INFO_LIMIT + 1)
+    )
+    assert len(merge_server_info(stored, [_server("192.0.2.100")], 0)) == SERVER_INFO_LIMIT + 1
+
+
+def test_only_a_record_of_the_reported_type_is_dropped() -> None:
+    stored = (
+        _server("192.0.2.50", rtt=99, server_type=1),
+        *(_server(f"192.0.2.{n}", rtt=n) for n in range(1, SERVER_INFO_LIMIT + 1)),
+    )
+    merged = merge_server_info(stored, [_server("192.0.2.100", rtt=1)], 0)
+    assert stored[0] in merged
+    assert _server(f"192.0.2.{SERVER_INFO_LIMIT}", rtt=SERVER_INFO_LIMIT) not in merged
+
+
+def test_the_list_is_filtered_to_the_station_domain_in_any_case() -> None:
+    mine = _server("192.0.2.1")
+    other = ServerInfo(
+        domain="other.example.com", server_type=0, ip="192.0.2.2", port=1, protocol=0
+    )
+    assert servers_for_domain((mine, other), "signal.EXAMPLE.com") == (mine,)
+    assert servers_for_domain((mine, other), None) == (mine, other)
+
+
+def test_a_server_record_round_trips_through_json() -> None:
+    record = _server("192.0.2.1", rtt=4)
+    assert ServerInfo.from_json(json.loads(json.dumps(record.as_json()))) == record
+
+
+@pytest.mark.parametrize(
+    "change",
+    [{"ip": None}, {"port": "5062"}, {"avg_rtt": True}, {"domain": 5}, {"protocol": None}],
+)
+def test_a_damaged_server_record_reads_as_none(change: dict[str, object]) -> None:
+    value = {**_server("192.0.2.1").as_json(), **change}
+    assert ServerInfo.from_json(value) is None
+
+
+def test_a_server_record_missing_a_field_reads_as_none() -> None:
+    value = _server("192.0.2.1").as_json()
+    del value["ip"]
+    assert ServerInfo.from_json(value) is None

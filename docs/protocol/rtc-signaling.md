@@ -3,13 +3,14 @@
 The eufy app reaches some devices over its WebRTC path instead of PPPP: every device
 behind a T9000, T8N00, T7000 or T8040 station, and some cameras on their own or behind a
 HomeBase 3 or T8025 in a firmware window (`station.app_uses_webrtc(device_sn)` evaluates
-the app's rule). `eufy_home_security.rtc` holds the protocol layers of that path: the
-signaling wire format and its cryptography, the messages the client sends, the private
-call's `sdp_info`, command encryption, the RTCP APP command channel, the data channel's
-framing over KCP, and RTP depacketizing. They are pure codecs and small state machines
-over callbacks; **nothing opens a socket and no station uses them yet**, so these
-modules are internal and carry no public API. Devices the app reaches only over WebRTC
-stay skipped (`webrtc_only`).
+the app's rule). `eufy_home_security.rtc` holds that path up to a running data channel:
+the signaling wire format and its cryptography, the messages the client sends, the
+private call's `sdp_info`, command encryption, the RTCP APP command channel, the data
+channel's framing over KCP, RTP depacketizing, and the asyncio signaling client and
+session that bring a station's data channel up ([Client](#client), [Session](#session)).
+**No station uses them yet**, so these modules are internal and carry no public API;
+devices the app reaches only over WebRTC stay skipped (`webrtc_only`). ICE needs the
+optional `rtc` extra (`aioice` 0.15); everything else runs without it.
 
 Tags as in [README.md](README.md#verification-markers): **[verified]** for what ran
 against eufy's signaling server and a HomeBase 3 (T8030, fw 3.8.7.4), **[app]** for what
@@ -97,8 +98,8 @@ key (16 of `[0-9A-Za-z]`) and IV (12), and its ICE username (5 ice-chars) and pa
 
 ## Sequence
 
-What the client sends is built in `rtc/signaling.py`; the client that runs the sequence
-is not part of the library yet.
+What the client sends is built in `rtc/signaling.py`; `rtc/client.py` runs the
+sequence ([Client](#client)).
 
 1. **DISCOVER** to the signaling host, header only. The 200 carries JSON
    `{"server_addr": "<ip>" | "self", "saddrs": [...], "timestamp": n}`: the server to
@@ -112,11 +113,13 @@ is not part of the library yet.
    (body type 6, mode 0) for 23 h (`QuickLogin`) **[app]**. A LOGIN without an answer
    is sent again: the first wait is 10 s plus 1-10 s, each further wait three times the
    previous one, at most 270 s (`login_retry_delays`) **[app]**.
-3. **MESSAGE ping** every 3 s: channel 0, command type 2, sub type 0x66, JSON
+3. **MESSAGE ping** every 2 s: channel 0, command type 2, sub type 0x66, JSON
    `{"to": "device", "account": md5("0" + user id + time), "eufy_client_dynamic_id": n,
    "content": base64({"eufy_contact_id", "eufy_network_type": 1, "eufy_app_id"})}`
-   (`ping_message`) **[app]**. Every MESSAGE request from the server or the device is
-   answered 200 with its ids echoed (`message_answer`) **[verified]**.
+   (`ping_message`), `n` a random 30-bit id fixed for the client's lifetime **[app]**.
+   Every MESSAGE request from the server or the device is answered 200 with its ids
+   echoed **[verified]**, carrying the same `eufy_client_dynamic_id` (`message_answer`)
+   **[app]**.
 4. **CALL** per channel kind, body type 7 with the call's channel, encrypted JSON
    `{"account": md5(channel + user id + time), "ftv": 20, "call_type",
    "eufy_p2p_type", "to": "device", "eufy_from_contact", "eufy_video_format",
@@ -124,13 +127,19 @@ is not part of the library yet.
    **100** with a TURN relay `{"turn_addr", "turn_port", "turn_user", "turn_password",
    "alt_turn_addr", "alt_turn_port"}` **[verified]**; the app uses only the primary
    relay (`media.TurnServer`) **[app]**. A device that serves a private call answers
-   **200** with its own `sdp_info`, the relay again, `srflx` and `port` **[verified]**;
-   the client acknowledges with **ACK** (the call body without attachment). 480 and
-   486 refuse the call (`call_event`).
-5. **INFO** carries ICE candidates both ways: the device trickles
-   `{"candidate": "a=candidate:…"}` **[verified]**, the client sends
-   `{"candidate": "candidate:…"}`, with `request_id` first when the device's 200
-   carried one (`info_payload`); the device's INFO is answered 200 **[app]**.
+   **200** with its own `sdp_info`, the relay again, `srflx` and `port`, sometimes
+   several times in a row **[verified]**; the client acknowledges each with **ACK** (the
+   call body without attachment). 480 and 486 refuse the call (`call_event`). The answer
+   to a kind-5 call may carry `transport_caps` (an integer) or `pbsdp`, base64 of a
+   protobuf message whose field 3, sub-field 16 (a varint) holds the same value
+   **[app]** (see [Session](#session)).
+5. **INFO** carries ICE candidates both ways, with `request_id` first when the device's
+   200 carried one (`info_payload`). On a kind-5 call the device trickles
+   `{"file_candidate": "a=candidate:…", "file_candidate_num": n}` and sends each again
+   about every 200 ms until acknowledged **[verified]**; the client acknowledges with
+   `{"file_candidate_ack": n}` and sends its own candidates the same way **[app]**. On a
+   media call they travel as `{"candidate": …}` **[verified]**. A device INFO is answered
+   200; on a private call the 200 echoes the INFO's attachment **[app]**.
 6. **HANGUP** ends a call.
 
 | kind | `call_type` | `eufy_p2p_type` | used for |
@@ -151,6 +160,84 @@ video SSRCs as u32; base64 in the encrypted attachment. The device answers kind 
 kind 6 with an `sdp_info` of the same shape, content key 16 bytes and IV 12
 **[verified]**.
 
+## Client
+
+`rtc/client.py` `SignalingClient` runs the sequence on the event loop: one UDP socket per
+client plus one per private call, a TCP connection only to send a CALL again. It
+**[app]**:
+
+- logs in with a stored quick-login record younger than 23 h; a 401 to it falls back to
+  the key exchange within the same attempt. Each login's record goes to `on_login` for
+  the consumer's cache, and the login server's record (address, port, the login's round
+  trip, when it was last used or failed) to `on_server_info`; `config.merge_server_info`
+  keeps a per-station list of them as the eufy app does (a report replaces the record
+  with the same address; beyond 8 per server type the slowest is dropped);
+- sends DISCOVER three times, 4 s apart, before giving up, and uses its answer only when
+  it names an IPv4 address (a name would need a DNS lookup on the event loop);
+- answers a packet with the re-discover flag with DISCOVER and a quick login;
+- sends an unanswered CALL again over TCP after 5 s, three times at most, to wake a
+  sleeping device;
+- drops datagrams from any address but the signaling host and the login server, and
+  keeps at most 64 unread events per call (the oldest dropped);
+- reports the first socket error (`on_lost`); `close` hangs up open calls, closes every
+  socket and fails pending requests with `SignalingError`.
+
+Errors: `SignalingError` (`code`: 401 for a refused login), `CallRefusedError` (486 or
+480, `code` None for a hang-up before the answer), `DeviceTimeoutError` for a step that
+gets no answer, `ProtocolError` for an answer that does not decode. The sequence up to
+an ICE-connected data channel is **[verified]** on a HomeBase 3 with a probe client; this
+client has run only against the library's loopback fake (`eufy_home_security.testing.rtc`).
+
+## Session
+
+`rtc/session.py` `RtcSession` holds one station's link, by station serial **[app]**:
+
+1. DISCOVER (skipped with a usable quick login), LOGIN, the ping;
+2. a kind-5 CALL on channel 0 whose `sdp_info` byte 2 has bit 0 set when the station's
+   kcp_type is 2 and never bit 1. The eufy app also sets bit 1 when it offers QUIC; this
+   client runs KCP only;
+3. the device's answer: its `sdp_info` (ICE username and password, content key, byte 2)
+   and `transport_caps`, read as the eufy app reads it: from `pbsdp` when the answer
+   carries a non-empty one (0 when it does not decode or lacks field 3.16), and from the
+   JSON `transport_caps` key only when it does not (`rtc/sdp.py` `read_pbsdp`, a bounded
+   reader). The data channel runs QUIC when bit 1 is set in both the
+   client's byte 2 and `transport_caps`, else KCP; with this client's byte it is always
+   KCP (a device that picked QUIC would raise `UnsupportedError`);
+4. ICE as the controlled side over `aioice` (`rtc/ice.py`: UDP and IPv4 only, the call's
+   TURN relay, at most 16 remote candidates), the candidates exchanged as above; the
+   client's own are sent again after 0.3, 0.4, ... s (100 ms steps, 200 ms from the
+   sixth) until the device acknowledges each. ICE must connect within 20 s, the eufy
+   app's wait. The device does not signal the end of its candidates, and aioice fails
+   ICE only after it, so a failed ICE ends at those 20 s as `DeviceTimeoutError`;
+5. the KCP data channel over the ICE connection, framed as the answer's byte 2 says (bit
+   0: the 32-byte prefix).
+
+`start` returns once the data channel is up and otherwise raises the attempt's error
+with nothing left running: `MissingDependencyError` without the `rtc` extra (before any
+socket), the client's errors above, `DeviceTimeoutError` when ICE does not connect in 20
+s (also when its checks fail: the device does not signal the end of its candidates, so
+aioice reports no failure through the session), `CommunicationError` when the session is
+closed during the connect (a direct `IceTransport` caller that signals the end of the
+remote candidates also gets it for failed checks). A signaling socket error or a hang-up
+of the data call during these steps ends them at once with that error (a socket error as
+`CommunicationError`). The first `start` gives up with `DeviceTimeoutError` when no
+connection is up within 180 s, all steps and retries together (the library's bound: it
+covers DISCOVER, a refused quick login and the key exchange, gathering, the CALL's wake
+re-sends and TCP connect, the 60 s answer wait and ICE, with a margin; without it a
+quick login against a dead server alone waits 7 to 9 minutes through the LOGIN retries).
+The cleanup after the bound runs outside it: closing a TURN allocation on an unreachable
+TURN server can take 30 s and more. The eufy app has no such bound on its first connect.
+After that the session reconnects by itself when the signaling socket fails, the device
+hangs up the call or the data channel stops: it waits 1 s, closes everything, waits 0.5
+s and connects again, as the eufy app does. A failed reconnect waits 1.5 s for its first
+three failures, then twice the previous wait, at most 64 s (the library's back-off);
+reconnects after a working connection go on until `close`, with no overall bound.
+`close` hangs up and closes every socket and task, the ICE connectivity checks of a
+connect still running included. One leftover is aioice's: with a TURN server in the
+call, a cancel or close while candidates are gathered leaves aioice's TURN allocation
+running until its request times out, or its socket open when the server answers after
+it. No command is sent over the channel yet.
+
 ## Media plane
 
 The app builds a remote SDP from a fixed template for the event path (`sdp.py`
@@ -164,9 +251,10 @@ Media is RTP H.265 (payload type 97) or H.264 (99), FlexFEC (125), audio on 111 
 (second byte 192-223, RFC 5761), builds and parses RTCP APP packets, and depacketizes
 H.264 (RFC 6184, single NAL units, STAP-A, FU-A) and H.265 (RFC 7798 without DONL:
 single NAL units, aggregation and fragmentation units) into Annex B access units with a
-keyframe flag; a lost fragment drops its NAL unit. No media has been received from a
-device; ICE, SRTP and the in-frame encryption of parameter sets, IDR slices and audio
-are not part of the library yet.
+keyframe flag; a lost fragment drops its NAL unit, and an access unit whose payloads pass
+4 MiB is dropped whole. No media has been received from a
+device; ICE for a media call, SRTP and the in-frame encryption of parameter sets, IDR
+slices and audio are not part of the library yet.
 
 ## Command encryption
 
@@ -200,7 +288,10 @@ A DATA frame is acknowledged with an ACK of its sequence number and delivered on
 (the last 1000 sequence numbers are remembered); an unacknowledged DATA is sent again
 after 100, 200 and 500 ms, five resends at most; an MTU request is answered with an MTU
 response; a heartbeat (sequence 0) goes out every second **[app]**. A HomeBase 3
-acknowledges the client's DATA and sends its own replies as DATA **[verified]**.
+acknowledges the client's DATA and sends its own replies as DATA **[verified]**. The
+client keeps at most 256 unread DATA bodies (a newer one is dropped unacknowledged, so
+the device sends it again) and runs at most 64 tasks for resends and answers (an inbound
+frame that needs another is dropped).
 
 ## Data channel
 
@@ -229,15 +320,20 @@ the client refuses a longer one before sending. The
 device may put a 20-byte outer head before a message (`u32 0x585a5948 | u32 flags |
 u32 length | u32 CRC32 | u32 offset`); the client sends none. KCP, both header
 directions, the outer head and the heartbeat echo are **[verified]**; a command reply
-over this channel has not been seen. The eufy app can also run this channel over QUIC,
-chosen per call from the device's answer **[app]**; only KCP is implemented, and which
-answer field picks QUIC is **[open]**.
+over this channel has not been seen. The client keeps at most 256 unread messages; when
+KCP has sent a segment 20 times without an acknowledgement (the peer went away) the
+channel ends with `CommunicationError`. The eufy app can also run this channel over
+QUIC, chosen per call as [Session](#session) says **[app]**; only KCP is implemented.
 
 ## Open
 
 - media from a device the station serves over WebRTC (ICE, SDES-SRTP, the in-frame
   encryption) and a successful live open;
-- the QUIC data channel and the answer field that selects it;
+- the QUIC data channel, and the fields of the `pbsdp` answer other than
+  `transport_caps`;
 - a command reply on the data channel;
 - the source of the command media key (the answer's `sdp_info` content key is inferred);
-- the client that runs the sequence, and a station transport that uses it.
+- this client and session against hardware (only a probe client has run the sequence);
+- a station transport that uses the session, and commands over the data channel;
+- which channel number the app's kind-5 CALL names (the client sends 0, as the probe
+  runs did).

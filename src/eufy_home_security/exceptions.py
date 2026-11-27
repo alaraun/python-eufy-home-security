@@ -367,6 +367,25 @@ class LiveStreamLimitError(CommunicationError):
         super().__init__(message)
 
 
+class SignalingError(CommunicationError):
+    """The WebRTC signaling server refused a request or ended a call.
+
+    ``code`` is the signaling response code (401 for a refused login; 480 or 486 for a
+    refused call), None when the call ended without one (a hang-up).
+    """
+
+    def __init__(
+        self, message: str, *, code: int | None = None, device_sn: str | None = None
+    ) -> None:
+        super().__init__(message, device_sn=device_sn)
+        self.code = code
+
+
+class CallRefusedError(SignalingError):
+    """A WebRTC CALL was answered with an error code (480, 486) or hung up before the
+    device's answer."""
+
+
 class ProtocolError(EufySecurityError):
     """A frame could not be decoded or decrypted."""
 

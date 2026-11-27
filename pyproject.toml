@@ -41,6 +41,10 @@ dependencies = [
 # Bounded: the client reaches aiomqtt's paho client; 2.2 is the first release that runs
 # on paho-mqtt 2.1 (Home Assistant's pin) without deprecation warnings.
 mqtt = ["aiomqtt>=2.2,<3"]
+# The WebRTC transport (stations the eufy app reaches only over WebRTC): ICE for
+# eufy_home_security.rtc.session. Bounded: the client builds on aioice's Connection
+# API as 0.15 has it. Internal until a station uses it.
+rtc = ["aioice>=0.15.1,<0.16"]
 
 [project.scripts]
 eufy-security = "eufy_home_security.cli:main"
@@ -62,6 +66,7 @@ dev = [
   "hypothesis>=6.130",
   "aioresponses>=0.7.8",
   "aiomqtt>=2.2,<3",  # the mqtt extra, so its tests and type checks run
+  "aioice>=0.15.1,<0.16",  # the rtc extra, likewise
   "mypy>=1.17",
   "ruff>=0.13",
   "prek>=0.2",
