@@ -17,6 +17,7 @@ how-to and reference docs.
 | [mqtt.md](mqtt.md) | the eufy security MQTT broker the app uses for its Wi-Fi locks: which devices, the client certificate and its reuse, connecting, topics, the message envelope, the client, lock commands |
 | [media.md](media.md) | still images, live stream open, video/audio frame headers, keyframe decryption, recording download, what is proven |
 | [locks.md](locks.md) | lock and unlock command forms per lock family (1940 cm2 frame with a time or HKDF key, 1961 JSON with an ECIES-wrapped key or plain, 1930 cm frame with an ECIES or ECDH key), which form a lock takes, how its answer is read, how a command is sent and confirmed by the lock's state; declared, not tested on hardware |
+| [rtc-signaling.md](rtc-signaling.md) | the eufy app's WebRTC path, protocol layers only (internal, not used by a station yet): signaling packets, DISCOVER, LOGIN, CALL, INFO and their cryptography, `sdp_info`, command encryption, the RTCP APP command channel, the data channel over KCP, RTP depacketizing |
 
 ## The layers
 
@@ -129,6 +130,7 @@ Untagged statements in a section inherit that section's tag.
 | command builders and decoders | `src/eufy_home_security/p2p/messages.py`, `p2p/params.py`, `p2p/notify.py`, `p2p/alarm.py`, `p2p/mode_actions.py`, `p2p/storage_info.py` |
 | media | `src/eufy_home_security/p2p/media.py` |
 | session orchestration | `src/eufy_home_security/p2p/session/` |
+| WebRTC protocol layers (internal, not wired in) | `src/eufy_home_security/rtc/` |
 | the MQTT transport (selection, envelope, TLS, client) | `src/eufy_home_security/mqtt/selection.py`, `mqtt/envelope.py`, `mqtt/tls.py`, `mqtt/client.py`, `mqtt/account.py`; the certificate in `cloud/api.py` |
 | cloud push registration and decoding | `src/eufy_home_security/push/fcm.py`, `push/decode.py`, `push/const.py` |
 | command names and the per-model settings | `src/eufy_home_security/devices/` (see `docs/reference/devices.md`, `docs/reference/models-schema.md`) |
