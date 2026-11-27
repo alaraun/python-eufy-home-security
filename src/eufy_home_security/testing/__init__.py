@@ -19,6 +19,10 @@ Never imported by the package itself: import it from a test suite only.
   :meth:`~.mqtt.MqttTestPki.register_answer` the fake cloud issues as the MQTT certificate
   (``FakeCloud(mqtt_answer=...)``), and :class:`~.mqtt.FakeMqttBroker`, a loopback MQTT
   broker for :class:`~eufy_home_security.mqtt.client.EufyMqttClient`.
+- :mod:`.rtc` (import it directly): :class:`~.rtc.FakeRtcServer`, eufy's WebRTC signaling
+  server and a station behind it on loopback, with an in-memory ICE connection
+  (:meth:`~.rtc.FakeRtcServer.ice_factory`) for
+  :class:`~eufy_home_security.rtc.session.RtcSession`; needs no extra.
 """
 
 from __future__ import annotations
