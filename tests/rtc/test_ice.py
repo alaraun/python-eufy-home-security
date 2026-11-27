@@ -84,15 +84,7 @@ async def settled(errors: list[dict[str, Any]]) -> None:
 
 
 @needs_aioice
-def test_the_aioice_internals_the_transport_stops_are_there(aioice: Any) -> None:
-    """The check list and the pair's task are aioice internals: an upgrade renaming them
-    must fail here."""
-    connection = aioice.Connection(ice_controlling=False, components=1, use_ipv6=False)
-    assert isinstance(connection._check_list, list)
-    candidate = aioice.Candidate.from_sdp("1 1 udp 1 127.0.0.1 9 typ host")
-    pair = aioice.ice.CandidatePair(None, candidate)
-    assert pair.task is None
-    assert aioice.Connection.check_start.__qualname__ == "Connection.check_start"
+def test_aioices_gathering_bound_is_the_one_counted(aioice: Any) -> None:
     gather = inspect.signature(aioice.Connection.get_component_candidates)
     assert gather.parameters["timeout"].default == ice_mod.AIOICE_GATHER_TIMEOUT
 

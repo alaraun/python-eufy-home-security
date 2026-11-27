@@ -140,15 +140,15 @@ wheels = [
 
 [[package]]
 name = "aioice"
-version = "0.10.2"
+version = "0.15.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dnspython" },
     { name = "ifaddr" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/67/04/df7286233f468e19e9bedff023b6b246182f0b2ccb04ceeb69b2994021c6/aioice-0.10.2.tar.gz", hash = "sha256:bf236c6829ee33c8e540535d31cd5a066b531cb56de2be94c46be76d68b1a806", size = 44307, upload-time = "2025-11-28T15:56:48.836Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/20/6f/84961dbeecaed4f298c762556748303da302b5823dc3cdcf2434ba88c6f5/aioice-0.15.1.tar.gz", hash = "sha256:c585e0cfa66646a617153d5f111814a4ec47dfbe1ccfa4d7c1f6158866dee78f", size = 72498, upload-time = "2026-11-25T09:30:21.579Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c7/e3/0d23b1f930c17d371ce1ec36ee529f22fd19ebc2a07fe3418e3d1d884ce2/aioice-0.10.2-py3-none-any.whl", hash = "sha256:14911c15ab12d096dd14d372ebb4aecbb7420b52c9b76fdfcf54375dec17fcbf", size = 24875, upload-time = "2025-11-28T15:56:47.847Z" },
+    { url = "https://files.pythonhosted.org/packages/af/37/66a9f0298c5e4012bc5f71ef05b541d3d33eed76999db4e78fc7507f5282/aioice-0.15.1-py3-none-any.whl", hash = "sha256:f1830fde71051f2cd91405c8a306a263be55967c65da248495380f53c56aca55", size = 31023, upload-time = "2026-11-25T09:30:20.337Z" },
 ]
 
 [[package]]
@@ -538,7 +538,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.11" },
-    { name = "aioice", marker = "extra == 'rtc'", specifier = ">=0.10,<0.11" },
+    { name = "aioice", marker = "extra == 'rtc'", specifier = ">=0.15.1,<0.16" },
     { name = "aiomqtt", marker = "extra == 'mqtt'", specifier = ">=2.2,<3" },
     { name = "cryptography", specifier = ">=44" },
     { name = "firebase-messaging", specifier = ">=0.4" },
@@ -549,7 +549,7 @@ provides-extras = ["mqtt", "rtc"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "aioice", specifier = ">=0.10,<0.11" },
+    { name = "aioice", specifier = ">=0.15.1,<0.16" },
     { name = "aiomqtt", specifier = ">=2.2,<3" },
     { name = "aioresponses", specifier = ">=0.7.8" },
     { name = "hypothesis", specifier = ">=6.130" },
