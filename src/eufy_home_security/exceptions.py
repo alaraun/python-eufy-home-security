@@ -636,9 +636,10 @@ class ModelDataError(EufySecurityError):
 
 
 class StorageError(EufySecurityError):
-    """The session cache file could not be read or moved aside (its permissions, a
-    read-only or failing disk); the message names the file, the :class:`OSError` is the
-    cause. A damaged file is no error: it is moved aside and the cache starts empty."""
+    """The session cache file could not be read, moved aside or written (its permissions,
+    a read-only, full or failing disk); the message names the file, the :class:`OSError`
+    is the cause. A damaged file is no error: it is moved aside and the cache starts
+    empty."""
 
 
 class MissingDependencyError(EufySecurityError):

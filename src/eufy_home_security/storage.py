@@ -174,6 +174,12 @@ class JsonFileStore:
         return doc if isinstance(doc, dict) else None
 
     def _save(self, data: dict[str, Any]) -> None:
+        try:
+            self._write(data)
+        except OSError as err:
+            raise StorageError(f"cache file {self.path} could not be written: {err}") from err
+
+    def _write(self, data: dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=self.path.parent, prefix=f".{self.path.name}.")
         try:
@@ -349,6 +355,8 @@ class SessionCache:
         self._pending_save = None  # from here on the write must not be cancelled
         try:
             await self.async_save()
+        except StorageError as err:
+            _LOGGER.warning("session cache not saved: %s", err)
         except Exception:
             _LOGGER.warning("session cache not saved", exc_info=True)
 

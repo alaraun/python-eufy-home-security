@@ -74,8 +74,8 @@ successful login it also holds the account password, so later runs may pass `Non
 and still log in again by themselves when the session expires. `password` may also
 be an async callable: it is awaited only when a login really happens and no password
 is cached, so an interactive program can prompt just in time. A damaged cache file is
-moved aside to `<name>.corrupt` and the cache starts empty; one that cannot be read or
-moved aside (its permissions, a read-only disk) raises `StorageError`.
+moved aside to `<name>.corrupt` and the cache starts empty; one that cannot be read,
+moved aside or written (its permissions, a read-only or full disk) raises `StorageError`.
 
 ## Arm, change a setting
 

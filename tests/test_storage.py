@@ -474,6 +474,47 @@ async def test_a_damaged_cache_file_that_cannot_be_moved_aside_is_a_storage_erro
     assert path.read_text() == "{"
 
 
+def _unwritable(tmp_path: Path, where: str) -> Path:
+    """A cache path the store cannot write: the path is a non-empty directory, or its
+    parent directory is a file."""
+    if where == "target":
+        (tmp_path / "cache.json" / "x").mkdir(parents=True)
+        return tmp_path / "cache.json"
+    (tmp_path / "parent").write_text("")
+    return tmp_path / "parent" / "cache.json"
+
+
+def _temp_files(tmp_path: Path) -> list[Path]:
+    """The store's temp files left anywhere under ``tmp_path``."""
+    return list(tmp_path.rglob(".cache.json.*"))
+
+
+@pytest.mark.parametrize("where", ["target", "parent"])
+async def test_a_cache_file_that_cannot_be_written_is_a_storage_error(
+    tmp_path: Path, where: str
+) -> None:
+    path = _unwritable(tmp_path, where)
+    with pytest.raises(StorageError, match="could not be written") as caught:
+        await JsonFileStore(path).async_save({"a": 1})
+    assert isinstance(caught.value.__cause__, OSError)
+    assert _temp_files(tmp_path) == []
+
+
+async def test_a_scheduled_save_logs_a_storage_error_once_without_a_traceback(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    path = tmp_path / "cache.json"
+    cache = SessionCache(JsonFileStore(path), "user@example.com")
+    await cache.async_load()
+    (path / "x").mkdir(parents=True)  # the file's place is taken by a directory
+    cache.schedule_save(0)
+    await asyncio.sleep(0.05)
+    records = [r for r in caplog.records if "session cache not saved" in r.getMessage()]
+    assert len(records) == 1
+    assert "could not be written" in records[0].getMessage()
+    assert records[0].exc_info is None
+
+
 async def test_save_hands_the_store_a_snapshot() -> None:
     saved: list[dict[str, Any]] = []
 
