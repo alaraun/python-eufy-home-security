@@ -1776,8 +1776,12 @@ state. Whether this client can also lock and unlock it is per unit:
 `eufy.lock_control(device_sn)` answers from the lock's command route, firmware and cloud
 record, without a session or network, with `writable`, `path` (`station` or `mqtt`),
 `reason` (a text for the UI when not writable) and `guest`. A lock whose route is its
-station's session is writable only while this client runs that station. Give the `lock`
-entity lock and unlock where `writable`, and make it read-only otherwise.
+station's session is writable only while this client runs that station. A lock on the
+MQTT path is writable exactly when `EufyMqttAccount` connects it (one rule for both,
+[protocol/mqtt.md](../protocol/mqtt.md#which-devices)); `writable` does not follow the
+account's connection, so it holds while the account starts or after a failed start, and
+a command then raises `CommunicationError`. Give the `lock` entity lock and unlock where
+`writable`, and make it read-only otherwise.
 
 `await eufy.async_lock(device_sn)` / `async_unlock(device_sn)` send the command over that
 path and return the `LockState` once the lock reports the asked state, never on an
@@ -1785,24 +1789,53 @@ acknowledgement ([protocol/locks.md](../protocol/locks.md#commands)). Before sen
 raise `GuestAccessError` (the account is a guest of the lock), `UnsupportedError` (no
 route the library sends, no member record for the lock in the cloud's device list, or no
 cloud user id before the first login), `MqttAccountRequiredError` (an MQTT lock: call
-`eufy.use_mqtt(account)` with the account's `EufyMqttAccount`) or `DeviceBusyError`
-(a command for that lock still waits). After sending they raise `CommandRejectedError`
-(`err.code`; -151 is a refused sequence number), `LockNotMovedError` (`err.state`: jammed
-or stopped between positions) or `DeviceTimeoutError`. A lock already in the asked state
-returns at once. The default wait is the app's 20 s for the answer (over MQTT after up to
-15 s for the broker to take the command) plus 30 s for the
-state, and `timeout` bounds the whole call; run it as a task and let `LockStateChanged`
-drive the entity. A command names the account's nickname as its sender, as the app does
-(`eufy.cloud.display_name`: the e-mail's local part only when the account has none).
+`eufy.use_mqtt(account)` with the account's `EufyMqttAccount`), `CommunicationError`
+(the account runs no connection for the lock now: not started, starting or stopped) or
+`DeviceBusyError` (a command for that lock still waits). After sending they raise
+`CommandRejectedError` (`err.code`; -151 is a refused sequence number),
+`LockNotMovedError` (`err.state`: jammed or stopped between positions) or
+`DeviceTimeoutError`. Every one of them imports from
+`eufy_home_security` itself, as every library error does. A lock whose reading (below: one
+merged reading of every source, never the MQTT reports alone) already is the asked state
+returns at once, sending nothing (not while that reading is a push that may be older than
+the lock's last report, below). Each wait is the app's: on the station path the connect,
+the lock's public key (a cloud call, on the 1961 and 1930 forms) and the station's result
+come first, with no bound of their own beyond the session's, then 20 s for the lock's
+answer; over MQTT up to 15 s for the broker to take the command (a connection that is not
+up gets 10 s of them), then 20 s for the answer; on both, then 30 s for the state.
+`timeout` caps the whole call, every step above included, and each wait keeps its own
+default within it: `timeout=75` still ends a lock that never answers after 20 s, and
+`timeout=5` ends any step after 5 s in all. Run it as a task and let `LockStateChanged`
+drive the entity. Once the lock took the command (its answer accepted it) the lock reads
+`locking` or `unlocking` (`source` `command`) until a report ends the wait. When the call
+then fails (a timeout, a lost connection) or is cancelled, the lock keeps reading `locking`
+or `unlocking` until its next report taken, at most 30 s (the app's state wait) after the
+take, then its last report again (with a `LockStateChanged`; `unknown`, `source`
+`command`, when nothing was reported before, and `lock_state` gives that reading too). A
+refusing status report ends it at once. Meanwhile the next lock or unlock is always sent,
+as the reading is never the asked state; a call cancelled before the lock took it leaves
+the reading as it was. A command names the account's nickname as
+its sender, as the app does (`eufy.cloud.display_name`: the e-mail's local part only when
+the account has none).
 Declared from the eufy app, not tested on hardware.
 
-`station.lock_state(device_sn)` gives a `LockReading` (None before anything was reported,
-and for a device that is no lock): `state`, a `LockState`, `source` (`p2p`, `notify`,
-`cloud`, `push` or `lock`, the lock's own status report after a command), `raw` (the parameter's value) or `event_type` (the push's). Every change
-of `state` emits `LockStateChanged(device_sn, state, source, station_sn, raw, event_type)`
-on the client's stream, the first state included; read the state from the event or from
-`lock_state`. The state is the lock-state code as the eufy app's lock controls read the
-lock's `smart_lock_onoff_status`, or what a push about the lock sets:
+`eufy.lock_state(device_sn)` gives the lock's one merged `LockReading`, whichever station
+serves it or none (`station.lock_state(device_sn)` the same for a lock of that station;
+None before anything was reported or a command was taken, and for a device that is no
+lock; `UnsupportedError` for a device not listed): `state`, a `LockState`, `source` (`p2p`,
+`notify`, `cloud`, `push` or `lock`, the lock's own status report, or `command`: locking or
+unlocking while a command of this client the lock took is unconfirmed, below, and
+`unknown` after such a command ended on a lock with nothing reported before it), `raw`
+(the parameter's value, or the status report's code) or `event_type` (the push's), and
+`observed_at` (epoch seconds the report or the take dates from; None for a cloud copy
+without an upload time or that `unknown`). Each
+report the reading takes emits `LockStateChanged(device_sn, state, source, station_sn,
+raw, event_type, observed_at, changed)` on the client's stream, the first one included; `changed` is False
+when the state repeats the previous reading's (another source, raw value or time). A
+report the reading does not take (older, a repeated value) emits nothing, so the entity
+needs no merging of its own: write the state from the event, or read `lock_state` on it.
+The state is the lock-state code as the eufy app's lock controls read the lock's
+`smart_lock_onoff_status`, or what a push about the lock sets:
 
 | `LockState` | lock-state code (param 1912 behind a station, 6000 for a lock that is its own station) | push `event_type` | suggested HA lock state (the library's suggestion) |
 |---|---|---|---|
@@ -1817,18 +1850,32 @@ lock's `smart_lock_onoff_status`, or what a push about the lock sets:
 | `jammed` | | 517, 519 (mechanical fault) | jammed |
 | `unknown` | any other code, a value that is no number, nothing reported | 516 (the lock went offline) | unknown |
 
-The parameter and the pushes are ordered by time, as the guard mode is: a push is ignored
-when it is more than 300 s old, older than the last push taken, or more than 30 s older
-than the lock's last parameter report; a parameter value is taken when it moves, and also
-when it repeats but dates from after the push the state came from. So the next dump after
-a push replaces it, and `jammed`, which only a push reports, lasts until the lock's next
-report ([events.md](../protocol/events.md#lock-pushes-declared-app)). Keep `state` (and
-`raw`) as attributes when the entity maps passage and privacy mode to unlocked and
-locked.
-A lock the library reaches through no station (a Wi-Fi lock without a P2P id is skipped,
-`SkippedDevice`) has no `lock_state`. Served through `use_mqtt`, its status reports arrive
-as `LockStateChanged` with `station_sn` None once this client has sent it a command (the
-reports are read with the key the command names, [mqtt.md](../protocol/mqtt.md#lock-commands)).
+Every source feeds one reading per lock, the station's reports, pushes and the lock's own
+status reports over its station or the MQTT broker alike, and the newest report wins, as
+for the guard mode: a push is ignored when it is more than 300 s old, older than the last
+push taken, or more than 30 s older than the lock's last status report or parameter report
+(a push is dated by the lock's or the cloud's clock, a report by its arrival). A push of
+another state than the lock's last status or parameter report, dated no later than it, is
+shown, but the two may have come in either order: until the reading takes its next report
+(another push of the same kind leaves the order unknown too), a lock or unlock command is
+sent even when the reading already is the asked state, and such a push does not confirm a
+command waiting for its state. So on a lock whose clock runs behind and that sends no report
+of its own after a command, the command can end unconfirmed (`DeviceTimeoutError`) though
+the lock moved, as the push that would confirm it is dated before the lock's last report.
+The lock's own status report is always taken; a parameter value is taken when it differs
+from the lock's last value (the last status report's code included), and also when it
+repeats but dates from after the push the state came from. So the next dump after a push
+replaces it, and `jammed`, which only a push reports, lasts until the lock's next report
+([events.md](../protocol/events.md#lock-pushes-declared-app)). A changed value from the
+device list's copy is taken unless the cloud dates it more than 30 s
+(`LOCK_REPORT_SLACK_SECONDS`) before the reading; a copy without an upload time never
+replaces a dated reading. Keep `state` (and `raw`) as attributes when the entity maps
+passage and privacy mode to unlocked and locked.
+A lock that no station of this client serves (a Wi-Fi lock without a P2P id is skipped,
+`SkippedDevice`) has no `station.lock_state`; the client keeps its reading
+(`eufy.lock_state`) from the device list's copy, pushes about it and, served through
+`use_mqtt`, its MQTT status reports, with `LockStateChanged.station_sn` None. A lock that
+is its own station takes its MQTT status reports into its station's reading.
 
 ### Garage doors
 
@@ -3779,7 +3826,12 @@ ERROR `Unexpected message ID "<n>" in on_subscribe callback` on an unload is har
 `EufyMqttAccount` per account with the cloud device list and call `async_update_devices()`
 after each device-list refresh: the library decides which devices are MQTT devices, which
 login scope's connection serves each (one connection per scope holding MQTT devices),
-reuses each scope's certificate and reconnects by itself. Call `async_publish` and
+reuses each scope's certificate and reconnects by itself. The certificate request never
+logs in: a cloud error of it arrives as a `CloudProblem` with `station_sn` None once the
+account is given to `use_mqtt` (route it as the other cloud problems: an
+`AuthenticationError` to reauth; a `NoCachedSessionError` means the connection waits for
+the integration's next login, which the next ordinary cloud call or a reauth makes).
+Call `async_publish` and
 `async_request` on the account; it routes them by device. A request pending when a
 connection ends or the client stops raises `CommunicationError` at once. Call `async_stop()` on unload: it waits
 for a device update in progress and for a connect step (30 s at most), then closes what

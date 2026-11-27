@@ -515,9 +515,10 @@ fw 3.8.7.4), so in practice a push is always the cloud's.
   the handshake completed: it is emitted once per connection, after the first
   successful parameter read. `connected=False` follows only a `True` that was
   announced. A bare `async_connect()` emits nothing.
-- **Background cloud failures are account events.** When a credential refresh or
-  the push-token upload hits a cloud error, `EufySecurity` emits one `CloudProblem`
-  per error type until the next successful cloud call or login. Such an error is
+- **Background cloud failures are account events.** When a credential refresh, the
+  push-token upload or the MQTT certificate request of an account given to `use_mqtt()`
+  (which never logs in, [mqtt.md](mqtt.md)) hits a cloud error, `EufySecurity` emits one
+  `CloudProblem` per error type until the next successful cloud call or login. Such an error is
   delivered only there: the station's `ConnectionChanged` carries
   `cause=CREDENTIALS_UNAVAILABLE` with `error=None`. The library's own cipher-refresh
   cooldown (`RefreshCooldownError`) is not a cloud problem and stays on
@@ -626,9 +627,10 @@ properties derived from them are described under
 ### Lock pushes **[declared: app]**
 
 A smart lock's push carries its `event_type`; the eufy app sets its lock card from it.
-The library does the same for a device graded `lock` that is paired to one of the
-account's stations (`Station.note_lock_push`, called for every delivered push), emitting
-`LockStateChanged` with `source` `push`:
+The library does the same for a device graded `lock` (`Station.note_lock_push` for a lock
+of one of the client's stations, called for every delivered push; the client's own reading
+for a listed lock no station of the client serves), emitting `LockStateChanged` with
+`source` `push`:
 
 | `event_type` | state |
 |---|---|
@@ -638,18 +640,34 @@ account's stations (`Station.note_lock_push`, called for every delivered push), 
 | 516 (the lock went offline) | `unknown`: the app sets a code its card shows as its fault state; the library does not call an offline lock jammed |
 
 Other lock pushes (low battery, a door left open, tamper) set no state. A lock's own status
-report after a lock command sets it with `source` `lock` ([locks.md](locks.md#commands)). Between pushes
-the lock state comes from its lock-state parameter (1912 behind a station, 6000 for a lock
-that is its own station; the `lock` block of its settings file), from a dump, a parameter
-notify or the device list's copy. Both are ordered by time, with the guard mode's bounds:
+report (over its station after a lock command, or over the MQTT broker,
+[mqtt.md](mqtt.md#lock-commands)) sets it with `source` `lock`
+([locks.md](locks.md#commands)). Between them the lock state comes from its lock-state
+parameter (1912 behind a station, 6000 for a lock that is its own station; the `lock`
+block of its settings file), from a dump, a parameter notify or the device list's copy. A
+lock no station of the client serves (a Wi-Fi lock without a P2P id, a lock behind a
+station this client does not run) has the same reading, kept by the client from the
+device list's copy, its pushes and its MQTT status reports. Every source feeds one reading
+per lock, and the newest report wins, with the guard mode's bounds:
 
 - a push (dated by its event time, by its arrival without one) is dropped when it is more
   than 300 s old, older than the last push taken for that lock, or more than 30 s older
-  than the lock's last dated parameter report (its arrival over P2P, the cloud's upload
-  time of its copy);
-- a parameter report is taken when its value moved, and also when it repeats the value
-  but dates from after the push the state came from: a dump taken after a push replaces
-  it. A push-only state (`jammed`) therefore lasts until the next such report.
+  than the lock's last status report or dated parameter report (its arrival over P2P or
+  MQTT, the cloud's upload time of its copy). A push of another state than that last
+  report, dated no later than it, is taken, but the two clocks leave their order unknown:
+  until a report that settles it (a later push, a push of the report's state, the lock's
+  own report, a parameter report taken), a lock command is sent whatever the reading says
+  and such a push does not end a command's wait for its state
+  ([locks.md](locks.md#commands));
+- the lock's own status report (dated by its arrival) is always taken, and its code
+  becomes the lock's last value;
+- a parameter report is taken when its value differs from the lock's last value, and also
+  when it repeats the value but dates from after the push or status report the state came
+  from: a dump taken after a push replaces it. A push-only state (`jammed`) therefore lasts
+  until the next such report. A changed value from the device list's copy dated more than
+  30 s before the lock's reading is about an earlier state and is dropped; a copy without
+  an upload time never replaces a dated reading (it is taken only while every reading the
+  lock has is undated).
 
 ## De-duplication across channels
 

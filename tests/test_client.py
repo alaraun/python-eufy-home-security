@@ -29,7 +29,7 @@ from eufy_home_security.cloud.const import KEY_REFRESH_SLOW_RETRY, CloudCode
 from eufy_home_security.cloud.models import CloudDevice, CloudInvite
 from eufy_home_security.cloud.status import DeviceListSource, LoginNeed
 from eufy_home_security.devices.capabilities import Capability
-from eufy_home_security.devices.locks import LockState, LockStateSource
+from eufy_home_security.devices.locks import LockReading, LockState, LockStateSource
 from eufy_home_security.devices.model_settings import (
     BATTERY_PROPERTY,
     PARENTLESS_ONLY,
@@ -2786,6 +2786,49 @@ async def test_a_lock_push_sets_the_state_of_the_station_it_is_paired_to() -> No
     changed = [e for e in seen if isinstance(e, LockStateChanged)]
     assert [(e.device_sn, e.state) for e in changed] == [(lock_sn, LockState.LOCKED)]
     assert isinstance(seen[0], SecurityEvent)  # the push itself first
+
+
+async def test_a_lock_no_station_serves_reads_its_cloud_copy_and_pushes() -> None:
+    """A listed lock no built station serves (no P2P id) has a merged reading too: the
+    device list's copy of its lock-state parameter, then a newer push about it."""
+    lock_sn = "T85D0P2000054329"
+    lock = {
+        "device_sn": lock_sn,
+        "device_type": 202,
+        "device_new_pn": "T85D0",
+        "station_sn": lock_sn,
+        "device_name": "Door",
+        "params": [{"param_type": 6000, "param_value": "4"}],
+    }
+    async with aiohttp.ClientSession() as http:
+        client = account(http, FakeCloud(devices=[station_device(), lock]))
+        await client.async_discover(refresh=True)
+        seen: list[Event] = []
+        client.subscribe(seen.append)
+        try:
+            states = client._lock_states(lock_sn)
+            assert states is not None
+            listed = states.reading(lock_sn)
+            client._deliver(
+                SecurityEvent(
+                    source=EventSource.CLOUD,
+                    device_sn=lock_sn,
+                    event_type=258,  # unlocked by hand
+                    event_time_ms=int(time.time() * 1000),
+                    raw={},
+                )
+            )
+            pushed = states.reading(lock_sn)
+        finally:
+            await client.async_close()
+    assert lock_sn not in {d.device_sn for s in client.stations.values() for d in s.devices}
+    assert listed == LockReading(state=LockState.LOCKED, source=LockStateSource.CLOUD, raw="4")
+    assert pushed is not None
+    assert (pushed.state, pushed.source) == (LockState.UNLOCKED, LockStateSource.PUSH)
+    changed = [e for e in seen if isinstance(e, LockStateChanged)]
+    assert [(e.device_sn, e.state, e.station_sn) for e in changed] == [
+        (lock_sn, LockState.UNLOCKED, None)
+    ]
 
 
 def test_client_rejects_zero_cloud_state_refresh() -> None:

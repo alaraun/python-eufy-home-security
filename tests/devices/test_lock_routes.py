@@ -160,18 +160,35 @@ def test_the_generator_writes_a_loadable_table(gen: ModuleType, tmp_path: Path) 
         "SL2": _entry(prefix="T0002", p2p=None, mqtt="never"),  # no route: left out
         "SL3": _entry(prefix="T0003", p2p="AnkerBleV12", ecdh_param=6610),
     }
-    routes.write_text(json.dumps({"models": models}))
+    routes.write_text(json.dumps({"models": models, "mqtt_device_types": [230, 202, 202]}))
     table = gen.generate(routes, tmp_path / "missing.json")
     assert table == {
         "T0001": [("", "1940", "never", None, None), ("6:9", "1961", "never", None, None)],
         "T0003": [("", "1930", "never", 6610, None)],
     }
     namespace: dict[str, object] = {}
-    exec(gen.render(table), namespace)  # noqa: S102 - the generator's own output
+    types = gen.mqtt_device_types(routes)
+    assert types == [202, 230]
+    exec(gen.render(table, types), namespace)  # noqa: S102 - the generator's own output
     assert namespace["LOCK_ROUTES"] == {k: tuple(v) for k, v in table.items()}
+    assert namespace["MQTT_DEVICE_TYPES"] == frozenset({202, 230})
     empty: dict[str, object] = {}
-    exec(gen.render({}), empty)  # noqa: S102 - the generator's own output
+    exec(gen.render({}, []), empty)  # noqa: S102 - the generator's own output
     assert empty["LOCK_ROUTES"] == {}
+    assert empty["MQTT_DEVICE_TYPES"] == frozenset()
+
+
+@pytest.mark.parametrize("types", [None, "202,230", [202, "230"], [True]])
+def test_the_generator_needs_the_connectors_device_types(
+    gen: ModuleType, tmp_path: Path, types: object
+) -> None:
+    routes = tmp_path / "routes.json"
+    data: dict[str, object] = {"models": {}}
+    if types is not None:
+        data["mqtt_device_types"] = types
+    routes.write_text(json.dumps(data))
+    with pytest.raises(SystemExit, match="mqtt_device_types"):
+        gen.mqtt_device_types(routes)
 
 
 def test_the_generator_needs_a_plain_row_per_product(gen: ModuleType, tmp_path: Path) -> None:

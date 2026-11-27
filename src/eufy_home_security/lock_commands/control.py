@@ -1,6 +1,7 @@
 """What every lock command path decides before and after it sends: refusals, the state it
 asks for, and how a reading ends its wait (declared, eufy app; docs/protocol/locks.md §
-Commands). Pure: no I/O.
+Commands). No I/O beyond the bundled model data the MQTT selection reads, which the client
+loads at discovery.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from .._logging import redact_serial
 from ..devices.lock_routes import LockForm
 from ..devices.locks import LockState
 from ..exceptions import GuestAccessError, UnsupportedError
+from ..mqtt.selection import is_mqtt_device
 from .actions import LockAction
 
 if TYPE_CHECKING:
@@ -111,9 +113,19 @@ def has_member_record(device: CloudDevice) -> bool:
     )
 
 
-def lock_control(form: LockForm | None, *, guest: bool) -> LockControl:
-    """The control a lock with route ``form`` offers this account (``guest``: its member
-    record names a guest)."""
+NOT_SELECTED_FOR_MQTT: Final = (
+    "the lock takes its commands over MQTT, but no MQTT connection of the eufy app serves it"
+)
+"""The reason of an MQTT lock that neither of the app's MQTT connectors selects
+(:func:`~..mqtt.selection.is_mqtt_device`): the account would serve no connection for it."""
+
+
+def lock_control(form: LockForm | None, device: CloudDevice) -> LockControl:
+    """The control a lock with route ``form`` offers this account, from ``device``'s cloud
+    record: its member record (a guest has none) and, on the MQTT path, whether the eufy
+    app's MQTT selection serves it (the account's own rule,
+    :func:`~..mqtt.selection.is_mqtt_device`, so a writable MQTT lock is always one the
+    account connects). Reads the model's bundled data the client loaded at discovery."""
     if form is None:
         return LockControl(form=None, path=None, reason="no lock command route for this model")
     if form is LockForm.P2P_1911:
@@ -123,7 +135,9 @@ def lock_control(form: LockForm | None, *, guest: bool) -> LockControl:
             reason="the lock takes its commands as Bluetooth frames through its station, "
             "which this library does not build",
         )
-    if guest:
+    if form is LockForm.MQTT and not is_mqtt_device(device):
+        return LockControl(form=form, path=None, reason=NOT_SELECTED_FOR_MQTT)
+    if is_guest(device):
         return LockControl(
             form=form,
             path=None,
@@ -154,6 +168,14 @@ def check_control(control: LockControl, device_sn: str, path: LockPath) -> LockF
             device_sn=device_sn,
         )
     return control.form
+
+
+def phase_wait(default: float, deadline: float | None, now: float) -> float:
+    """The bound of one wait of a command: its own ``default`` (the app's wait), cut to
+    what is left at ``now`` before the call's ``deadline`` (None: the call has none)."""
+    if deadline is None:
+        return default
+    return max(0.0, min(default, deadline - now))
 
 
 def ends_wait(reading_state: LockState, target: LockState) -> bool:

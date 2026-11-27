@@ -179,12 +179,21 @@ acknowledgement alone never counts. In order:
    1961 one names no `userId`). A 1940 command (station or MQTT) raises `UnsupportedError`
    while the cloud client has no user id for the account (before its first login), and a
    1961 ECIES or 1930 command on a station built without a cloud client, which the lock's
-   public key comes from. An MQTT route with no account given to `use_mqtt()` raises
-   `MqttAccountRequiredError`; a command still waiting for the same lock raises
-   `DeviceBusyError`. A lock whose last reading already is the
-   asked state returns it at once and sends nothing (the app's lock card offers lock only
-   for a lock it shows open, unlock otherwise). An unknown or offline reading refuses
-   nothing.
+   public key comes from. An MQTT route that the app's MQTT selection leaves out
+   ([mqtt.md](mqtt.md#which-devices): a T8506 with 7th serial character `8`) is not
+   writable and raises `UnsupportedError`, as the account runs no connection for it. An
+   MQTT route with no account given to `use_mqtt()` raises `MqttAccountRequiredError`;
+   one whose account runs no client for it now (not started yet, starting, stopped, or a
+   start that failed) raises `CommunicationError`, sending nothing: `lock_control()` does
+   not follow the account's connection. A command still waiting for the same lock raises
+   `DeviceBusyError`. A lock whose reading already is the asked state returns it at once
+   and sends nothing (the app's lock card offers lock only for a lock it shows open,
+   unlock otherwise), unless that reading is a push that may be older than the lock's last
+   report (another state, dated no later, on another clock): then the command is sent.
+   The reading is the lock's one merged reading of every source (its station's reports,
+   pushes, its status reports over the station or MQTT; the newest report wins,
+   [events.md](events.md#lock-pushes-declared-app)) on both paths, never the MQTT reports
+   alone. An unknown or offline reading refuses nothing.
 2. **The station's result** (P2P): a non-zero code raises `CommandRejectedError(code)`,
    except -151 (sequence number refused) on the 1940 and 1930 forms, where the wait for the
    lock's answer goes on, as in the app. On the 1961 form the station's result is the
@@ -198,17 +207,32 @@ acknowledgement alone never counts. In order:
 4. **The state**: the asked state from any source (the lock's status report, `0x4A` in the
    1940 through data: a code byte, then `A1` the battery level and `A2` the lock-state code,
    a missing entry read as 0 as the app reads it; a parameter dump or notify; a push)
-   taken after the send returns it, also when it comes
-   before the lock's answer; `jammed` or
-   `intermediate` raises `LockNotMovedError` (`err.state`); a status report with a non-zero
-   code raises `CommandRejectedError`; another state keeps the wait, so a
-   stale dump does not end it. This last rule is the library's: the app ends on the first
-   status report with code 0, whatever state it names.
+   taken after the send returns it, also when it comes before the lock's answer; `jammed`
+   or `intermediate` raises `LockNotMovedError` (`err.state`); a status report with a
+   non-zero code raises `CommandRejectedError`; another state keeps the wait, so a stale
+   dump does not end it. Nor does an unsettled push: one of another state than the lock's
+   last status or parameter report, dated no later than it (on another clock its order
+   against that report is unknown, [events.md](events.md#lock-pushes-declared-app)); the
+   next report taken or a push dated after it does. This rule and the last are the
+   library's: the app ends on the first status report with code 0, whatever state it
+   names.
+
+From the lock's accepting answer until a report ends the wait, the lock reads `locking` or
+`unlocking` (`LockStateSource.COMMAND`). A call that fails after that (a timeout, a lost
+connection) or is cancelled leaves it so until the lock's next report taken, at most
+`LOCK_CONFIRM_TIMEOUT` (30 s) after the answer; a refusing status report ends it at once.
+While it lasts the next command is sent whatever the last report says, since the reading is
+never an asked state. When it ends the lock reads its last report again; a lock with
+nothing reported before it reads `unknown` (`LockStateSource.COMMAND`), the state its
+`LockStateChanged` names.
 
 The waits are the app's: 20 s for the lock's answer (over MQTT counted from the broker's
-acknowledgement, which has 15 s), then 30 s for its state; a `timeout`
-bounds the whole command, the public-key query, the connect and the send included. Nothing
-within it raises `DeviceTimeoutError`, whose message names what was missing: the send
+acknowledgement, which has 15 s), then 30 s for its state. A `timeout` caps the whole
+command, the connect, the public-key query and the send included, and each of those waits
+keeps its own default within it (`phase_wait`: the default cut to what is left of the
+call): a lock that never answers ends after 20 s even with `timeout=75`. The steps before
+the answer have no default of their own beyond the session's. A wait that runs out raises
+`DeviceTimeoutError`, whose message names what was missing and the wait it had: the send
 ("not sent"), the station's result after the send went out ("no station result"), the
 lock's answer or its state.
 

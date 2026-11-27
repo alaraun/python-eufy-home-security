@@ -11,20 +11,30 @@ cloud or broker.
 
 ## Which devices
 
-A device is an MQTT device when both hold:
+The app runs two connectors on its one MQTT connection, and a device is an MQTT device when
+its device-list entry's `category` is one of `eufy_security`, `eufy_care`, `eufy_pet` (an
+entry without a category counts as `eufy_security`; the app's lights, `eufy_life`, have a
+client of their own) and either connector selects it:
 
-- its device-list entry's `category` is one of `eufy_security`, `eufy_care`,
-  `eufy_pet` (an entry without a category counts as `eufy_security`); the app's lights
-  (`eufy_life`) have a client of their own;
-- its model's thing description declares the property `is_support_mqtt` with default
-  `true`. The model is the entry's `device_new_pn`, else the product its serial names.
+- the current connector: its model's thing description declares the property
+  `is_support_mqtt` with default `true`. The model is the entry's `device_new_pn`, else
+  the product its serial names. The property is read from the bundled settings files
+  (`devices/data/models/<PN>.json`), so a regenerated data set moves products in or out by
+  itself. In the bundled data these models declare it: T8501, T8531, T8532, T85D0, T85D2,
+  T85F0, T85F1, T85L0, T85L1, T85M0, T85M1, T85P0, T85P1, T85V0, T8028 and T6010. T8L04,
+  a light, declares it too and is picked only when its entry's category is one of the
+  three.
+- the lock connector (legacy, still live for locks): the entry's cloud `device_type` is
+  one of `LOCK_CONNECTOR_DEVICE_TYPES` (189, 201, 202, 203, 205, 206, 207, 209, 210, 211,
+  212, 213, 229, 230, 299), generated with the lock routes from the app's lock
+  configuration (`scripts/gen_lock_routes.py`). Every lock the current connector selects
+  is on it, and T85F2 (229) and T85F3 (230), whose data declares no `is_support_mqtt`.
 
-The property is read from the bundled settings files (`devices/data/models/<PN>.json`),
-never from a list of device types, so a regenerated data set moves products in or out by
-itself. In the bundled data these models declare it: T8501, T8531, T8532, T85D0, T85D2,
-T85F0, T85F1, T85L0, T85L1, T85M0, T85M1, T85P0, T85P1, T85V0, T8028 and T6010. T8L04, a
-light, declares it too and is picked only when its entry's category is one of the three. `eufy_home_security.mqtt.mqtt_devices()`
-applies the rule to a device list.
+`eufy_home_security.mqtt.mqtt_devices()` applies the rule to a device list. The same rule
+decides whether a lock on the MQTT command route is writable (`lock_control()`,
+[locks.md](locks.md#commands)): a T8506 with 7th serial character `8` takes its commands
+over MQTT, but neither connector selects it, so the account runs no connection for it and
+it is not writable.
 
 With no MQTT device on the account the app asks for no certificate and opens no
 connection; the library does the same.
@@ -68,6 +78,13 @@ applies the app's rules for reusing it:
   reconnects all the same.
 - A publish while no certificate was obtained asks for one at once, without waiting out
   the reconnect back-off.
+- The client asks in the background and never logs in (`login=False`): without a usable
+  session (none cached, or one the cloud no longer accepts) the request fails with
+  `NoCachedSessionError` and the client tries again after its reconnect back-off, so the
+  connection comes back after the consumer's next login. A login there could make eufy
+  e-mail a verification code with no one to enter it. Each cloud error of the request
+  reaches `EufyMqttAccount.add_cloud_error_listener()`, and through
+  `EufySecurity.use_mqtt()` the client's stream as a `CloudProblem` (`station_sn` None).
 
 The certificate, its key and the thing name are masked in every log line and never shown
 in a repr.
@@ -170,6 +187,7 @@ await mqtt.async_stop()
 | `add_listener(fn)` | `fn(MqttMessage)` for every message; returns its remover. An exception from `fn` is logged (once per 5 minutes per listener) and touches neither the connection nor the other listeners |
 | `async_update_devices(devices)` | a changed MQTT device set reconnects with a new certificate; an unchanged one changes nothing. On the account: a scope left without MQTT devices has its client stopped, a new one gets a client. After `async_stop()` it does nothing until the next `async_start()` |
 | `clients`, `client_for(sn)` | the account's client per scope, and the one serving a device |
+| `async_stop()` | stops every client; their pending requests get a `CommunicationError`. On the account it marks itself stopped and tells every client to stop before it awaits anything, so a cancelled (bounded) stop still stops them all, and a start or device update in progress, or one still waiting for another, starts no client after it |
 
 The calls are the same on both classes. A serial that is not one of the client's (the
 account's) MQTT devices is an `UnsupportedError`; no
@@ -235,16 +253,18 @@ The app's thing-model screens of some locks build another form (`apiCommand` 194
 key order, an `account_id` of `""` inside `trans`); the library does not send it.
 
 The publish has 15 s for the broker's acknowledgement, then the lock 20 s to answer, then 30 s
-to report the asked state (a `timeout` bounds the whole call instead). The lock answers in a
+to report the asked state; a `timeout` caps the whole call and each wait keeps its own
+default within it. The lock answers in a
 device message (`cmd` 8) on its response topic: its through data `{"dev_sn", "lock_payload",
 "time"}` names the lock (the topic's lock when `dev_sn` is missing) and opens under the key
 its own `time` names; an answer to another request is skipped. The refusals, waits and
 sequence numbers of [locks.md](locks.md#commands) apply.
 
-The lock's status reports (device messages on its response topic, read as its answers are)
-set its state: each change emits
-`LockStateChanged` with `source` `lock` and `station_sn` None. They are read for a lock that
-took a command from this client (the command's key user id opens them). A status report with
-a non-zero code ends a waiting command with `CommandRejectedError(code)`, as on the station
-path. Declared from the
-eufy app, not tested against the broker.
+The lock's status reports (device messages on its response topic, read as its answers are,
+under the key user id of the lock's cloud record) set its state with `source` `lock`: in
+the lock's one reading, which its station's reports and pushes feed too
+([events.md](events.md#lock-pushes-declared-app)): its station's for a lock that is its own
+station (`station_sn` its serial), the client's for a lock no station of the client serves
+(`station_sn` None). A status report with a non-zero code ends a waiting command with
+`CommandRejectedError(code)`, as on the station path. Declared from the eufy app, not tested
+against the broker.

@@ -12,10 +12,17 @@ from typing import Any
 import pytest
 
 from eufy_home_security.cloud.models import CloudDevice
-from eufy_home_security.exceptions import CommunicationError, UnsupportedError
+from eufy_home_security.events import CloudProblem, Event
+from eufy_home_security.exceptions import (
+    CloudError,
+    CommunicationError,
+    NoCachedSessionError,
+    UnsupportedError,
+)
 from eufy_home_security.mqtt import account as account_module
 from eufy_home_security.mqtt.account import EufyMqttAccount
 from eufy_home_security.mqtt.envelope import MqttMessage, response_topic
+from eufy_home_security.testing import FakeCloud
 
 from .conftest import (
     CAMERA,
@@ -134,7 +141,8 @@ async def test_a_device_update_after_a_stop_starts_no_client(
     await account.async_wait_connected(5)
     stop = asyncio.create_task(account.async_stop())
     await asyncio.sleep(0)
-    assert account._lifecycle.locked()  # the stop holds the lifecycle
+    assert account._stopped  # marked at once, before the stop awaits anything
+    assert account.clients == {}
     if not queued:
         await stop
     update = asyncio.create_task(account.async_update_devices([EU_LOCK, SCOPE_LOCK]))
@@ -146,6 +154,36 @@ async def test_a_device_update_after_a_stop_starts_no_client(
     assert rig.broker.connected_clients == []
     assert len(rig.broker.connects) == 1
     assert mqtt_tasks() == []
+
+
+async def test_a_start_queued_before_a_stop_starts_no_client(
+    rig: Rig, account: EufyMqttAccount, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A start waiting behind a slow device update when a stop comes starts nothing: once
+    the stop returns no client runs, and the account stays stopped."""
+    await account.async_start([EU_LOCK])
+    await account.async_wait_connected(5)
+    held = hold_selection(monkeypatch, account_module)
+    try:
+        update = asyncio.create_task(account.async_update_devices([EU_LOCK]))
+        await until(held.entered.is_set)
+        start = asyncio.create_task(account.async_start([EU_LOCK, SCOPE_LOCK]))
+        await asyncio.sleep(0.05)  # the start waits for the update
+        stop = asyncio.create_task(account.async_stop())
+        await asyncio.sleep(0.05)
+    finally:
+        held.release.set()
+    async with asyncio.timeout(5):
+        await update
+        await start
+        await stop
+    assert account.clients == {}
+    assert account._stopped
+    await account.async_update_devices([EU_LOCK, SCOPE_LOCK])  # still stopped: ignored
+    assert account.clients == {}
+    await until(lambda: rig.broker.connected_clients == [])
+    assert len(rig.broker.connects) == 1
+    await until(lambda: mqtt_tasks() == [], 3.0)
 
 
 async def test_a_start_after_a_stop_follows_device_updates_again(
@@ -176,6 +214,32 @@ async def test_a_cancel_of_a_stop_still_stops_every_client(rig: Rig) -> None:
         finally:
             for client in clients:
                 await client.async_stop()
+
+
+async def test_a_stop_cancelled_behind_a_slow_device_update_still_stops_every_client(
+    rig: Rig, account: EufyMqttAccount, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A bounded stop (an unload) cancelled while a device update still reads the list:
+    the running client is stopped all the same, and the update starts no new one."""
+    await account.async_start([EU_LOCK])
+    await account.async_wait_connected(5)
+    held = hold_selection(monkeypatch, account_module)
+    try:
+        update = asyncio.create_task(account.async_update_devices([EU_LOCK, SCOPE_LOCK]))
+        await until(held.entered.is_set)
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(0.2):
+                await account.async_stop()
+    finally:
+        held.release.set()
+    async with asyncio.timeout(5):
+        await update
+    await until(lambda: mqtt_tasks() == [], 3.0)
+    assert account.clients == {}
+    await until(lambda: rig.broker.connected_clients == [])
+    assert len(rig.broker.connects) == 1  # no client for the update's new scope
+    await account.async_update_devices([EU_LOCK, SCOPE_LOCK])  # stopped: ignored
+    assert account.clients == {}
 
 
 async def test_a_client_stop_failing_after_a_cancel_is_logged_once(
@@ -253,3 +317,28 @@ async def test_listeners_reach_later_clients_until_removed(
     await asyncio.sleep(0.05)
     assert removed == []
     remove()  # a second call is a no-op
+
+
+async def test_a_certificate_fetchs_cloud_error_reaches_the_client_as_a_cloud_problem(
+    rig: Rig, account: EufyMqttAccount
+) -> None:
+    """The account's certificate fetch never logs in; its cloud error reaches the
+    account's listeners and, through ``use_mqtt``, the client's stream as one
+    ``CloudProblem`` (no station), which a consumer routes like any other."""
+    errors: list[CloudError] = []
+    account.add_cloud_error_listener(errors.append)
+    removed: list[CloudError] = []
+    account.add_cloud_error_listener(removed.append)()  # removed at once: never called
+    seen: list[Event] = []
+    rig.eufy.subscribe(seen.append)
+    rig.eufy.use_mqtt(account)
+    rig.cloud.call_errors.extend([FakeCloud.refusal(401)] * 2)
+    await account.async_start([EU_LOCK])
+    await until(lambda: len(errors) == 2)
+    await account.async_wait_connected(5)
+    rig.eufy.use_mqtt(None)
+    assert all(isinstance(e, NoCachedSessionError) for e in errors)
+    problems = [e for e in seen if isinstance(e, CloudProblem)]
+    assert [(type(p.error), p.station_sn) for p in problems] == [(NoCachedSessionError, None)]
+    assert "login" not in rig.cloud.calls
+    assert removed == []

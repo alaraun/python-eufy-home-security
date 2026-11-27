@@ -15,7 +15,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from .._logging import redact_serial
-from ..exceptions import CommunicationError, UnsupportedError
+from ..exceptions import CloudError, CommunicationError, UnsupportedError
 from .client import (
     KEEPALIVE_SECONDS,
     MQTT_PORT,
@@ -59,9 +59,12 @@ class EufyMqttAccount:
         self._server_ca_pem = server_ca_pem
         self._clients: dict[str, EufyMqttClient] = {}
         self._listeners: list[Listener] = []
+        self._cloud_listeners: list[Callable[[CloudError], None]] = []
         self._subscribe: frozenset[str] | None = None
         self._stopped = False
         """Set by :meth:`async_stop`, cleared by :meth:`async_start`: device updates are ignored."""
+        self._stop_generation = 0
+        """Counts :meth:`async_stop` calls: a start called before the latest stop starts nothing."""
         self._ending: set[asyncio.Task[None]] = set()
         """Client stops still running after a cancel of :meth:`async_stop`'s caller."""
         self._lifecycle = asyncio.Lock()
@@ -103,6 +106,34 @@ class EufyMqttAccount:
 
         return remove
 
+    def add_cloud_error_listener(
+        self, listener: Callable[[CloudError], None]
+    ) -> Callable[[], None]:
+        """Call ``listener`` with each cloud error of a client's certificate fetch (which
+        never logs in: :class:`~..exceptions.NoCachedSessionError` without a usable
+        session); returns its remover. :meth:`~..client.EufySecurity.use_mqtt` reports them
+        as :class:`~..events.CloudProblem`."""
+        self._cloud_listeners.append(listener)
+
+        def remove() -> None:
+            if listener in self._cloud_listeners:
+                self._cloud_listeners.remove(listener)
+
+        return remove
+
+    def _cloud_error(self, error: CloudError) -> None:
+        for listener in list(self._cloud_listeners):
+            try:
+                listener(error)
+            except Exception:
+                _LOGGER.exception("MQTT cloud error listener %r failed", listener)
+
+    def serves(self, device_sn: str) -> bool:
+        """Whether a running client serves MQTT device ``device_sn``."""
+        return any(
+            d.device_sn == device_sn for client in self._clients.values() for d in client.devices
+        )
+
     def client_for(self, device_sn: str) -> EufyMqttClient:
         """The client serving MQTT device ``device_sn``; :class:`UnsupportedError` for
         a serial that is none of the account's MQTT devices."""
@@ -123,12 +154,15 @@ class EufyMqttAccount:
     async def _start_client(
         self, scope: str, devices: list[CloudDevice], *, connect_without_devices: bool = False
     ) -> None:
+        if self._stopped:  # a stop came while a start or device update ran: no new client
+            return
         client = EufyMqttClient(
             self._cloud,
             region=scope,
             port=self._port,
             keepalive=self._keepalive,
             server_ca_pem=self._server_ca_pem,
+            on_cloud_error=self._cloud_error,
         )
         for listener in self._listeners:
             client.add_listener(listener)
@@ -148,9 +182,14 @@ class EufyMqttAccount:
 
         With none, nothing connects unless ``connect_without_devices`` (a connection check
         on the cloud's :attr:`~..cloud.api.EufyCloudApi.region`). ``subscribe`` is each
-        client's (:meth:`.EufyMqttClient.async_start`).
+        client's (:meth:`.EufyMqttClient.async_start`). A start still waiting for a device
+        update or another start when :meth:`async_stop` is called starts nothing.
         """
+        generation = self._stop_generation
         async with self._lifecycle:
+            if generation != self._stop_generation:
+                _LOGGER.debug("MQTT account stopped while the start waited: nothing started")
+                return
             if self._clients:
                 raise RuntimeError("the MQTT account is already started")
             self._stopped = False
@@ -184,23 +223,29 @@ class EufyMqttAccount:
 
     async def async_stop(self) -> None:
         """Stop every client; their pending requests get a :class:`CommunicationError`.
-        A start or device update in progress finishes first, then is stopped; a later
-        device update is ignored until the next :meth:`async_start`. The clients stop
-        together; a cancel of the caller propagates at once and they still stop. A client
-        stop that fails is logged as a warning, and the first such failure is raised to a
-        caller still waiting."""
-        async with self._lifecycle:
-            self._stopped = True
-            clients, self._clients = list(self._clients.values()), {}
-            # Tasks, not awaits in turn: a cancel of the caller still stops every client.
-            stops = [asyncio.create_task(c.async_stop()) for c in clients]
+
+        The account is marked stopped and its clients are taken and told to stop at once,
+        before anything is awaited, so a cancel of the caller (a bounded unload) still
+        stops every client. A start or device update in progress, or one still waiting for
+        another, starts no client after that and finishes first (each client's stop waits
+        for its own start or update); a later device update is ignored until the next
+        :meth:`async_start`. A cancel of the
+        caller propagates at once. A client stop that fails is logged as a warning, and the
+        first such failure is raised to a caller still waiting."""
+        self._stopped = True
+        self._stop_generation += 1
+        clients, self._clients = list(self._clients.values()), {}
+        # Tasks, not awaits in turn: a cancel of the caller still stops every client.
+        stops = [asyncio.create_task(c.async_stop()) for c in clients]
+        for stop in stops:
+            self._ending.add(stop)
+            stop.add_done_callback(self._stop_ended)
+        async with self._lifecycle:  # a start or device update in progress ends first
+            pass
+        if stops:
+            await asyncio.wait(stops)
             for stop in stops:
-                self._ending.add(stop)
-                stop.add_done_callback(self._stop_ended)
-            if stops:
-                await asyncio.wait(stops)
-                for stop in stops:
-                    stop.result()
+                stop.result()
 
     def _stop_ended(self, stop: asyncio.Task[None]) -> None:
         """Done callback of a client stop: its failure is logged here, read or not."""

@@ -1321,11 +1321,12 @@ class Station:
 
     def lock_state(self, device_sn: str) -> LockReading | None:
         """The lock state of ``device_sn`` (this station's own serial when it is a lock
-        itself): from its lock-state parameter (a dump, a parameter notify, the device
-        list's copy) or a cloud push about it, ordered by time as
-        :class:`~.locks.StationLocks` describes. None for a device not graded
-        :attr:`~..devices.capabilities.Capability.LOCK` or with nothing reported yet.
-        Each change emits :class:`~..events.LockStateChanged`. Sync; raises
+        itself): its one merged reading of its lock-state parameter (a dump, a parameter
+        notify, the device list's copy), cloud pushes about it and its own status reports
+        (over this station or the MQTT broker), the newest report winning as
+        :class:`~.locks.LockStates` describes. None for a device not graded
+        :attr:`~..devices.capabilities.Capability.LOCK` or with nothing reported and no
+        command taken yet. Each change emits :class:`~..events.LockStateChanged`. Sync; raises
         ``UnsupportedError`` when ``device_sn`` is not paired to this station.
         """
         self.sub_device(device_sn)
@@ -1344,14 +1345,22 @@ class Station:
         Sends the lock's P2P command form over this station's session and confirms by the
         lock's state, never by the station's or the lock's acknowledgement (see
         :class:`~.lock_control.StationLockControl`). Returns at once, sending nothing, when
-        the lock already reads locked. ``timeout`` bounds the whole call, public-key query,
-        connect and send included (default: the eufy app's 20 s for the lock's answer, then
-        30 s for its state, the steps before them unbounded). Raises before sending:
-        ``UnsupportedError`` (no lock, no route, a route this library cannot send or one
-        served over MQTT: use :meth:`EufySecurity.async_lock`), ``GuestAccessError`` (a
-        guest account), ``DeviceBusyError`` (a command for this lock still waits). After:
-        ``CommandRejectedError`` (the station or the lock refused it, with its code),
-        ``LockNotMovedError`` (the lock reported a fault state), ``DeviceTimeoutError``.
+        the lock's merged reading already is locked. The waits are the eufy app's: 20 s for
+        the lock's answer, then 30 s for its state (the connect, public-key query and send
+        before them have no bound of their own beyond the session's). ``timeout`` caps the
+        whole call, those steps included, and each wait keeps its own default within it.
+
+        Once the lock took the command it reads locking (unlocking) until a report ends the
+        wait; a call that fails or is cancelled after that keeps it so until the lock's next
+        report, at most ``LOCK_CONFIRM_TIMEOUT`` after the take, and the next command is
+        sent meanwhile.
+
+        Raises before sending: ``UnsupportedError`` (no lock, no route, a route this library
+        cannot send or one served over MQTT: use :meth:`EufySecurity.async_lock`),
+        ``GuestAccessError`` (a guest account), ``DeviceBusyError`` (a command for this lock
+        still waits). After: ``CommandRejectedError`` (the station or the lock refused it,
+        with its code), ``LockNotMovedError`` (the lock reported a fault state),
+        ``DeviceTimeoutError``.
         """
         return await self._lock_control.async_command(device_sn, LockAction.LOCK, timeout=timeout)
 
@@ -1717,12 +1726,13 @@ class Station:
 
     async def async_close(self) -> None:
         """Close the session; forget the device-siren states and cancel their expiry and
-        the held garage doors' expiry."""
+        the held garage doors' and locks' expiry."""
         try:
             await self.session.async_close()
         finally:
             await self._activity.close()
             self._garage.close()
+            self._locks.close()
             for timer in self._alarms.siren_expiry.values():
                 timer.cancel()
             self._alarms.siren_expiry.clear()

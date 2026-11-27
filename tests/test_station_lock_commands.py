@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import gc
+import time
 from collections.abc import AsyncIterator, Callable
 from types import MappingProxyType
 
@@ -16,7 +17,7 @@ from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.devices._lock_routes_data import LOCK_ROUTES
 from eufy_home_security.devices.lock_routes import LockForm
 from eufy_home_security.devices.locks import LockState, LockStateSource
-from eufy_home_security.events import Event, LockStateChanged
+from eufy_home_security.events import Event, EventSource, LockStateChanged, SecurityEvent
 from eufy_home_security.exceptions import (
     AccountRejectedError,
     CommandRejectedError,
@@ -155,7 +156,10 @@ async def test_a_lock_is_confirmed_by_its_status_report(
         await station.async_close()
     assert lock_1940.received == [(1940, LockAction.LOCK, int(NOW) + 1)]
     changes = [(e.state, e.source) for e in events if isinstance(e, LockStateChanged)]
-    assert changes == [(LockState.LOCKED, LockStateSource.LOCK)]
+    assert changes == [
+        (LockState.LOCKING, LockStateSource.COMMAND),  # the lock took it
+        (LockState.LOCKED, LockStateSource.LOCK),
+    ]
     assert station.lock_state(LOCK_1940).state is LockState.LOCKED  # type: ignore[union-attr]
 
 
@@ -178,6 +182,99 @@ async def test_a_lock_already_in_the_asked_state_sends_nothing(
     station = await _hub(fake, _lock(LOCK_1940), lock_1940)
     try:
         assert await station.async_lock(LOCK_1940) is LockState.LOCKED
+    finally:
+        await station.async_close()
+    assert lock_1940.received == []
+
+
+def _push_ms(station: Station, offset_ms: int, event_type: int = 259) -> SecurityEvent:
+    """A push about the 1940 lock (default: unlocked by code), dated ``offset_ms`` from its
+    reading's report."""
+    reading = station.lock_state(LOCK_1940)
+    assert reading is not None
+    assert reading.observed_at is not None
+    return SecurityEvent(
+        source=EventSource.CLOUD,
+        device_sn=LOCK_1940,
+        event_type=event_type,
+        event_time_ms=int(reading.observed_at * 1000) + offset_ms,
+    )
+
+
+@pytest.mark.parametrize("offset_ms", [-500, 0], ids=["before", "same-time"])
+async def test_a_push_of_another_state_dated_before_the_report_sends_either_command(
+    fake: FakeStation, lock_1940: FakeLock, offset_ms: int
+) -> None:
+    """A push of another state dated before the report the reading holds (on another
+    clock) is taken, but the order of the two is unknown: an unlock is sent although the
+    reading says unlocked. The lock's next report settles the reading again."""
+    lock_1940.state_code = 4
+    station = await _hub(fake, _lock(LOCK_1940), lock_1940)
+    try:
+        assert station.note_lock_push(_push_ms(station, offset_ms)) is True
+        assert _state(station) is LockState.UNLOCKED
+        assert await station.async_unlock(LOCK_1940) is LockState.UNLOCKED
+        assert await station.async_unlock(LOCK_1940) is LockState.UNLOCKED  # settled
+    finally:
+        await station.async_close()
+    assert [a for _, a, _ in lock_1940.received] == [LockAction.UNLOCK]
+
+
+async def test_a_second_push_of_the_same_state_before_the_report_keeps_the_order_unknown(
+    fake: FakeStation, lock_1940: FakeLock
+) -> None:
+    """Two lock pushes dated before the station's unlocked report may both predate it: the
+    second does not settle the reading, so a lock command is sent."""
+    lock_1940.state_code = 3
+    station = await _hub(fake, _lock(LOCK_1940), lock_1940)
+    try:
+        first, second = _push_ms(station, -500, 262), _push_ms(station, -400, 262)
+        assert station.note_lock_push(first) is True
+        assert station.note_lock_push(second) is True
+        assert _state(station) is LockState.LOCKED
+        assert await station.async_lock(LOCK_1940) is LockState.LOCKED
+    finally:
+        await station.async_close()
+    assert [a for _, a, _ in lock_1940.received] == [LockAction.LOCK]
+
+
+@pytest.mark.parametrize(
+    ("offset_ms", "ends"), [(-3_000, False), (1, True)], ids=["unsettled", "settled"]
+)
+async def test_only_a_settled_push_ends_a_commands_wait(
+    fake: FakeStation, lock_1940: FakeLock, offset_ms: int, ends: bool
+) -> None:
+    """An unlock the lock took waits for its state: a push of that state dated before the
+    station's last report does not end the wait, the next report does; a push dated after
+    the report ends it."""
+    lock_1940.state_code = 4
+    lock_1940.report = False
+    station = await _hub(fake, _lock(LOCK_1940), lock_1940)
+    try:
+        push = _push_ms(station, offset_ms)
+        unlocking = asyncio.create_task(station.async_unlock(LOCK_1940, timeout=5))
+        await _until(lambda: _state(station) is LockState.UNLOCKING)
+        assert station.note_lock_push(push) is True
+        await asyncio.sleep(0.1)
+        assert unlocking.done() is ends
+        if not ends:
+            assert _state(station) is LockState.UNLOCKING
+            fake.params[lock_1940.channel][1912] = "3"
+            fake.send_param_dump()
+        async with asyncio.timeout(5):
+            assert await unlocking is LockState.UNLOCKED
+    finally:
+        await station.async_close()
+
+
+async def test_a_push_of_the_same_state_dated_before_the_report_keeps_the_shortcut(
+    fake: FakeStation, lock_1940: FakeLock
+) -> None:
+    lock_1940.state_code = 3
+    station = await _hub(fake, _lock(LOCK_1940), lock_1940)
+    try:
+        assert station.note_lock_push(_push_ms(station, -500)) is True
+        assert await station.async_unlock(LOCK_1940) is LockState.UNLOCKED
     finally:
         await station.async_close()
     assert lock_1940.received == []
@@ -393,6 +490,36 @@ async def test_no_state_report_times_out(fake: FakeStation, lock_1940: FakeLock)
         await station.async_close()
 
 
+@pytest.mark.parametrize(
+    ("what", "constant"),
+    [("answer", "LOCK_ANSWER_TIMEOUT"), ("locked state", "LOCK_CONFIRM_TIMEOUT")],
+)
+async def test_a_bound_longer_than_a_wait_keeps_that_wait(
+    fake: FakeStation,
+    lock_1940: FakeLock,
+    monkeypatch: pytest.MonkeyPatch,
+    what: str,
+    constant: str,
+) -> None:
+    """``timeout`` caps the whole call, each wait keeps its own default within it: a lock
+    that never answers (or never reports) ends at the app's wait, not at the bound."""
+    monkeypatch.setattr(lock_control_module, constant, 0.3)
+    if what == "answer":
+        lock_1940.answer = False
+    else:
+        lock_1940.report = False
+    station = await _hub(fake, _lock(LOCK_1940), lock_1940)
+    loop = asyncio.get_running_loop()
+    try:
+        started = loop.time()
+        async with asyncio.timeout(5):
+            with pytest.raises(DeviceTimeoutError, match=rf"no {what} within 0\.3 s"):
+                await station.async_lock(LOCK_1940, timeout=75)
+        assert loop.time() - started < 3
+    finally:
+        await station.async_close()
+
+
 async def test_a_fault_state_raises_lock_not_moved(fake: FakeStation, lock_1940: FakeLock) -> None:
     lock_1940.move_to = 5
     station = await _hub(fake, _lock(LOCK_1940), lock_1940)
@@ -420,6 +547,230 @@ async def test_a_second_command_while_one_waits_is_busy(
     finally:
         await station.async_close()
     assert len(lock_1940.received) == 1
+
+
+# ── a command the lock took, its call cancelled or failed ─────────────────────
+
+
+async def _until(predicate: Callable[[], bool]) -> None:
+    async with asyncio.timeout(5):
+        while not predicate():
+            await asyncio.sleep(0.01)
+
+
+def _state(station: Station) -> LockState | None:
+    reading = station.lock_state(LOCK_1940)
+    return None if reading is None else reading.state
+
+
+@pytest.fixture
+def locked_1940(lock_1940: FakeLock) -> FakeLock:
+    """The 1940 lock, reported locked, reporting no state after a command."""
+    lock_1940.state_code = 4
+    lock_1940.report = False
+    return lock_1940
+
+
+async def test_a_cancelled_command_the_lock_took_keeps_it_moving_and_the_next_is_sent(
+    fake: FakeStation, locked_1940: FakeLock
+) -> None:
+    """An unlock the lock took whose call is cancelled keeps the lock unlocking; a lock
+    command then is sent although the last report is locked, and its report ends the
+    hold."""
+    station = await _hub(fake, _lock(LOCK_1940), locked_1940)
+    events = _events(station)
+    try:
+        assert _state(station) is LockState.LOCKED
+        unlocking = asyncio.create_task(station.async_unlock(LOCK_1940))
+        await _until(lambda: _state(station) is LockState.UNLOCKING)
+        unlocking.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await unlocking
+        held = station.lock_state(LOCK_1940)
+        assert held is not None
+        assert (held.state, held.source) == (LockState.UNLOCKING, LockStateSource.COMMAND)
+        locked_1940.report = True
+        assert await station.async_lock(LOCK_1940) is LockState.LOCKED
+        assert station._locks._hold_expiry == {}
+    finally:
+        await station.async_close()
+    assert [a for _, a, _ in locked_1940.received] == [LockAction.UNLOCK, LockAction.LOCK]
+    changes = [(e.state, e.source) for e in events if isinstance(e, LockStateChanged)]
+    assert changes == [
+        (LockState.UNLOCKING, LockStateSource.COMMAND),
+        (LockState.LOCKING, LockStateSource.COMMAND),
+        (LockState.LOCKED, LockStateSource.LOCK),
+    ]
+
+
+async def test_a_timed_out_command_keeps_it_moving_until_the_locks_next_report(
+    fake: FakeStation, locked_1940: FakeLock
+) -> None:
+    station = await _hub(fake, _lock(LOCK_1940), locked_1940)
+    try:
+        with pytest.raises(DeviceTimeoutError, match="unlocked state"):
+            await station.async_unlock(LOCK_1940, timeout=0.3)
+        assert _state(station) is LockState.UNLOCKING
+        fake.params[locked_1940.channel][1912] = "3"
+        fake.send_param_dump()
+        await _until(lambda: _state(station) is LockState.UNLOCKED)
+        assert station.lock_state(LOCK_1940).source is LockStateSource.P2P  # type: ignore[union-attr]
+        assert station._locks._hold_expiry == {}
+    finally:
+        await station.async_close()
+
+
+async def test_a_held_move_ends_at_a_push_whose_order_is_unknown(
+    fake: FakeStation, locked_1940: FakeLock
+) -> None:
+    """A cancelled unlock's hold ends at the lock's next report taken, a push dated before
+    the last report included: the lock reads that push, and as its order is unknown the
+    next unlock is still sent."""
+    station = await _hub(fake, _lock(LOCK_1940), locked_1940)
+    try:
+        push = _push_ms(station, -500)  # unlocked, dated before the locked dump
+        unlocking = asyncio.create_task(station.async_unlock(LOCK_1940))
+        await _until(lambda: _state(station) is LockState.UNLOCKING)
+        unlocking.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await unlocking
+        assert LOCK_1940 in station._locks._hold_expiry
+        assert station.note_lock_push(push) is True
+        reading = station.lock_state(LOCK_1940)
+        assert reading is not None
+        assert (reading.state, reading.source) == (LockState.UNLOCKED, LockStateSource.PUSH)
+        assert station._locks._hold_expiry == {}
+        locked_1940.report = True
+        assert await station.async_unlock(LOCK_1940) is LockState.UNLOCKED
+    finally:
+        await station.async_close()
+    assert [a for _, a, _ in locked_1940.received] == [LockAction.UNLOCK, LockAction.UNLOCK]
+
+
+@pytest.mark.parametrize(
+    ("event_type", "state"),
+    [(262, LockState.LOCKED), (517, LockState.JAMMED)],
+    ids=["opposite", "jammed"],
+)
+async def test_a_held_move_ends_at_any_report_not_only_the_asked_state(
+    fake: FakeStation, locked_1940: FakeLock, event_type: int, state: LockState
+) -> None:
+    """A timed-out unlock's hold ends at the lock's next report whatever it says: the
+    opposite state as well as a fault."""
+    station = await _hub(fake, _lock(LOCK_1940), locked_1940)
+    try:
+        with pytest.raises(DeviceTimeoutError, match="unlocked state"):
+            await station.async_unlock(LOCK_1940, timeout=0.3)
+        assert _state(station) is LockState.UNLOCKING
+        push = SecurityEvent(
+            source=EventSource.CLOUD,
+            device_sn=LOCK_1940,
+            event_type=event_type,
+            event_time_ms=int(time.time() * 1000),
+        )
+        assert station.note_lock_push(push) is True
+        reading = station.lock_state(LOCK_1940)
+        assert reading is not None
+        assert (reading.state, reading.source) == (state, LockStateSource.PUSH)
+        assert station._locks._hold_expiry == {}
+    finally:
+        await station.async_close()
+
+
+async def test_a_command_cancelled_before_the_lock_took_it_holds_nothing(
+    fake: FakeStation, locked_1940: FakeLock
+) -> None:
+    locked_1940.answer = False
+    station = await _hub(fake, _lock(LOCK_1940), locked_1940)
+    events = _events(station)
+    try:
+        unlocking = asyncio.create_task(station.async_unlock(LOCK_1940))
+        await _until(lambda: bool(locked_1940.received))
+        unlocking.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await unlocking
+        assert station.lock_state(LOCK_1940).source is LockStateSource.P2P  # type: ignore[union-attr]
+    finally:
+        await station.async_close()
+    assert not [e for e in events if isinstance(e, LockStateChanged)]
+
+
+async def test_a_held_move_ends_at_the_confirm_wait_after_the_take(
+    fake: FakeStation, locked_1940: FakeLock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A lost report cannot leave the lock moving for good: the hold ends
+    ``LOCK_CONFIRM_TIMEOUT`` after the take, and the lock reads its last report again."""
+    monkeypatch.setattr(control, "LOCK_CONFIRM_TIMEOUT", 0.4)
+    station = await _hub(fake, _lock(LOCK_1940), locked_1940)
+    events = _events(station)
+    try:
+        unlocking = asyncio.create_task(station.async_unlock(LOCK_1940))
+        await _until(lambda: _state(station) is LockState.UNLOCKING)
+        taken = asyncio.get_running_loop().time()
+        unlocking.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await unlocking
+        expiry = station._locks._hold_expiry[LOCK_1940]
+        assert expiry.when() == pytest.approx(taken + 0.4, abs=0.1)
+        await _until(lambda: _state(station) is LockState.LOCKED)
+        assert station._locks._hold_expiry == {}
+    finally:
+        await station.async_close()
+    last = [e for e in events if isinstance(e, LockStateChanged)][-1]
+    assert (last.state, last.source, last.changed) == (LockState.LOCKED, LockStateSource.P2P, True)
+
+
+async def test_a_later_taken_command_outlasts_the_hold_it_replaced(
+    fake: FakeStation, locked_1940: FakeLock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A held move replaced by a later command the lock took: the earlier hold's end
+    does not end the later command's move while that call still waits."""
+    monkeypatch.setattr(control, "LOCK_CONFIRM_TIMEOUT", 0.2)
+    station = await _hub(fake, _lock(LOCK_1940), locked_1940)
+    locks = station._locks
+    try:
+        first = locks.begin_move(LOCK_1940, LockAction.UNLOCK)
+        locks.end_move(LOCK_1940, taken_at=first, keep=True)  # held for 0.2 s from the take
+        await asyncio.sleep(0.05)
+        locks.begin_move(LOCK_1940, LockAction.LOCK)  # its call still waits
+        await asyncio.sleep(0.3)  # past the first hold's end
+        assert _state(station) is LockState.LOCKING
+    finally:
+        await station.async_close()
+
+
+async def test_closing_the_station_cancels_a_held_moves_expiry(
+    fake: FakeStation, locked_1940: FakeLock
+) -> None:
+    station = await _hub(fake, _lock(LOCK_1940), locked_1940)
+    try:
+        unlocking = asyncio.create_task(station.async_unlock(LOCK_1940))
+        await _until(lambda: _state(station) is LockState.UNLOCKING)
+        unlocking.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await unlocking
+        expiry = station._locks._hold_expiry[LOCK_1940]
+    finally:
+        await station.async_close()
+    assert expiry.cancelled()
+    assert station._locks._hold_expiry == {}
+
+
+async def test_a_refusing_status_report_ends_the_move(
+    fake: FakeStation, lock_1940: FakeLock
+) -> None:
+    """The lock took the command, then refused it in its status report: it does not move,
+    and reads its last report again."""
+    lock_1940.status_code = 2
+    station = await _hub(fake, _lock(LOCK_1940), lock_1940)
+    try:
+        with pytest.raises(CommandRejectedError):
+            await station.async_lock(LOCK_1940, timeout=5)
+        reading = station.lock_state(LOCK_1940)
+    finally:
+        await station.async_close()
+    assert reading is not None
+    assert (reading.state, reading.source) == (LockState.UNLOCKED, LockStateSource.P2P)
 
 
 async def test_a_reading_taken_while_connecting_does_not_end_the_command(
@@ -828,7 +1179,7 @@ async def test_lock_control_and_the_command_agree_for_every_lock(
     ``lock_control`` says writable; otherwise it raises ``UnsupportedError`` first."""
     reached: list[str] = []
 
-    async def run(self: object, device: object, *_: object) -> LockState:
+    async def run(self: object, device: object, *_: object, **__: object) -> LockState:
         reached.append(getattr(device, "device_sn", device))  # type: ignore[arg-type]
         return LockState.LOCKED
 
@@ -838,7 +1189,8 @@ async def test_lock_control_and_the_command_agree_for_every_lock(
     eufy._mqtt_locks = MqttLocks(
         _NoBroker(),  # type: ignore[arg-type]
         user=_Cloud(),
-        emit=lambda _e: None,
+        states=eufy._lock_states,
+        devices=eufy._listed_device,
     )
     writable = 0
     try:
@@ -874,10 +1226,13 @@ async def test_lock_control_and_the_command_agree_for_every_lock(
 
 
 class _NoBroker:
-    """An MQTT account stand-in that is never asked to publish."""
+    """An MQTT account stand-in that serves every lock and is never asked to publish."""
 
     def add_listener(self, _callback: object) -> Callable[[], None]:
         return lambda: None
+
+    def serves(self, _device_sn: str) -> bool:
+        return True
 
 
 async def _no_credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:

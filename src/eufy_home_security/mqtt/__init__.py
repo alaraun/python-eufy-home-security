@@ -8,6 +8,7 @@ docs/protocol/mqtt.md.
 from __future__ import annotations
 
 from .selection import (
+    LOCK_CONNECTOR_DEVICE_TYPES,
     MQTT_CATEGORIES,
     SUPPORT_PROPERTY,
     device_key,
@@ -19,6 +20,7 @@ from .selection import (
 )
 
 __all__ = [
+    "LOCK_CONNECTOR_DEVICE_TYPES",
     "MQTT_CATEGORIES",
     "SUPPORT_PROPERTY",
     "device_key",

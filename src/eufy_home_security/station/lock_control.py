@@ -54,8 +54,8 @@ from ..lock_commands.control import (
     check_control,
     ends_wait,
     has_member_record,
-    is_guest,
     lock_control,
+    phase_wait,
 )
 from ..lock_commands.sequence import LockSequences, SharedSequence
 from ..models import FrameCipher
@@ -205,7 +205,7 @@ class StationLockControl:
 
     def control(self, device_sn: str) -> LockControl:
         device = self._station.sub_device(device_sn)
-        return lock_control(self.form(device), guest=is_guest(device))
+        return lock_control(self.form(device), device)
 
     # ── inbound ─────────────────────────────────────────────────────────────
 
@@ -379,8 +379,7 @@ class StationLockControl:
                 device_sn=device_sn,
             )
         target = TARGET_STATES[action]
-        reading = self._locks.reading(device_sn)
-        if reading is not None and reading.state is target:
+        if self._locks.settled(device_sn, target):
             return target
         if not has_member_record(device):  # as the app: no member record, no command
             raise UnsupportedError(
@@ -412,7 +411,12 @@ class StationLockControl:
         )
 
         def on_reading(reading: LockReading) -> None:
-            if not pending.state.done() and ends_wait(reading.state, target):
+            # A push that may predate the lock's last report does not confirm the command.
+            if (
+                not pending.state.done()
+                and not self._locks.unsettled(serial)
+                and ends_wait(reading.state, target)
+            ):
                 pending.state.set_result(reading.state)
 
         if form in (LockForm.P2P_1940, LockForm.P2P_1940_HKDF):
@@ -434,6 +438,8 @@ class StationLockControl:
         # (a dump repeating an old fault) does not end the command.
         self._pending[serial] = pending
         unwatch = self._locks.watch(serial, on_reading)
+        taken_at: float | None = None
+        keep = True  # a taken command whose wait fails or is cancelled holds its move
         try:
             applied = await _within(
                 deadline,
@@ -444,7 +450,7 @@ class StationLockControl:
             )
             if sent.read is None and applied:  # the station's result is the lock's answer
                 pending.answer.set_result(LockReply(0, LockResult.ACCEPTED))
-            budget = LOCK_ANSWER_TIMEOUT if deadline is None else deadline - loop.time()
+            budget = phase_wait(LOCK_ANSWER_TIMEOUT, deadline, loop.time())
             try:
                 done = await self._first(pending, budget, serial, "answer")
             except DeviceTimeoutError:
@@ -454,7 +460,7 @@ class StationLockControl:
                     pending.sent.command,
                     SEQUENCE_REFUSED,
                     f"{redact_serial(serial)}: sequence number refused, and no answer or "
-                    f"sequence report within {budget:.0f} s",
+                    f"sequence report within {budget:g} s",
                     device_sn=serial,
                 ) from None
             if done is pending.answer:
@@ -467,9 +473,11 @@ class StationLockControl:
                         device_sn=serial,
                     )
                 if not pending.state.done():
-                    budget = LOCK_CONFIRM_TIMEOUT if deadline is None else deadline - loop.time()
+                    taken_at = self._locks.begin_move(serial, action)
+                    budget = phase_wait(LOCK_CONFIRM_TIMEOUT, deadline, loop.time())
                     await self._first(pending, budget, serial, f"{target.value} state", state=True)
             state = pending.state.result()
+            keep = False
             if state in FAULT_STATES:
                 raise LockNotMovedError(
                     sent.command,
@@ -479,7 +487,11 @@ class StationLockControl:
                     device_sn=serial,
                 )
             return state
+        except CommandRejectedError:
+            keep = False  # the lock refused it: it does not move
+            raise
         finally:
+            self._locks.end_move(serial, taken_at=taken_at, keep=keep)
             unwatch()
             self._pending.pop(serial, None)
             for task in pending.resends:
@@ -523,7 +535,7 @@ class StationLockControl:
         done, _ = await asyncio.wait(waits, timeout=max(0.0, budget), return_when="FIRST_COMPLETED")
         if not done:
             raise DeviceTimeoutError(
-                f"{redact_serial(serial)}: no {what} within {budget:.0f} s", device_sn=serial
+                f"{redact_serial(serial)}: no {what} within {budget:g} s", device_sn=serial
             )
         first = pending.state if pending.state in done else next(iter(done))
         if (error := first.exception()) is not None:
