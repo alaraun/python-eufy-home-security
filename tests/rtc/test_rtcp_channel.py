@@ -369,7 +369,11 @@ async def test_the_heartbeat_survives_failed_sends_and_warns_once(
         finally:
             await channel.close()
     assert all(f.type == FrameType.HEARTBEAT for f in map(decode_frame, send.sent))
-    warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+    warnings = [
+        r
+        for r in caplog.records
+        if r.levelname == "WARNING" and r.name == "eufy_home_security.rtc.rtcp_channel"
+    ]
     assert len(warnings) == 1
     assert "heartbeat" in warnings[0].getMessage()
 
