@@ -16,12 +16,15 @@ recorded in :attr:`~FakeRtcServer.refused` and not acted on.
 :meth:`FakeRtcServer.ice_factory` gives the session an in-memory ICE connection
 (:class:`PipeIce`) that connects only with the credentials of both ``sdp_info`` and after
 the client's first candidate; behind it the station runs a KCP data channel that echoes
-every message (:attr:`FakeRtcServer.device_channels`).
+every message (:attr:`FakeRtcServer.device_channels`) and records it
+(:attr:`FakeRtcServer.device_received`).
 
-Scripts: ``call_reply`` (``answer``, ``trying``, ``busy``, ``hangup``, ``silent``),
-``udp_calls`` False (only a CALL over TCP is answered: a sleeping device),
+Scripts: ``call_reply`` (``answer``, ``trying``, ``busy``, ``hangup``, ``silent``) and
+``kind_replies`` (the same per CALL kind), ``udp_calls`` False (only a CALL over TCP is answered: a sleeping device),
 ``refuse_login``, ``drop_logins``, ``drop_discovers``, ``answer_repeats``,
-``ice_connects`` False, ``ack_candidates``/``ack_only``, and
+``ice_connects`` False, ``ack_candidates``/``ack_only``, ``pbsdp`` (an answer blob),
+``unasked`` (messages the station sends once its data channel is up, behind the older
+link header with ``device_old_header``), and
 :meth:`~FakeRtcServer.hang_up`, :meth:`~FakeRtcServer.break_link`,
 :meth:`~FakeRtcServer.send_candidate`, :meth:`~FakeRtcServer.send_info` mid-session.
 Synthetic identities only (:data:`~.synthetic.SYNTHETIC`).
@@ -54,7 +57,7 @@ from ..rtc.codec import (
 )
 from ..rtc.config import RtcConfig
 from ..rtc.crypto import DEFAULT_SECRET, aes_ecb_decrypt, aes_ecb_encrypt
-from ..rtc.data_channel import KcpDataChannel
+from ..rtc.data_channel import KcpDataChannel, LinkMessage
 from ..rtc.media import TurnServer
 from ..rtc.sdp import SdpInfo
 from .synthetic import SYNTHETIC
@@ -128,6 +131,7 @@ class PipeIce:
         self.credentials: tuple[str, str] | None = None
         self.remote_candidates: list[str] = []
         self.closed = False
+        self.connected = False
         self.drop_outbound = False
         self.lines = ["candidate:1 1 udp 2130706431 127.0.0.1 7 typ host"]
         """The candidate lines :meth:`gather` returns."""
@@ -155,8 +159,13 @@ class PipeIce:
             call is None or self.credentials != (call.ice_ufrag, call.ice_pwd)
         ):
             raise CommunicationError("RTC ICE did not connect: credentials do not match")
+        self.connected = True
         if self.peer is not None:
             server._attach(self.peer)
+
+    def selected_pair(self) -> tuple[str, str] | None:
+        """Both ends are host candidates once connected."""
+        return ("host", "host") if self.connected else None
 
     async def recv(self) -> bytes:
         data = await self._inbox.get()
@@ -184,6 +193,8 @@ class FakeRtcServer(asyncio.DatagramProtocol):
     """eufy's signaling server and a station behind it, on loopback."""
 
     call_reply: str = "answer"
+    kind_replies: dict[int, str] = field(default_factory=dict)
+    """A ``call_reply`` script per CALL kind; a kind not in it takes ``call_reply``."""
     udp_calls: bool = True
     refuse_login: bool = False
     drop_logins: int = 0
@@ -192,6 +203,8 @@ class FakeRtcServer(asyncio.DatagramProtocol):
     request_id: str | None = None
     """The 200's ``request_id``; None leaves it out (as a HomeBase 3 does)."""
     transport_caps: int | None = None
+    pbsdp: str | None = None
+    """The 200's ``pbsdp`` text; None leaves it out."""
     turn: dict[str, Any] | None = field(default_factory=lambda: dict(TURN))
     device_info: SdpInfo = DEVICE_INFO
     ice_connects: bool = True
@@ -209,6 +222,11 @@ class FakeRtcServer(asyncio.DatagramProtocol):
     client_candidates: list[dict[str, Any]] = field(default_factory=list)
     device_acks: set[int] = field(default_factory=set)
     device_channels: list[KcpDataChannel] = field(default_factory=list)
+    device_received: list[LinkMessage] = field(default_factory=list)
+    """Every message the station's data channels received."""
+    unasked: list[tuple[int, bytes]] = field(default_factory=list)
+    """``(link type, payload)`` the station sends once a data channel is up."""
+    device_old_header: bool = False
     refused: list[str] = field(default_factory=list)
     """Packets of the client in a form a station does not take (a header field off)."""
     port: int = 0
@@ -264,14 +282,19 @@ class FakeRtcServer(asyncio.DatagramProtocol):
         return client
 
     def _attach(self, device: PipeIce) -> None:
-        channel = KcpDataChannel(device, prefixed=self.device_info.data_channel)
+        channel = KcpDataChannel(
+            device, prefixed=self.device_info.data_channel, old_protocol=self.device_old_header
+        )
         self.device_channels.append(channel)
         self._spawn(self._echo(channel))
 
     async def _echo(self, channel: KcpDataChannel) -> None:
         with contextlib.suppress(CommunicationError):
+            for msg_type, payload in self.unasked:
+                await channel.send_message(payload, msg_type=msg_type)
             while True:
                 message = await channel.recv_message()
+                self.device_received.append(message)
                 await channel.send_message(message.payload, msg_type=message.msg_type)
 
     def _spawn(self, coro: Any) -> None:
@@ -287,6 +310,14 @@ class FakeRtcServer(asyncio.DatagramProtocol):
 
     def of_type(self, message_type: int) -> list[Received]:
         return [r for r in self.received if r.header.message_type == message_type]
+
+    def call_kinds(self) -> list[int]:
+        """The kind of every CALL request received, in order (-1: unreadable)."""
+        return [
+            _call_kind(r.payload)
+            for r in self.of_type(MessageType.CALL)
+            if not r.header.is_response
+        ]
 
     def hang_up(self) -> None:
         """The station hangs up the last call."""
@@ -459,9 +490,10 @@ class FakeRtcServer(asyncio.DatagramProtocol):
         if isinstance(raw, str):
             self.call_info = SdpInfo.decode(base64.b64decode(raw))
         self._calls.append((call, header, item.addr))
-        if self.call_reply == "silent":
+        script = self.kind_replies.get(_call_kind(payload), self.call_reply)
+        if script == "silent":
             return
-        if self.call_reply == "busy":
+        if script == "busy":
             reply(header.response(486), call.without_attachment().encode())
             return
         trying = {"turn": self.turn} if self.turn else {}
@@ -471,10 +503,10 @@ class FakeRtcServer(asyncio.DatagramProtocol):
                 call.channel, call.uuid, CONTACT, self._seal(header.packet_id, trying)
             ).encode(),
         )
-        if self.call_reply == "hangup":
+        if script == "hangup":
             self._device_packet(MessageType.HANGUP, call, None, item.addr)
             return
-        if self.call_reply != "answer":
+        if script != "answer":
             return
         answer: dict[str, Any] = {
             "sdp_info": base64.b64encode(self.device_info.encode()).decode(),
@@ -488,6 +520,8 @@ class FakeRtcServer(asyncio.DatagramProtocol):
             answer["request_id"] = self.request_id
         if self.transport_caps is not None:
             answer["transport_caps"] = self.transport_caps
+        if self.pbsdp is not None:
+            answer["pbsdp"] = self.pbsdp
         for _ in range(self.answer_repeats):
             reply(
                 header.response(200),
@@ -532,6 +566,13 @@ class FakeRtcServer(asyncio.DatagramProtocol):
         header = self._header(mtype, encrypted=payload is not None, body_type=BodyType.CALL)
         attach = self._seal(header.packet_id, payload) if payload is not None else b""
         self.send(header, CallBody(call.channel, call.uuid, CONTACT, attach).encode(), addr)
+
+
+def _call_kind(payload: dict[str, Any] | None) -> int:
+    """The CALL kind a CALL attachment names; -1 when it names none."""
+    payload = payload or {}
+    pair = (payload.get("call_type"), payload.get("eufy_p2p_type"))
+    return next((int(k) for k, types in codec.CALL_TYPES.items() if types == pair), -1)
 
 
 __all__ = [

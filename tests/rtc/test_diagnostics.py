@@ -1,0 +1,494 @@
+"""``rtc/diagnostics.py``: the read-only WebRTC report, against the loopback fake station."""
+
+from __future__ import annotations
+
+import asyncio
+import base64
+import dataclasses
+import json
+import struct
+from collections.abc import AsyncIterator, Callable
+from typing import Any
+
+import pytest
+
+from eufy_home_security.cloud.models import CloudDevice
+from eufy_home_security.exceptions import MissingDependencyError
+from eufy_home_security.p2p.xzyh import encode_frame
+from eufy_home_security.rtc import diagnostics as diag
+from eufy_home_security.rtc import session as session_mod
+from eufy_home_security.rtc.codec import CallKind, MessageType
+from eufy_home_security.rtc.data_channel import LINK_HEADER_LEN, LINK_HEADER_LEN_OLD, DataMsgType
+from eufy_home_security.rtc.diagnostics import (
+    RtcStationReport,
+    StepStatus,
+    async_diagnose_station,
+    ip_class,
+    placeholder,
+    rtc_stations,
+)
+from eufy_home_security.rtc.session import RtcSession
+from eufy_home_security.testing import SYNTHETIC
+from eufy_home_security.testing.rtc import (
+    APP_ID,
+    CONTACT,
+    DEVICE_INFO,
+    LICENSE,
+    TURN,
+    FakeRtcServer,
+    rtc_config,
+)
+
+NVR_SN = "T8N00" + SYNTHETIC.station_sn[5:]
+"""A synthetic NVR serial (the eufy app reaches a T8N00 only over WebRTC)."""
+TURN_USER = "synthetic-turn-user"
+TURN_PASSWORD = "synthetic-turn-secret"
+SDK = "1.1.0"
+"""Below the T8N00's kcp_type-2 SDK: the client offers no framing bit."""
+
+
+def station_entry(serial: str = NVR_SN, **extra: Any) -> dict[str, Any]:
+    entry: dict[str, Any] = {
+        "device_sn": serial,
+        "device_type": 0,
+        "device_name": "Synthetic NVR",
+        "device_new_pn": serial[:5],
+        "p2p_did": SYNTHETIC.did,
+        "p2p_license": LICENSE,
+        "signaling_servers": ["https://127.0.0.1", "https://signal.example.com"],
+        "main_sw_version": "1.3.0.0",
+        "webrtc_sdk_version": SDK,
+    }
+    return entry | extra
+
+
+def camera_entry(serial: str, parent: str, channel: int = 0) -> dict[str, Any]:
+    return {
+        "device_sn": serial,
+        "device_type": 1,
+        "device_name": "Synthetic camera",
+        "device_new_pn": serial[:5],
+        "parent_sn": parent,
+        "device_channel": channel,
+        "main_sw_version": "9.9.9.9",
+    }
+
+
+def devices(*entries: dict[str, Any]) -> list[CloudDevice]:
+    return [CloudDevice.from_api(e) for e in entries]
+
+
+@pytest.fixture
+async def fake() -> AsyncIterator[FakeRtcServer]:
+    seen: list[dict[str, Any]] = []
+    loop = asyncio.get_running_loop()
+    loop.set_exception_handler(lambda _loop, ctx: seen.append(ctx))
+    server = await FakeRtcServer().start()
+    yield server
+    await server.close()
+    await asyncio.sleep(0)
+    loop.set_exception_handler(None)
+    assert server.refused == []
+    assert seen == []
+
+
+@pytest.fixture
+def run(fake: FakeRtcServer) -> Callable[..., Any]:
+    async def run(*listed: dict[str, Any], **kwargs: Any) -> RtcStationReport:
+        listed = listed or (station_entry(),)
+        found = devices(*listed)
+        kwargs.setdefault("seconds", 0.3)
+        return await async_diagnose_station(
+            found[0],
+            found,
+            user_id=SYNTHETIC.account_id,
+            app_id=APP_ID,
+            ice_factory=fake.ice_factory,
+            signaling_port=fake.port,
+            tcp_ports=(fake.tcp_port,),
+            **kwargs,
+        )
+
+    return run
+
+
+def secret_values() -> list[str]:
+    """Every identifier and key of the synthetic run, as text."""
+    values = []
+    for f in dataclasses.fields(SYNTHETIC):
+        value = getattr(SYNTHETIC, f.name)
+        if isinstance(value, bytes):
+            value = value.decode()
+        if isinstance(value, str):
+            values.append(value)
+    values += [NVR_SN, LICENSE, CONTACT, APP_ID, "127.0.0.1", TURN_USER, TURN_PASSWORD]
+    values += [DEVICE_INFO.ice_ufrag, DEVICE_INFO.ice_pwd]
+    values += [DEVICE_INFO.content_key, DEVICE_INFO.content_iv, "signal.example.com"]
+    return sorted(set(values))
+
+
+# ── pure parts ───────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("127.0.0.1", "loopback"),
+        ("192.0.2.10", "private"),
+        ("10.1.2.3", "private"),
+        ("169.254.1.1", "link_local"),
+        ("100.64.0.1", "shared"),
+        ("8.8.8.8", "public"),
+        ("8.8.8.8:3478", "public"),
+        ("signal.example.com", "not_ip"),
+        ("", "not_ip"),
+    ],
+)
+def test_an_address_is_reported_as_its_class(text: str, expected: str) -> None:
+    assert ip_class(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("abcdef", "<did:6>"), ({"a": 1}, "<did:7>"), (None, "<did:0>"), (12, "<did:2>")],
+)
+def test_a_placeholder_keeps_the_field_name_and_length(value: object, expected: str) -> None:
+    assert placeholder("did", value) == expected
+
+
+def test_webrtc_only_stations_and_stations_with_a_routed_device_are_picked() -> None:
+    hb3 = SYNTHETIC.station_sn
+    routed_camera = "T8224" + SYNTHETIC.camera_sn[5:]
+    plain = "T8025" + SYNTHETIC.station_sn[5:]
+    found = devices(
+        station_entry(),
+        station_entry(hb3, main_sw_version="3.8.0.0"),
+        camera_entry(routed_camera, hb3),
+        station_entry(plain),
+    )
+    picked = {d.device_sn: reason for d, reason in rtc_stations(found)}
+    assert picked == {NVR_SN: "station", hb3: "device"}
+
+
+def test_a_named_station_is_picked_whatever_its_route() -> None:
+    plain = "T8025" + SYNTHETIC.station_sn[5:]
+    found = devices(station_entry(), station_entry(plain))
+    assert [(d.device_sn, r) for d, r in rtc_stations(found, plain)] == [(plain, "asked")]
+    assert [(d.device_sn, r) for d, r in rtc_stations(found, NVR_SN)] == [(NVR_SN, "station")]
+    assert rtc_stations(found, "T8030P0000000000") == []
+
+
+def test_the_inputs_name_what_is_present_and_how_each_device_is_routed() -> None:
+    camera = "T8160" + SYNTHETIC.camera_sn[5:]
+    found = devices(station_entry(), camera_entry(camera, NVR_SN, channel=3))
+    inputs = diag.describe_inputs(found[0], found)
+    assert inputs.outcome.status is StepStatus.OK
+    assert inputs.present == {
+        "p2p_did": True,
+        "p2p_license": True,
+        "signaling_servers": True,
+        "webrtc_sdk_version": True,
+        "main_sw_version": True,
+    }
+    assert (inputs.signaling_ipv4, inputs.signaling_domains) == (1, 1)
+    assert (inputs.webrtc_sdk_version, inputs.main_sw_version) == (SDK, "1.3.0.0")
+    assert inputs.webrtc_only is True
+    assert inputs.kcp_type == 1  # T8N00 below SDK x.2: the single-stream framing
+    assert [(d.product_code, d.channel, d.webrtc) for d in inputs.devices] == [("T8160", 3, True)]
+    assert inputs.devices[0].serial == "T8160***7890"
+
+
+def test_missing_inputs_fail_step_one_and_name_the_fields() -> None:
+    found = devices(station_entry(p2p_license="", signaling_servers=["signal.example.com"]))
+    inputs = diag.describe_inputs(found[0], found)
+    assert inputs.outcome.status is StepStatus.FAILED
+    assert inputs.missing == ("p2p_license", "signaling_servers")
+
+
+# ── a run against the fake ───────────────────────────────────────────────────
+
+
+async def test_a_full_run_records_every_step(fake: FakeRtcServer, run: Any) -> None:
+    fake.transport_caps = 3
+    fake.request_id = "synthetic-request"
+    report = await run(probe_kinds=True)
+    assert report.station == "T8N00***2345"
+    assert report.inputs.outcome.status is StepStatus.OK
+    login = report.login
+    assert login.discover.status is StepStatus.OK
+    assert login.login.status is StepStatus.OK
+    assert login.quick_login is False
+    assert login.server == "loopback"
+    assert login.server_records == 1
+    call = report.call
+    assert call.outcome.status is StepStatus.OK
+    assert call.transport_caps == 3
+    assert call.transport == "kcp"
+    assert call.client_flag == 0  # kcp_type 1 for this SDK
+    assert call.request_id_present is True
+    assert call.turn_present is True
+    assert call.turn_keys == ("turn_addr", "turn_password", "turn_port", "turn_user")
+    assert call.answer_keys == (
+        "call_type",
+        "eufy_p2p_type",
+        "port",
+        "request_id",
+        "sdp_info",
+        "transport_caps",
+        "turn",
+    )
+    assert call.answer_values["transport_caps"] == 3
+    assert call.answer_values["call_type"] == "scall"
+    assert call.answer_values["request_id"] == "<request_id:17>"
+    assert call.answer_values["sdp_info"].startswith("<sdp_info:")
+    sdp = call.device_sdp
+    assert sdp is not None
+    assert (sdp.length, sdp.flag_byte, sdp.ufrag_len, sdp.pwd_len) == (86, 1, 5, 23)
+    assert (sdp.key_len, sdp.iv_len) == (16, 12)
+    assert (sdp.audio_ssrc_present, sdp.video_ssrc_present) == (True, True)
+    assert report.ice.outcome.status is StepStatus.OK
+    assert report.ice.local_types == {"host": 1}
+    assert report.ice.remote_types == {"host": 1}
+    assert report.ice.selected == ("host", "host")
+    channel = report.data_channel
+    assert channel.outcome.status is StepStatus.OK
+    assert channel.kcp_type == 2  # the device's answer says prefixed
+    assert [p.kind for p in report.probes.kinds] == [1, 3, 4]
+    assert all(p.outcome.status is StepStatus.OK for p in report.probes.kinds)
+    assert all(p.codes == (100, 200) for p in report.probes.kinds)
+    assert report.probes.login.status is StepStatus.OK
+
+
+async def test_the_report_carries_no_synthetic_identifier(fake: FakeRtcServer, run: Any) -> None:
+    fake.request_id = "synthetic-request"
+    fake.turn = TURN | {"turn_user": TURN_USER, "turn_password": TURN_PASSWORD}
+    fake.unasked = [(DataMsgType.NOTIFY, encode_frame(0x0473, b"payload-bytes", bytes(6)))]
+    report = await run(probe_kinds=True)
+    text = json.dumps(report.as_dict())
+    leaked = [v for v in secret_values() if v and v in text]
+    assert leaked == []
+    assert b"payload-bytes".hex() not in text
+    secrets = json.dumps(report.secrets_dict())
+    for value in (NVR_SN, SYNTHETIC.did, LICENSE, CONTACT, "127.0.0.1", TURN_PASSWORD):
+        assert value in secrets
+    assert b"payload-bytes".hex() in secrets
+
+
+async def test_a_run_sends_only_the_allowed_messages(fake: FakeRtcServer, run: Any) -> None:
+    fake.unasked = [(DataMsgType.NOTIFY, encode_frame(0x0473, b"x", bytes(6)))]
+    await run(probe_kinds=False)
+    allowed = {
+        MessageType.DISCOVER,
+        MessageType.LOGIN,
+        MessageType.MESSAGE,
+        MessageType.CALL,
+        MessageType.ACK,
+        MessageType.INFO,
+        MessageType.HANGUP,
+    }
+    assert set(fake.kinds()) <= allowed
+    assert fake.call_kinds() == [CallKind.PRIV1]
+    assert fake.device_channels  # the data channel was up
+    assert fake.device_received == []  # nothing was sent on it
+
+
+async def test_the_fake_records_what_its_data_channel_receives(fake: FakeRtcServer) -> None:
+    """The control for the no-write check: a message the client sends is recorded."""
+    session = RtcSession(
+        rtc_config(),
+        ice_factory=fake.ice_factory,
+        signaling_port=fake.port,
+        tcp_ports=(fake.tcp_port,),
+    )
+    try:
+        await session.start()
+        assert session.data_channel is not None
+        await session.data_channel.send_message(b"sent")
+        async with asyncio.timeout(3):
+            while not fake.device_received:
+                await asyncio.sleep(0.01)
+        assert [m.payload for m in fake.device_received] == [b"sent"]
+    finally:
+        await session.close()
+
+
+async def test_probe_kinds_add_only_calls_of_kinds_1_3_4(fake: FakeRtcServer, run: Any) -> None:
+    await run(probe_kinds=True)
+    assert fake.call_kinds() == [CallKind.PRIV1, 1, 3, 4]
+    assert fake.device_received == []
+
+
+async def test_unasked_frames_are_recorded_without_their_payload(
+    fake: FakeRtcServer, run: Any
+) -> None:
+    subheader = bytes([9, 0, 3, 12, 0, 1])
+    fake.unasked = [
+        (DataMsgType.HEARTBEAT, encode_frame(0x0473, b"", bytes(6))),
+        (DataMsgType.NOTIFY, encode_frame(0x0514, b"\x01" * 40, subheader)),
+        (DataMsgType.COMMAND, b"not an xzyh frame"),
+    ]
+    report = await run()
+    channel = report.data_channel
+    assert channel.heartbeats == 1
+    assert channel.messages == 3
+    assert channel.header_lens == (LINK_HEADER_LEN,)
+    frames = [(f.link_type, f.xzyh_type, f.length, f.subheader, f.channel) for f in channel.frames]
+    assert frames == [
+        (DataMsgType.NOTIFY, 0x0514, 40, subheader.hex(), 3),
+        (DataMsgType.COMMAND, None, 17, None, None),
+    ]
+
+
+async def test_the_older_link_header_is_recorded(fake: FakeRtcServer, run: Any) -> None:
+    fake.device_old_header = True
+    fake.unasked = [(DataMsgType.NOTIFY, encode_frame(0x0514, b"x", bytes(6)))]
+    report = await run()
+    assert report.data_channel.header_lens == (LINK_HEADER_LEN_OLD,)
+
+
+async def test_frames_beyond_the_cap_are_counted(
+    fake: FakeRtcServer, run: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(diag, "MAX_FRAMES", 2)
+    fake.unasked = [(DataMsgType.NOTIFY, encode_frame(0x0514, b"x", bytes(6)))] * 3
+    report = await run()
+    assert len(report.data_channel.frames) == 2
+    assert report.data_channel.frames_dropped == 1
+    assert report.data_channel.messages == 3
+
+
+async def test_a_busy_call_fails_step_three_and_skips_ice_and_the_channel(
+    fake: FakeRtcServer, run: Any
+) -> None:
+    fake.call_reply = "busy"
+    report = await run(probe_kinds=True)
+    assert report.login.login.status is StepStatus.OK
+    assert report.call.outcome.status is StepStatus.FAILED
+    assert (report.call.outcome.error, report.call.outcome.code) == ("CallRefusedError", 486)
+    assert report.ice.outcome.status is StepStatus.SKIPPED
+    assert report.ice.outcome.reason == "call failed"
+    assert report.data_channel.outcome.status is StepStatus.SKIPPED
+    # The probes still run: they need only a login.
+    assert report.probes.login.status is StepStatus.OK
+    assert [p.codes for p in report.probes.kinds] == [(486,)] * 3
+
+
+async def test_a_refused_login_fails_step_two_and_skips_the_rest(
+    fake: FakeRtcServer, run: Any
+) -> None:
+    fake.refuse_login = True
+    report = await run(probe_kinds=True)
+    assert report.login.discover.status is StepStatus.OK
+    assert report.login.login.status is StepStatus.FAILED
+    assert report.login.login.error == "SignalingError"
+    assert report.call.outcome.status is StepStatus.SKIPPED
+    assert report.call.outcome.reason == "login failed"
+    assert report.probes.login.status is StepStatus.SKIPPED
+
+
+async def test_per_kind_replies_are_recorded(
+    fake: FakeRtcServer, run: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(diag, "PROBE_TIMEOUT", 0.3)
+    fake.kind_replies = {1: "busy", 3: "silent", 4: "hangup"}
+    report = await run(probe_kinds=True)
+    probes = {p.kind: p for p in report.probes.kinds}
+    assert probes[1].codes == (486,)
+    assert probes[3].outcome.status is StepStatus.TIMEOUT
+    assert probes[3].codes == ()
+    assert probes[4].codes == (100,)
+    assert probes[4].hung_up is True
+
+
+async def test_ice_that_never_connects_is_a_step_four_failure(
+    fake: FakeRtcServer, run: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(session_mod, "ICE_TIMEOUT", 0.2)
+    fake.ice_connects = False
+    report = await run()
+    assert report.call.outcome.status is StepStatus.OK
+    assert report.ice.outcome.status is StepStatus.FAILED
+    assert report.ice.outcome.error == "DeviceTimeoutError"
+    assert report.ice.local_types == {"host": 1}
+    assert report.data_channel.outcome.status is StepStatus.SKIPPED
+
+
+async def test_the_first_start_bound_is_a_step_result(
+    fake: FakeRtcServer, run: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(session_mod, "START_TIMEOUT", 0.3)
+    fake.call_reply = "silent"
+    report = await run()
+    assert report.call.outcome.status is StepStatus.FAILED
+    assert report.call.outcome.error == "DeviceTimeoutError"
+    assert report.ice.outcome.status is StepStatus.SKIPPED
+
+
+async def test_the_whole_run_is_bounded(
+    fake: FakeRtcServer, run: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(diag, "station_budget", lambda seconds, probes: 0.4)
+    fake.call_reply = "silent"
+    loop = asyncio.get_running_loop()
+    began = loop.time()
+    report = await run()
+    assert loop.time() - began < 2.0
+    assert report.call.outcome.status is StepStatus.TIMEOUT
+    assert report.ice.outcome.status is StepStatus.SKIPPED
+
+
+def test_the_budget_covers_the_session_bound_the_watch_and_the_probes() -> None:
+    assert diag.station_budget(60, probes=False) > session_mod.START_TIMEOUT + 60
+    assert diag.station_budget(60, probes=True) > (
+        session_mod.START_TIMEOUT + 60 + len(diag.PROBE_KINDS) * diag.PROBE_TIMEOUT
+    )
+
+
+async def test_a_lost_link_ends_the_watch_without_a_second_connect(
+    fake: FakeRtcServer, run: Any
+) -> None:
+    async def hang_up_soon() -> None:
+        while not fake.device_channels:
+            await asyncio.sleep(0.01)
+        fake.hang_up()
+
+    task = asyncio.create_task(hang_up_soon())
+    report = await run(seconds=5.0)
+    await task
+    channel = report.data_channel
+    assert channel.outcome.status is StepStatus.FAILED
+    assert channel.watched < 2.0
+    assert fake.call_kinds() == [CallKind.PRIV1]  # no reconnect
+    assert fake.kinds().count(MessageType.LOGIN) == 2  # the one key exchange
+
+
+async def test_missing_inputs_skip_every_network_step(fake: FakeRtcServer, run: Any) -> None:
+    report = await run(station_entry(p2p_did=""), probe_kinds=True)
+    assert report.inputs.outcome.status is StepStatus.FAILED
+    for outcome in (report.login.login, report.call.outcome, report.probes.login):
+        assert outcome.status is StepStatus.SKIPPED
+        assert outcome.reason == "inputs failed"
+    assert fake.received == []
+
+
+async def test_without_the_extra_the_run_raises_before_any_socket(
+    fake: FakeRtcServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def missing() -> None:
+        raise MissingDependencyError("the WebRTC transport", extra="rtc")
+
+    monkeypatch.setattr(diag, "require_aioice", missing)
+    found = devices(station_entry())
+    with pytest.raises(MissingDependencyError):
+        await async_diagnose_station(
+            found[0], found, user_id=SYNTHETIC.account_id, app_id=APP_ID, seconds=0.1
+        )
+    assert fake.received == []
+
+
+async def test_a_pbsdp_answer_is_recorded_by_length(fake: FakeRtcServer, run: Any) -> None:
+    fake.pbsdp = base64.b64encode(struct.pack("<BB", 0x10, 3)).decode()
+    report = await run()
+    assert report.call.pbsdp_len == 4
+    assert report.call.transport_caps is None
+    assert report.call.answer_values["pbsdp"] == "<pbsdp:4>"
