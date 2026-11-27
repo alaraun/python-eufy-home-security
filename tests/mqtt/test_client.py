@@ -87,7 +87,7 @@ async def test_it_connects_with_the_app_client_id_and_subscribes_each_mqtt_devic
 ) -> None:
     await rig.client.async_start([lock(), CAMERA, lock(LOCK2_SN, "T85L0")])
     await rig.client.async_wait_connected(5)
-    await until(lambda: len(rig.broker.subscriptions) == 2)
+    await until(lambda: len(rig.broker.subscriptions) == 2 and len(rig.client.topics) == 2)
     openudid = rig.eufy.cloud._install_id("eu")
     (connect,) = rig.broker.connects
     assert connect.client_id == f"android-eufy_security-{SYNTHETIC.account_id}-{openudid}"
