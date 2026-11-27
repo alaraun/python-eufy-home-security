@@ -620,6 +620,33 @@ async def test_a_timed_out_command_keeps_it_moving_until_the_locks_next_report(
         await station.async_close()
 
 
+async def test_a_held_move_ends_at_a_push_whose_order_is_unknown(
+    fake: FakeStation, locked_1940: FakeLock
+) -> None:
+    """A cancelled unlock's hold ends at the lock's next report taken, a push dated before
+    the last report included: the lock reads that push, and as its order is unknown the
+    next unlock is still sent."""
+    station = await _hub(fake, _lock(LOCK_1940), locked_1940)
+    try:
+        push = _push_ms(station, -500)  # unlocked, dated before the locked dump
+        unlocking = asyncio.create_task(station.async_unlock(LOCK_1940))
+        await _until(lambda: _state(station) is LockState.UNLOCKING)
+        unlocking.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await unlocking
+        assert LOCK_1940 in station._locks._hold_expiry
+        assert station.note_lock_push(push) is True
+        reading = station.lock_state(LOCK_1940)
+        assert reading is not None
+        assert (reading.state, reading.source) == (LockState.UNLOCKED, LockStateSource.PUSH)
+        assert station._locks._hold_expiry == {}
+        locked_1940.report = True
+        assert await station.async_unlock(LOCK_1940) is LockState.UNLOCKED
+    finally:
+        await station.async_close()
+    assert [a for _, a, _ in locked_1940.received] == [LockAction.UNLOCK, LockAction.UNLOCK]
+
+
 @pytest.mark.parametrize(
     ("event_type", "state"),
     [(262, LockState.LOCKED), (517, LockState.JAMMED)],

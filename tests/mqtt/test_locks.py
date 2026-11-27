@@ -784,6 +784,38 @@ async def test_a_second_push_of_the_same_state_before_an_mqtt_report_keeps_the_o
     ]
 
 
+async def test_each_lock_logs_its_own_unknown_order(caplog: pytest.LogCaptureFixture) -> None:
+    """The unknown-order line is throttled per lock: a second lock still gets its own."""
+    caplog.set_level(logging.DEBUG, logger="eufy_home_security.station.locks")
+    now = 1_700_000_000_000
+    devices = [lock(), lock(LOCK2_SN, "T85L0")]
+    states = ListedLocks(EventBus(), lambda: devices, now_ms=lambda: now)
+    for device in devices:
+        states.on_report(device.device_sn, 3)
+        assert states.on_push(_push(262, now - 500, device.device_sn)) is True
+    unknown = [r.getMessage() for r in caplog.records if "order unknown" in r.getMessage()]
+    assert [line.split(":")[0] for line in unknown] == ["T85D0***4321", "T85L0***4322"]
+
+
+async def test_of_two_reports_in_one_millisecond_the_later_taken_is_the_last() -> None:
+    """Two reports of the lock dated the same millisecond: the one taken later is the last
+    report a push is ordered against. A push of its state dated before it settles nothing
+    new, so an unlock is answered from the reading."""
+    now = 1_700_000_000_000
+    device = lock()
+    states = ListedLocks(EventBus(), lambda: [device], now_ms=lambda: now)
+    account = _Recording()
+    locks = _listed_lock_commands(account, device, states=states)
+    states.on_report(LOCK_SN, 4)
+    states.on_report(LOCK_SN, 3)  # the same millisecond, taken later
+    assert states.on_push(_push(257, now - 500)) is True
+    state = await locks.async_command(
+        device, LockAction.UNLOCK, control=mqtt_lock_control(device), timeout=5
+    )
+    assert state is LockState.UNLOCKED
+    assert account.waits == []
+
+
 @pytest.mark.parametrize(
     ("offset_ms", "ends"), [(-3_000, False), (1, True)], ids=["unsettled", "settled"]
 )
