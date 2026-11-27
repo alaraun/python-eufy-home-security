@@ -524,7 +524,8 @@ class _Run:
     probe_login: StepOutcome | None = None
     probe_results: list[ProbeReport] = field(default_factory=list)
     probe_current: int | None = None
-    probe_started: float = 0.0
+    probe_started: float | None = None
+    """When the probe client began (None before step 6)."""
 
     # step bookkeeping
 
@@ -656,6 +657,9 @@ async def async_diagnose_station(
             run.probe_results.append(
                 ProbeReport(run.probe_current, StepOutcome(StepStatus.TIMEOUT))
             )
+        elif run.probe_started is not None:
+            seconds = round(loop.time() - run.probe_started, 3)
+            run.probe_login = StepOutcome(StepStatus.TIMEOUT, seconds)
         else:
             run.fail(None, StepStatus.TIMEOUT)
     finally:
@@ -791,8 +795,8 @@ async def _probe(run: _Run, port: int | None, tcp_ports: tuple[int, ...] | None)
         extra["port"] = port
     if tcp_ports is not None:
         extra["tcp_ports"] = tcp_ports
+    began = run.probe_started = run.loop.time()
     client = SignalingClient(run.config, **extra)
-    began = run.loop.time()
     try:
         try:
             await client.open()

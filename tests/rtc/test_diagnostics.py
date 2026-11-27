@@ -432,6 +432,26 @@ async def test_a_probe_cut_by_the_run_bound_is_a_timeout_and_the_rest_skipped(
     assert report.data_channel.outcome.status is StepStatus.OK
 
 
+async def test_the_run_bound_during_the_probe_login_is_a_probe_timeout(
+    fake: FakeRtcServer, run: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(diag, "station_budget", lambda seconds, probes: 1.5)
+
+    async def drop_later_logins() -> None:
+        while not fake.device_channels:
+            await asyncio.sleep(0.01)
+        fake.drop_logins = 1000
+
+    task = asyncio.create_task(drop_later_logins())
+    report = await run(seconds=0.2, probe_kinds=True)
+    await task
+    assert report.data_channel.outcome.status is StepStatus.OK
+    assert report.probes.login.status is StepStatus.TIMEOUT
+    assert [(p.kind, p.outcome.status, p.outcome.reason) for p in report.probes.kinds] == [
+        (k, StepStatus.SKIPPED, "run timed out") for k in (1, 3, 4)
+    ]
+
+
 async def test_ice_that_never_connects_is_a_step_four_failure(
     fake: FakeRtcServer, run: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
