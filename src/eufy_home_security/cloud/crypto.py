@@ -19,6 +19,7 @@ import hmac
 import os
 import secrets
 from dataclasses import dataclass, field
+from typing import Final
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives import padding
@@ -163,12 +164,31 @@ class LoginPassword:
     client_public_key: str
     secret: bytes = field(repr=False)
     """The ECDH secret the password was wrapped under (kept for debug logging)."""
+    sha256_first: bool = False
+    """Whether the wrapped text is the password's SHA-256 (:func:`login_password_text`)."""
+
+
+# Java's ``String.trim()``: every character up to U+0020 at either end.
+_TRIMMED: Final = "".join(chr(c) for c in range(0x21))
+
+
+def login_password_text(password: str, *, sha256_first: bool = False) -> str:
+    """The text a login wraps: ``password`` as given, or with ``sha256_first`` the
+    lower-case hex SHA-256 of its UTF-8 bytes once the characters up to U+0020 at
+    either end are removed (an account whose e-mail check answers ``enc_text: sha2``,
+    as the eufy app hashes it; docs/protocol/cloud.md § Login).
+    """
+    if not sha256_first:
+        return password
+    return hashlib.sha256(password.strip(_TRIMMED).encode()).hexdigest()
 
 
 def encrypt_login_password(
-    password: str, server_public_key_hex: str = LOGIN_SERVER_PUBLIC_KEY
+    password: str, server_public_key_hex: str | None = None, *, sha256_first: bool = False
 ) -> LoginPassword:
-    """ECDH-wrap the account password for ``/passport/login``.
+    """ECDH-wrap the account password for ``/passport/login`` against the login server
+    key (:data:`~.const.LOGIN_SERVER_PUBLIC_KEY` unless ``server_public_key_hex``);
+    ``sha256_first`` wraps its SHA-256 instead (:func:`login_password_text`).
 
     ``AES-CBC(key=secret, iv=secret[:16])`` over the password, padded **PKCS7 at
     256 bits** — the key size, not the 16-byte AES block. That is not a typo, and it
@@ -180,18 +200,26 @@ def encrypt_login_password(
     body.
     """
     private_key = ec.generate_private_key(ec.SECP256R1())
-    secret = private_key.exchange(ec.ECDH(), load_public_key(server_public_key_hex))
-    return rewrap_login_password(password, public_key_hex(private_key), secret)
+    server_key = load_public_key(server_public_key_hex or LOGIN_SERVER_PUBLIC_KEY)
+    secret = private_key.exchange(ec.ECDH(), server_key)
+    return rewrap_login_password(
+        password, public_key_hex(private_key), secret, sha256_first=sha256_first
+    )
 
 
-def rewrap_login_password(password: str, client_public_key: str, secret: bytes) -> LoginPassword:
+def rewrap_login_password(
+    password: str, client_public_key: str, secret: bytes, *, sha256_first: bool = False
+) -> LoginPassword:
     """Wrap ``password`` under an earlier wrap's ECDH ``secret`` and client public key,
-    as :func:`encrypt_login_password` does: the same password gives the same ciphertext."""
-    ciphertext = _aes_cbc_encrypt(password.encode(), secret, secret[:16], block_bits=256)
+    as :func:`encrypt_login_password` does: the same password and ``sha256_first`` give
+    the same ciphertext."""
+    text = login_password_text(password, sha256_first=sha256_first)
+    ciphertext = _aes_cbc_encrypt(text.encode(), secret, secret[:16], block_bits=256)
     return LoginPassword(
         encrypted=base64.b64encode(ciphertext).decode(),
         client_public_key=client_public_key,
         secret=secret,
+        sha256_first=sha256_first,
     )
 
 

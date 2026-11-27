@@ -323,6 +323,20 @@ async def test_a_request_limit_from_the_fake_cloud_holds_off_the_whole_install(
     assert cloud.calls == ["login"]
 
 
+@pytest.mark.parametrize("enc_text", [None, "sha2"])
+async def test_every_login_checks_the_account_first(enc_text: str | None) -> None:
+    """The check is counted apart from ``calls``, so call lists stay as they were."""
+    cloud = FakeCloud(enc_text=enc_text)
+    eufy = build_eufy_security(email=SYNTHETIC.email, store=MemoryStore(), cloud=cloud)
+    try:
+        await eufy.async_login()
+    finally:
+        await eufy.async_close()
+    logins = [call for call in cloud.calls if call.split("@")[0] == "login"]
+    assert cloud.account_checks == len(logins) >= 1
+    assert logins == cloud.calls
+
+
 async def test_a_stopped_station_is_the_start_error(
     fake: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -98,8 +98,32 @@ identity minted in one realm is refused by the other's cipher gateway **[verifie
  "answer": "", "captcha_id": "", "verify_code": "", "login_id": ""}
 ```
 
+**Account check [declared (eufy app); not verified on an account that needs it].** Every
+login, the answer to an e-mailed code included, is preceded by `POST
+app-passport-{region}-pr.eufy.com/passport/validate_email`, body `{"email": "<e-mail>"}`,
+sent under the identity the login then uses (inside a pending login: its identity and
+pending token). An answer `data.enc_text` of exactly `"sha2"` means the login wraps the
+lower-case hex SHA-256 of the password's UTF-8 bytes, after the characters up to U+0020 at
+either end are removed, instead of the password; any other answer (no `enc_text`, another
+value) wraps the password as given. The check carries no password, so it cannot count
+toward the wrong-password lock; the library counts the check and its login as one login
+attempt in its budget, before the check is sent. The accounts tested log in with the
+password as given.
+
+The login is sent only after the check succeeds, as in the app: a refused check stops it,
+and its answer is classified as a login's would be (a challenge code raises the challenge,
+a throttle starts the hold-off, a credential code is a credential rejection, HTTP 401, a
+re-key answer and no answer at all raise as on any call; another body code raises
+`CloudApiError`, recorded as a refused scope for an extra country). Code 26502 (the account
+is on another cluster domain) looks the login's `ab` up again with `estimate_domain` and
+repeats the check once on the domain it names, which then serves the scope's hosts. The
+library follows only a domain of the scope's own cluster: a domain of the other cluster, or
+none, raises `CloudApiError` 26502 and no login is sent; a second 26502 does the same. The
+library's own `ab` fallback below re-sends the login without a second check.
+
 **Password wrap.** `secret = ECDH(client_priv, LOGIN_SERVER_PUBLIC_KEY).x` (32 bytes).
-The value is `base64(AES-CBC(key=secret, iv=secret[:16], PKCS7-pad(password, block=256 bits)))`.
+The value is `base64(AES-CBC(key=secret, iv=secret[:16], PKCS7-pad(text, block=256 bits)))`,
+where `text` is the password or, after a `sha2` account check, its SHA-256 (above).
 The login server public key is a static P-256 point embedded in the app
 (`cloud/const.py: LOGIN_SERVER_PUBLIC_KEY`). The pad block is **256 bits**, the key
 size, not the AES block size. That looks wrong, but short passwords log in with it
@@ -194,10 +218,10 @@ asks again.
 
 ## Login challenges
 
-A challenge arrives as a non-zero body `code` on `/passport/login`. The client
-re-submits the login with the answer filled in. The codes and the flow come from the
-app **[app]**. The library implements them, but they have not been triggered on a
-live account.
+A challenge arrives as a non-zero body `code` on `/passport/login` (or on the account
+check before it). The client re-submits the login with the answer filled in. The codes
+and the flow come from the app **[app]**. The library implements them, but they have not
+been triggered on a live account.
 
 | code(s) | challenge | re-submit with |
 |---|---|---|
@@ -219,8 +243,9 @@ be answered. The token is never stored as a session.
 - the same key-exchange identity (`X-Key-Ident`, shared key), no new key exchange;
 - the pending `auth_token` as `x-auth-token` and `authorization`, and `gtoken` =
   MD5 of the pending answer's `user_id`;
+- the account check first, under the same identity and token (above);
 - the same password wrap: the same `client_secret_info.public_key` and, for the same
-  password, the same ciphertext;
+  password and the same `enc_text`, the same ciphertext;
 - body exactly `{email, password, ab, client_secret_info, verify_code, login_id}`, with
   no `answer` and no `captcha_id`.
 
@@ -550,6 +575,7 @@ Whether a guest (`member_type` 0) is served is untested **[open]**.
 | throttled (requests) | 26145 `API_REQUEST_LIMIT`, 250999 `REQUEST_TOO_FAST` **[reported]**, HTTP 429 | hold off every call (1 h, or a longer `Retry-After`) |
 | throttled / locked (logins) | **100028 `MAX_LOGIN_LIMIT`** (hold off logins 2 h); 10019, 100056, 26053 (24 h) | hold off logins; a valid session keeps working |
 | login crypto | 100029, 100030 | the password wrap was wrong |
+| domain mismatch | 26502 on the account check | look the login's `ab` up again (`estimate_domain`) and check once more on that domain if it is the scope's cluster; otherwise stop (see Login) |
 
 ## Device session key (DSK)
 
@@ -645,14 +671,15 @@ fetch that returned the key the handshake uses (the RSA key for the RSA handshak
 the ECC key) emits `CredentialsRefreshed`; one that leaves an RSA station on its static
 key emits none.
 
-The limits themselves are not published. Reports put a "too fast" block (`250999`,
-"The request is too fast. Please stop and have a rest", or HTTP 429) at 30–60 min per
-IP or session, restarted by requests sent during it, and a `100028` login block at
-1–2 h. So a throttling answer starts a **hold-off**, set at the long end of those
-reports, that is persisted with the session: until it ends the library refuses locally
-and sends nothing — every call for a request throttle, logins only for a login
-throttle. Independently, at most 3 login attempts (of any outcome) are sent in a
-rolling 6 h. A refusal is a `RateLimitedError` (`LoginLimitedError` for logins) carrying
-`retry_after`, its `origin` (`cloud`: the answer was a throttle; `hold_off`: refused
-locally after one; `budget`: the library's login budget; `cooldown`: a key-refresh
-cooldown) and, for a refused login, its login `scope`.
+The limits themselves are not published. Reports put a "too fast" block (`250999`, "The
+request is too fast. Please stop and have a rest", or HTTP 429) at 30–60 min per IP or
+session, restarted by requests sent during it, and a `100028` login block at 1–2 h. So a
+throttling answer starts a **hold-off**, set at the long end of those reports, that is
+persisted with the session: until it ends the library refuses locally and sends nothing
+— every call for a request throttle, logins only for a login throttle. Independently, at
+most 3 login attempts (of any outcome; the account check and the login it precedes are
+one attempt) are sent in a rolling 6 h. A refusal is a `RateLimitedError`
+(`LoginLimitedError` for logins) carrying `retry_after`, its `origin` (`cloud`: the
+answer was a throttle; `hold_off`: refused locally after one; `budget`: the library's
+login budget; `cooldown`: a key-refresh cooldown) and, for a refused login, its login
+`scope`.

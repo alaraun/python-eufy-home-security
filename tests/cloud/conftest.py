@@ -10,7 +10,9 @@ under the derived shared key, exactly as the live gateway does.
 from __future__ import annotations
 
 import asyncio
+import base64
 import functools
+import hashlib
 import inspect
 import json
 import re
@@ -20,7 +22,9 @@ from typing import Any, cast
 import aiohttp
 import pytest
 from aioresponses import CallbackResult
+from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from yarl import URL
 
 # aioresponses 0.7.9 builds a ClientResponse without the `stream_writer` argument
@@ -170,6 +174,18 @@ class FakeMega:
         self.one_session_per_install = False
         self._install_token: dict[tuple[str, str], str] = {}
         self._login_calls = 0
+        # passport/validate_email: the ``enc_text`` its answer's data carries (None: none).
+        self.enc_text: str | None = None
+        # The account password a login must wrap (its SHA-256 when ``enc_text`` is
+        # "sha2"); None takes any. Another one answers 26006, as a wrong password.
+        self.account_password: str | None = None
+        # The login server's key pair: the client wraps the password against its public
+        # half (the ``fake_mega`` fixture installs it), so the fake can read the wrap.
+        self.login_server_key = ec.generate_private_key(ec.SECP256R1())
+        # The text each login wrapped, unwrapped by the fake, in order.
+        self.login_passwords: list[str] = []
+        # estimate_domain: country -> the domain it answers, ahead of ``country_regions``.
+        self.country_domains: dict[str, str] = {}
 
     # ── registration on an aioresponses mock ─────────────────────────────────
 
@@ -211,6 +227,11 @@ class FakeMega:
         mock.post(
             _url(passport, const.LOGIN_PATH),
             callback=self._delayed("login", functools.partial(self._login, region=region), region),
+            repeat=True,
+        )
+        mock.post(
+            _url(passport, const.VALIDATE_EMAIL_PATH),
+            callback=self._delayed("validate_email", self._validate_email, region),
             repeat=True,
         )
         mock.post(
@@ -342,6 +363,21 @@ class FakeMega:
         )
         self.install_mqtt_register(mock, const.mega_host(region), region)
 
+    def install_domain(self, mock: Any, domain: str, label: str) -> None:
+        """Answer the account check and the login on ``domain``'s passport host (a
+        ``mega-`` domain), recorded in ``region_calls`` under ``label``."""
+        passport = const.cluster_host("passport", "eu", domain)
+        mock.post(
+            _url(passport, const.VALIDATE_EMAIL_PATH),
+            callback=self._delayed("validate_email", self._validate_email, label),
+            repeat=True,
+        )
+        mock.post(
+            _url(passport, const.LOGIN_PATH),
+            callback=self._delayed("login", functools.partial(self._login, region=label), label),
+            repeat=True,
+        )
+
     def install_mqtt_register(self, mock: Any, host: str, region: str) -> None:
         """Answer ``app/mqtt/register/iot`` on ``host`` (a cluster's ``mega-`` domain)."""
         mock.post(
@@ -449,6 +485,36 @@ class FakeMega:
 
         return cb
 
+    def _unwrap_password(self, payload: Mapping[str, Any]) -> str | None:
+        """The text a login wrapped: ECDH with the login server key, AES-CBC with the
+        secret as key and its first 16 bytes as IV, PKCS7 at 256 bits; None when it was
+        wrapped against another key (a fake built outside the ``fake_mega`` fixture)."""
+        client = crypto.load_public_key(str(payload["client_secret_info"]["public_key"]))
+        secret = self.login_server_key.exchange(ec.ECDH(), client)
+        decryptor = Cipher(algorithms.AES(secret), modes.CBC(secret[:16])).decryptor()
+        padded = decryptor.update(base64.b64decode(payload["password"])) + decryptor.finalize()
+        unpadder = padding.PKCS7(256).unpadder()
+        try:
+            return (unpadder.update(padded) + unpadder.finalize()).decode()
+        except ValueError:
+            return None
+
+    def _password_accepted(self, wrapped: str | None) -> bool:
+        if self.account_password is None:
+            return True
+        if self.enc_text != "sha2":
+            return wrapped == self.account_password
+        trimmed = self.account_password.strip("".join(chr(c) for c in range(0x21)))
+        return wrapped == hashlib.sha256(trimmed.encode()).hexdigest()
+
+    def _validate_email(self, url: str, **kwargs: Any) -> CallbackResult:
+        self.calls.append(("validate_email", self._decrypt_body(kwargs)))
+        self.headers.setdefault("validate_email", []).append(dict(kwargs["headers"]))
+        if failure := self._failure_once("validate_email", kwargs):
+            return failure
+        data = {} if self.enc_text is None else {"enc_text": self.enc_text}
+        return self._reply(self._shared_for(kwargs), 0, data)
+
     def _login(self, url: str, *, region: str = "", **kwargs: Any) -> CallbackResult:
         self._login_calls += 1
         shared = self._shared_for(kwargs)
@@ -457,6 +523,14 @@ class FakeMega:
         self.headers.setdefault("login", []).append(dict(kwargs["headers"]))
         if failure := self._failure_once("login", kwargs):
             return failure
+        wrapped = self._unwrap_password(payload)
+        if wrapped is not None:
+            self.login_passwords.append(wrapped)
+        if not self._password_accepted(wrapped):
+            refused = int(const.CloudCode.EMAIL_OR_PASSWORD_ERROR)
+            return CallbackResult(
+                status=200, body=json.dumps({"code": refused, "msg": "Failed to login."})
+            )
         if self.answer_error is not None and payload.get("verify_code"):
             status, error_body = self.answer_error
             return CallbackResult(status=status, body=json.dumps(error_body))
@@ -511,7 +585,10 @@ class FakeMega:
         if failure := self._failure_once("estimate_domain", kwargs):
             return failure
         region = self.country_regions.get(str(payload.get("ab")))
-        domain = f"mega-{region}-pr.eufy.com" if region else "aiot-api-eu.eufylife.com"
+        domain = self.country_domains.get(
+            str(payload.get("ab")),
+            f"mega-{region}-pr.eufy.com" if region else "aiot-api-eu.eufylife.com",
+        )
         body = {"code": 0, "msg": "success!", "data": {"domain": domain, "is_same_region": True}}
         return CallbackResult(status=200, body=json.dumps(body))
 
@@ -673,8 +750,11 @@ class FakeMega:
 
 
 @pytest.fixture
-def fake_mega() -> FakeMega:
-    return FakeMega()
+def fake_mega(monkeypatch: pytest.MonkeyPatch) -> FakeMega:
+    fake = FakeMega()
+    server = crypto.public_key_hex(fake.login_server_key)
+    monkeypatch.setattr(crypto, "LOGIN_SERVER_PUBLIC_KEY", server)
+    return fake
 
 
 @pytest.fixture

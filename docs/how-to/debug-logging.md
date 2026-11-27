@@ -7,7 +7,7 @@ Loggers follow the module path, so one subsystem can be turned up on its own:
 | Logger | What it covers |
 |---|---|
 | `eufy_home_security` | everything |
-| `eufy_home_security.cloud.api` | every HTTP call (URL, headers, body, status, API code, ms, response); the login flow step by step (cached session, password source, key exchanges, challenges, token), owner id and cipher keys, push-token upload, local hold-offs |
+| `eufy_home_security.cloud.api` | every HTTP call (URL, headers, body, status, API code, ms, response); the login flow step by step (cached session, password source, key exchanges, the account check and whether the login wraps the password or its SHA-256, challenges, token), owner id and cipher keys, push-token upload, local hold-offs |
 | `eufy_home_security.storage` | session cache loaded / saved (sections, never values), version or account changes |
 | `eufy_home_security.client` | the P2P credentials handed to each station |
 | `eufy_home_security.identity` | which account serves a station shared between accounts |

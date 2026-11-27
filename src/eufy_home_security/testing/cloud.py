@@ -448,6 +448,11 @@ class FakeCloud:
     mqtt_requests: list[tuple[str, bool, dict[str, Any]]] = field(default_factory=list)
     """(host, whether the ``category``/``app-tab`` headers were sent, body) of each
     ``app/mqtt/register/iot`` request, in order."""
+    enc_text: str | None = None
+    """``enc_text`` of the account check every login sends first (``"sha2"``: the login
+    wraps the password's SHA-256); None answers without it. The checks are counted in
+    ``account_checks``, not recorded in ``calls``, and consume no ``call_errors``."""
+    account_checks: int = 0
     lock_public_keys: dict[tuple[str, int], bytes] = field(default_factory=dict)
     """(lock serial, key type) -> the public key ``app/public_key/query`` answers (recorded
     as ``"public_key:<serial>"``); another pair is answered with no key."""
@@ -529,6 +534,9 @@ class FakeCloud:
             self._raise_call_error()
             public = self.lock_public_keys.get((serial, int(payload.get("type", 0))))
             return None if public is None else {"public_key": public.hex()}
+        if path == const.VALIDATE_EMAIL_PATH:
+            self.account_checks += 1
+            return {} if self.enc_text is None else {"enc_text": self.enc_text}
         if path == const.LOGIN_PATH:
             note("login")
             if self.login_error is not None:

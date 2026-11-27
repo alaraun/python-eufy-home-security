@@ -108,6 +108,11 @@ _SUCCESS: Final = int(const.CloudCode.SUCCESS)
 _HTTP_429_THROTTLE: Final = const.Throttle(login_only=False, seconds=const.REQUEST_HOLD_OFF_SECONDS)
 """The hold-off an HTTP 429 answer starts (a request throttle)."""
 
+_CHECK_TOLERATED: Final = (
+    const.VERIFY_CODE_CODES | const.CAPTCHA_CODES | {const.CloudCode.DOMAIN_MISMATCH}
+)
+"""Account-check answer codes :meth:`EufyCloudApi._check_account` reads itself."""
+
 _ALL_HOUSES: Final = ""
 """The ``house_id`` of the account-wide device list (the eufy app's "All Devices")."""
 
@@ -1192,6 +1197,11 @@ class EufyCloudApi:
         """The region whose cluster ``estimate_domain`` names for ``country``; None when
         it names another kind of domain (not a eufy country). Raises
         :class:`CommunicationError` or :class:`ProtocolError` when it does not answer."""
+        return const.region_from_mega_domain(await self._estimate_domain(country))
+
+    async def _estimate_domain(self, country: str) -> str | None:
+        """The domain ``estimate_domain`` names for ``country`` (None when it names
+        none); raises as :meth:`_lookup_home_region`."""
         region = self._region_override or const.DEFAULT_REGION
         data = await self._post_plain(
             const.mega_host(region),
@@ -1200,7 +1210,7 @@ class EufyCloudApi:
             region=region,
         )
         domain = data.get("domain")
-        return const.region_from_mega_domain(domain if isinstance(domain, str) else None)
+        return domain if isinstance(domain, str) else None
 
     async def _post_plain(
         self, host: str, path: str, payload: Mapping[str, Any], *, region: str
@@ -1337,6 +1347,9 @@ class EufyCloudApi:
         (:meth:`_pending_login`: no key exchange, no ``ab`` fallback), else as a new
         login; a credential, HTTP 401 or re-key refusal of it raises
         :class:`LoginVerificationError` and keeps the cached password.
+        Every login, the answer included, first sends the account check
+        (:meth:`_check_account`), whose answer decides whether the password or its
+        SHA-256 is wrapped and whose refusal stops the login.
         Callers hold ``_login_lock``.
         """
         self._raise_if_held_off(login=True, region=region)
@@ -1348,28 +1361,35 @@ class EufyCloudApi:
         wanted = self.login_ab(region)
         self._log_login_start(region, password, source, wanted)
         pending = self._pending_login(region) if verify_code else None
-        request = (
-            self._answer_in_pending_login(
-                region, pending, password, verify_code=verify_code, login_id=login_id
-            )
-            if pending is not None
-            else await self._new_login_request(
-                region,
-                password,
-                wanted,
-                verify_code=verify_code,
-                captcha_id=captcha_id,
-                captcha_answer=captcha_answer,
-                login_id=login_id,
-            )
-        )
+        if pending is None:
+            identity = await self._login_identity(region, answering=bool(verify_code))
+            ab = self._settled_ab(region, wanted)
+        else:
+            identity, ab = pending.identity, pending.ab
         try:
+            hashed = await self._check_account(region, identity, ab, interactive=interactive)
             if pending is not None:
+                request = self._answer_in_pending_login(
+                    region, pending, password, hashed, verify_code=verify_code, login_id=login_id
+                )
                 answer = await self._send_login_request(request)
             else:
+                request = _LoginRequest(
+                    identity,
+                    crypto.encrypt_login_password(password, sha256_first=hashed),
+                    ab,
+                    {
+                        "answer": captcha_answer or "",
+                        "captcha_id": captcha_id or "",
+                        "verify_code": verify_code or "",
+                        "login_id": login_id or "",
+                    },
+                )
                 request, answer = await self._send_new_login(
                     region, request, fallback=fallback, interactive=interactive
                 )
+        except LoginChallengeError:
+            raise  # the account check asked for a code or a captcha: nothing was refused
         except (AuthenticationError, _RekeyRequiredError) as err:
             await self._handle_login_refusal(region, err, password, answering=bool(verify_code))
             raise
@@ -1423,17 +1443,18 @@ class EufyCloudApi:
         region: str,
         pending: _PendingLogin,
         password: str,
+        sha256_first: bool,
         *,
         verify_code: str | None,
         login_id: str | None,
     ) -> _LoginRequest:
         """The verification code answer sent inside ``pending``, as the app answers:
-        its key identity and token, the same password wrap and ``ab``, no captcha
-        fields."""
+        its key identity and token, the password wrapped under the same key (its
+        SHA-256 with ``sha256_first``) and ``ab``, no captcha fields."""
         request = _LoginRequest(
             identity=pending.identity,
             wrapped=crypto.rewrap_login_password(
-                password, pending.client_public_key, pending.secret
+                password, pending.client_public_key, pending.secret, sha256_first=sha256_first
             ),
             ab=pending.ab,
             answer={"verify_code": verify_code or "", "login_id": login_id or ""},
@@ -1441,36 +1462,114 @@ class EufyCloudApi:
         _LOGGER.info("%s answering the verification code inside the pending login", region)
         return request
 
-    async def _new_login_request(
-        self,
-        region: str,
-        password: str,
-        wanted: str,
-        *,
-        verify_code: str | None,
-        captcha_id: str | None,
-        captcha_answer: str | None,
-        login_id: str | None,
-    ) -> _LoginRequest:
-        """A new login to ``region``: a key exchange, the password wrapped for it, the
-        challenge answer fields (blank when absent) and the ``ab`` of
-        :meth:`_settled_ab`."""
-        if verify_code:
+    async def _login_identity(self, region: str, *, answering: bool) -> _Identity:
+        """The key-exchange identity a new login to ``region`` is sent under."""
+        if answering:
             _LOGGER.info("%s has no pending login kept; answering with a new login", region)
-        identity = await self._key_exchange(
+        return await self._key_exchange(
             self._host("openapi", region),
             const.KEY_EXCHANGE_PATH,
             const.MEGA_PRESET_KEY,
             region=region,
         )
-        wrapped = crypto.encrypt_login_password(password)
-        answer = {
-            "answer": captcha_answer or "",
-            "captcha_id": captcha_id or "",
-            "verify_code": verify_code or "",
-            "login_id": login_id or "",
-        }
-        return _LoginRequest(identity, wrapped, self._settled_ab(region, wanted), answer)
+
+    async def _check_account(
+        self, region: str, identity: _Identity, ab: str, *, interactive: bool
+    ) -> bool:
+        """The account check (``passport/validate_email``) a login sends first under its
+        own identity, as the app does; whether the cloud asks for the password's
+        SHA-256 (``enc_text`` ``sha2``, docs/protocol/cloud.md § Login).
+
+        Counted in the region's login budget before it is sent: the check and the login
+        it precedes are one attempt. Every refusal stops the login, classified as a
+        login's: a challenge code raises :class:`LoginChallengeError` (a captcha fetched
+        only when ``interactive``), a throttle code or HTTP 429 starts the hold-off, a
+        credential code raises :class:`AuthenticationError`, HTTP 401, a re-key answer
+        and no answer raise as on any call. Code 26502 looks ``ab``'s cluster domain up
+        again (:meth:`_follow_account_domain`) and checks once more there; any other
+        body code raises :class:`CloudApiError`, recorded as the scope's refusal for an
+        extra country when ``interactive``.
+        """
+        await self._count_login(region)
+        try:
+            code, resp, data = await self._account_check_answer(region, identity, ab)
+        except CloudApiError as err:
+            if (
+                interactive
+                and type(err) is CloudApiError
+                and const.scope_country(region) is not None
+            ):
+                await self._refuse_scope(region, err)
+            raise
+        if code in const.CAPTCHA_CODES or code in const.VERIFY_CODE_CODES:
+            await self._note_challenge(region, resp, data, interactive=interactive)
+            _LOGGER.info("%s account check needs a challenge answer (code %s)", region, code)
+            if code in const.CAPTCHA_CODES:
+                login_id = self._extract_login_id(resp, data)
+                await self._raise_captcha_challenge(identity, code, login_id, request=interactive)
+            await self._raise_verify_code_challenge(identity, code, resp, data, request=interactive)
+        hashed = isinstance(data, Mapping) and data.get("enc_text") == const.ENC_TEXT_SHA256
+        _LOGGER.debug(
+            "%s account check: the login wraps %s",
+            region,
+            "the password's SHA-256 (enc_text sha2)" if hashed else "the password",
+        )
+        return hashed
+
+    async def _account_check_answer(
+        self, region: str, identity: _Identity, ab: str
+    ) -> _LoginAnswer:
+        """The account check's answer: success or a challenge code. A 26502 answer is
+        followed once (:meth:`_follow_account_domain`), a second one raises
+        :class:`CloudApiError`."""
+        followed = False
+        while True:
+            answer = await self._call(
+                self._host("passport", region),
+                const.VALIDATE_EMAIL_PATH,
+                {"email": self._email},
+                identity,
+                tolerate=_CHECK_TOLERATED,
+            )
+            code, resp, _data = answer
+            if code != const.CloudCode.DOMAIN_MISMATCH:
+                return answer
+            if followed:
+                raise CloudApiError(code, _message(resp), endpoint=const.VALIDATE_EMAIL_PATH)
+            followed = True
+            await self._follow_account_domain(region, ab)
+
+    async def _follow_account_domain(self, region: str, ab: str) -> None:
+        """After an account check answered 26502: make the cluster domain
+        ``estimate_domain`` names for ``ab`` scope ``region``'s hosts, as the app reloads
+        its domain before checking again. A domain of another cluster than the scope's
+        (or none) raises :class:`CloudApiError` 26502: a scope never moves cluster."""
+        domain = await self._estimate_domain(ab)
+        named = const.region_from_mega_domain(domain)
+        cluster = const.scope_region(region)
+        if named != cluster:
+            _LOGGER.warning(
+                "%s account check: the account is on another cluster domain (%s, region %s) "
+                "for ab %s; not followed",
+                region,
+                domain,
+                named,
+                ab,
+            )
+            raise CloudApiError(
+                int(const.CloudCode.DOMAIN_MISMATCH),
+                f"the {region} account check names another cluster ({named}); not followed",
+                endpoint=const.VALIDATE_EMAIL_PATH,
+            )
+        _LOGGER.info("%s account check: domain %s for ab %s; checking again", region, domain, ab)
+        self._cache.cloud_session(region)["mega_domain"] = domain
+        await self._cache.async_save()
+
+    async def _count_login(self, region: str) -> None:
+        """Count a login attempt in ``region``'s budget before any of it is sent (one
+        that times out may still have landed)."""
+        self._cache.note_login(const.LOGIN_BUDGET_WINDOW_SECONDS, const.scope_region(region))
+        await self._cache.async_save()
 
     def _settled_ab(self, region: str, wanted: str) -> str:
         """The ``ab`` a new login to ``region`` sends: ``wanted``, or the ``ab`` the
@@ -1519,6 +1618,7 @@ class EufyCloudApi:
                 fallback_ab,
             )
             self._raise_if_held_off(login=True, region=region)
+            await self._count_login(region)  # a second login; the same check's answer holds
             request = replace(request, ab=fallback_ab)
             return request, await self._send_login_request(request)
 
@@ -1534,7 +1634,8 @@ class EufyCloudApi:
         *,
         answering: bool,
     ) -> None:
-        """Act on a login's credential or re-key refusal ``err``; the caller re-raises it.
+        """Act on a login's (or its account check's) credential or re-key refusal
+        ``err``; the caller re-raises it.
 
         A refused verification code answer (``answering``) drops the scope's pending
         login and raises :class:`LoginVerificationError`, the password kept. Else a
@@ -1662,12 +1763,12 @@ class EufyCloudApi:
         answer: Mapping[str, str],
     ) -> tuple[int, dict[str, Any], Any]:
         """Send one ``passport/login`` with the ``wrapped`` password, ``ab`` and the
-        challenge ``answer`` fields, counted in the region's login budget before it is
-        sent."""
+        challenge ``answer`` fields (the caller counted it in the login budget)."""
         region = identity.region
         _LOGGER.debug(
-            "login: password wrapped under an ECDH key (client public key %s, "
+            "login: %s wrapped under an ECDH key (client public key %s, "
             "ECDH secret %s, ciphertext %s)",
+            "SHA-256 of the password" if wrapped.sha256_first else "password",
             wrapped.client_public_key,
             Credential(wrapped.secret),
             Credential(wrapped.encrypted),
@@ -1679,9 +1780,6 @@ class EufyCloudApi:
             "client_secret_info": {"public_key": wrapped.client_public_key},
             **answer,
         }
-        # Counted before it is sent: a login that times out may still have landed.
-        self._cache.note_login(const.LOGIN_BUDGET_WINDOW_SECONDS, const.scope_region(region))
-        await self._cache.async_save()
         return await self._call(
             self._host("passport", region),
             const.LOGIN_PATH,
