@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import binascii
 import contextlib
 import logging
 import random
@@ -130,7 +129,7 @@ class CallAnswer:
             raise ProtocolError("the device's answer carries no sdp_info")
         try:
             info = SdpInfo.decode(base64.b64decode(raw, validate=True))
-        except binascii.Error as exc:
+        except ValueError as exc:  # binascii.Error, and a non-ASCII text
             raise ProtocolError(f"the device's sdp_info is not base64: {exc}") from exc
         caps = payload.get("transport_caps")
         return cls(

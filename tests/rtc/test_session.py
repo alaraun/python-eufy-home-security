@@ -189,7 +189,15 @@ def test_the_answer_reads_sdp_info_and_transport_caps() -> None:
 
 
 @pytest.mark.parametrize(
-    "payload", [{}, {"sdp_info": ""}, {"sdp_info": 5}, {"sdp_info": "!!"}, {"sdp_info": "AAAA"}]
+    "payload",
+    [
+        {},
+        {"sdp_info": ""},
+        {"sdp_info": 5},
+        {"sdp_info": "!!"},
+        {"sdp_info": "AAAA"},
+        {"sdp_info": "\u00e9AAAA"},  # not ASCII: base64 refuses it with a ValueError
+    ],
 )
 def test_an_answer_without_a_readable_sdp_info_is_refused(payload: dict[str, Any]) -> None:
     with pytest.raises(ProtocolError):
