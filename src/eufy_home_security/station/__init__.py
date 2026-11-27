@@ -648,11 +648,12 @@ class StationState:
     """Internal eMMC storage used, 0-100 (param 1190; 0 is a real value)."""
     storage_status: int | None = None
     """The raw storage status code (param 1135, ``GET_TFCARD_STATUS``)."""
-    storage_groups: SdStatusGroups | None = field(default=None, repr=False, compare=False)
+    storage_groups: SdStatusGroups | None = field(default=None, repr=False)
     """How the station's model groups :attr:`storage_status`
     (:func:`~..devices.model_settings.sd_status_groups`, loaded by
     :meth:`Station.async_load_settings`); None: the library's table
-    (:func:`~..p2p.storage_info.sd_status_group`)."""
+    (:func:`~..p2p.storage_info.sd_status_group`). Part of equality: :attr:`storage_ok`
+    reads it."""
     upgrading: bool | None = None
     """Whether the station is installing a firmware update: the first of
     :data:`UPGRADE_PARAMS` it reports (P2P dump, else the cloud's copy), the flag the eufy

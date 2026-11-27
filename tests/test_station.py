@@ -1345,6 +1345,26 @@ def test_storage_ok_groups_the_status_by_the_station_model_s_table(
     assert state.storage_ok is ok
 
 
+def _storage_state(groups: SdStatusGroups | None) -> StationState:
+    return StationState(
+        serial=SYNTHETIC.station_sn,
+        guard_mode=None,
+        firmware=None,
+        devices={},
+        params={},
+        storage_status=30,
+        storage_groups=groups,
+    )
+
+
+def test_states_differing_only_in_the_storage_grouping_are_unequal() -> None:
+    """``storage_ok`` reads the grouping, so a state with another one is a new state."""
+    grouped = _storage_state(SdStatusGroups({0: 0}, 1))
+    assert grouped != _storage_state(None)
+    assert grouped != _storage_state(SdStatusGroups({0: 0, 30: 0}, 1))
+    assert grouped == _storage_state(SdStatusGroups({0: 0}, 1))
+
+
 def test_coverage_counts_the_power_and_storage_fields_as_parsed_state() -> None:
     state = _state_of(
         {
@@ -6248,6 +6268,20 @@ async def test_a_station_s_storage_ok_follows_its_model_s_grouping_once_loaded(
     assert before.storage_ok is True
     assert (after.storage_status, after.storage_ok) == (30, ok)
     assert on_loop == [False]
+
+
+async def test_a_grouping_loaded_after_the_first_state_emits_a_new_state(fake: FakeStation) -> None:
+    """The same dump after the grouping loads is a new snapshot: 30 is not normal on a T8115."""
+    fake.params.setdefault(STATION_CHANNEL, {})[1135] = "30"
+    station = await _standalone(fake, "T8115P2000054321")
+    events: list[Event] = []
+    station.subscribe(events.append)
+    try:
+        await station.async_load_settings()
+        await station.async_update()
+    finally:
+        await station.async_close()
+    assert [s.storage_ok for s in _snapshots(events)] == [False]
 
 
 async def test_a_model_without_a_grouping_groups_with_the_library_table(
