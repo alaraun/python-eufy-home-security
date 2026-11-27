@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Final, Protocol, runtime_checkable
 
-from ..exceptions import CommunicationError, ProtocolError
+from ..exceptions import CommunicationError, ProtocolError, UnsupportedError
 from . import _ikcp
 
 _LOGGER = logging.getLogger(__name__)
@@ -92,12 +92,15 @@ def encode_link_frame(
     ``msg_type`` is a :class:`DataMsgType`, ``seq`` the channel's sequence counter.
     ``old`` selects the 20-byte older header; the default is the 24-byte one. ``now``
     sets the timestamp (default: the wall clock, in seconds). The bytes the client does
-    not use stay zero; the device accepts that.
+    not use stay zero; the device accepts that. Raises :class:`ValueError` for an older
+    header and a payload over 65,535 bytes.
     """
     stamp = int(time.time()) if now is None else now
     if old:
+        if len(payload) > 0xFFFF:
+            raise ValueError(f"older link header cannot carry {len(payload)} payload bytes")
         head = bytearray(LINK_HEADER_LEN_OLD)
-        struct.pack_into("<HHH", head, 0, LINK_VERSION, LINK_HEADER_LEN_OLD, len(payload) & 0xFFFF)
+        struct.pack_into("<HHH", head, 0, LINK_VERSION, LINK_HEADER_LEN_OLD, len(payload))
         head[6] = _LINK_CONST
         struct.pack_into("<I", head, 8, stamp & 0xFFFFFFFF)
         head[12] = msg_type & 0xFF
@@ -193,6 +196,11 @@ _KCP_WINDOW: Final = 512
 _KCP_MTU: Final = 1200
 #: How often the channel drives KCP's timers, in seconds.
 KCP_TICK: Final = 0.01
+#: The longest message (link header + payload) the channel carries: KCP sends one
+#: message in at most 127 segments of MTU - 24 bytes, 149,352 bytes at MTU 1200.
+MAX_FRAME_LEN: Final = (_ikcp.IKCP_WND_RCV - 1) * (_KCP_MTU - _ikcp.IKCP_OVERHEAD)
+#: The older link header counts the payload in a u16.
+MAX_PAYLOAD_LEN_OLD: Final = 0xFFFF
 
 
 class KcpDataChannel:
@@ -250,8 +258,18 @@ class KcpDataChannel:
 
     async def send_message(self, payload: bytes, *, msg_type: int = DataMsgType.COMMAND) -> None:
         """Send one ``payload`` as a reliable message. Raises
-        :class:`~.exceptions.CommunicationError` on a closed or failed channel."""
+        :class:`~.exceptions.CommunicationError` on a closed or failed channel and
+        :class:`~.exceptions.UnsupportedError` for a payload that does not fit: with its
+        link header at most :data:`MAX_FRAME_LEN`, and at most 65,535 bytes behind the
+        older header (nothing is sent, no sequence number is used)."""
         self._check_open()
+        limit = MAX_FRAME_LEN - (LINK_HEADER_LEN_OLD if self._old else LINK_HEADER_LEN)
+        if self._old:
+            limit = min(limit, MAX_PAYLOAD_LEN_OLD)
+        if len(payload) > limit:
+            raise UnsupportedError(
+                f"RTC data-channel payload of {len(payload)} bytes exceeds {limit}"
+            )
         frame = encode_link_frame(payload, msg_type=msg_type, seq=self._seq, old=self._old)
         self._seq = (self._seq + 1) & 0xFFFFFFFF
         self._kcp.enqueue(frame)

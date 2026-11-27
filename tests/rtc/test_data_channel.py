@@ -13,13 +13,14 @@ import zlib
 
 import pytest
 
-from eufy_home_security.exceptions import CommunicationError, ProtocolError
+from eufy_home_security.exceptions import CommunicationError, ProtocolError, UnsupportedError
 from eufy_home_security.rtc import _ikcp
 from eufy_home_security.rtc.data_channel import (
     KCP_DOWNLOAD_CONV,
     KCP_PREFIX_LEN,
     LINK_HEADER_LEN,
     LINK_HEADER_LEN_OLD,
+    MAX_FRAME_LEN,
     OUTER_HEAD_MAGIC,
     DataMsgType,
     KcpDataChannel,
@@ -346,3 +347,35 @@ async def test_the_old_layout_channel_sends_the_short_header() -> None:
     finally:
         await left.close()
         await right.close()
+
+
+def test_the_message_bound_is_127_kcp_segments() -> None:
+    assert MAX_FRAME_LEN == 127 * (1200 - 24) == 149_352
+
+
+@pytest.mark.parametrize(
+    ("old", "bound"), [(False, MAX_FRAME_LEN - LINK_HEADER_LEN), (True, 0xFFFF)]
+)
+async def test_an_oversize_message_is_refused_before_it_takes_a_seq(old: bool, bound: int) -> None:
+    a2b: asyncio.Queue[bytes] = asyncio.Queue()
+    b2a: asyncio.Queue[bytes] = asyncio.Queue()
+    left = KcpDataChannel(_Pipe(a2b, b2a), old_protocol=old)
+    right = KcpDataChannel(_Pipe(b2a, a2b))
+    try:
+        with pytest.raises(UnsupportedError, match=f"exceeds {bound}"):
+            await left.send_message(bytes(bound + 1))
+        await left.send_message(bytes(bound))  # at the bound
+        await left.send_message(b"next")
+        big = await asyncio.wait_for(right.recv_message(), 5)
+        small = await asyncio.wait_for(right.recv_message(), 5)
+        assert (len(big.payload), big.seq) == (bound, 0)
+        assert (small.payload, small.seq) == (b"next", 1)
+    finally:
+        await left.close()
+        await right.close()
+
+
+def test_the_older_header_refuses_a_payload_its_u16_cannot_count() -> None:
+    assert len(encode_link_frame(bytes(0xFFFF), msg_type=1, seq=0, old=True)) == 20 + 0xFFFF
+    with pytest.raises(ValueError, match="65536"):
+        encode_link_frame(bytes(0x10000), msg_type=1, seq=0, old=True)

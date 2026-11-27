@@ -222,7 +222,10 @@ message starts with a link header:
 | 16 (12) | u8 | message type: 1 command, 2 file data, 3 notification, 4 playback, 0x63 heartbeat |
 | 20 (16) | u32 | sequence number |
 
-The payload is an XZYH frame; a heartbeat is a bare 16-byte frame of type 0x0473. The
+The payload is an XZYH frame; a heartbeat is a bare 16-byte frame of type 0x0473. KCP
+carries a message in at most 127 segments, so a message with its link header is at most
+149,352 bytes at MTU 1200, and a payload behind the older header at most 65,535 bytes;
+the client refuses a longer one before sending. The
 device may put a 20-byte outer head before a message (`u32 0x585a5948 | u32 flags |
 u32 length | u32 CRC32 | u32 offset`); the client sends none. KCP, both header
 directions, the outer head and the heartbeat echo are **[verified]**; a command reply
