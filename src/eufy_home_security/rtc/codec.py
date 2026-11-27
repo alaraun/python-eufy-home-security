@@ -41,6 +41,7 @@ from enum import IntEnum
 from typing import Any, Final
 
 from ..exceptions import ProtocolError
+from ..p2p._json import parse_json
 
 TAG: Final = 3
 VERSION: Final = 7
@@ -494,7 +495,7 @@ def json_text(data: bytes) -> dict[str, Any]:
     attachments). Raises :class:`~.exceptions.ProtocolError` when it is not one."""
     text = data.split(b"\0", 1)[0].decode("utf-8", "replace")
     try:
-        value = json.loads(text)
+        value = parse_json(text)
     except ValueError as exc:
         raise ProtocolError(f"signaling JSON does not parse: {exc}") from exc
     if not isinstance(value, dict):

@@ -8,6 +8,7 @@ import struct
 import pytest
 
 from eufy_home_security.exceptions import ProtocolError
+from eufy_home_security.p2p._json import MAX_JSON_DEPTH
 from eufy_home_security.rtc import codec
 from eufy_home_security.rtc.codec import (
     BodyType,
@@ -209,6 +210,16 @@ def test_json_text_refuses_non_objects() -> None:
         codec.json_text(b"[1]")
     with pytest.raises(ProtocolError):
         codec.json_text(b"{bad")
+
+
+def test_json_text_refuses_nesting_past_the_bound_and_non_finite_numbers() -> None:
+    """A text one level past the depth bound, or with NaN, is a ProtocolError on every interpreter."""
+    deep = b'{"ok": 1, "x": ' + b"[" * MAX_JSON_DEPTH + b"]" * MAX_JSON_DEPTH + b"}\0"
+    with pytest.raises(ProtocolError):
+        codec.json_text(deep)
+    with pytest.raises(ProtocolError):
+        codec.json_text(b'{"x": NaN}\0')
+    assert codec.json_text(b'{"x": ' + b"[" * 62 + b"]" * 62 + b"}\0")["x"]
 
 
 def test_the_stream_decoder_splits_back_to_back_packets() -> None:
