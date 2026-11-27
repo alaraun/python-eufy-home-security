@@ -361,7 +361,11 @@ async def _logged_in_by_region(
     ids=["verify-code", "captcha"],
 )
 async def test_an_unattended_re_login_asks_for_nothing_when_the_check_is_challenged(
-    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession, challenge: int
+    fake_mega: FakeMega,
+    cache: SessionCache,
+    http: aiohttp.ClientSession,
+    challenge: int,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """The one-time country re-login: a challenge on its account check e-mails no code,
     fetches no captcha, records no challenge and keeps the session."""
@@ -377,7 +381,9 @@ async def test_an_unattended_re_login_asks_for_nothing_when_the_check_is_challen
     with aioresponses() as mock:
         fake_mega.install(mock)
         api = _api(http, cache, country="DE", region=None)
-        await api.async_login()
+        with caplog.at_level(logging.INFO, logger="eufy_home_security.cloud.api"):
+            await api.async_login()
+    assert f"account check needs a challenge answer (code {challenge})" in caplog.text
     assert len(_sent(fake_mega, "validate_email")) == 1
     assert fake_mega.login_calls == logins
     assert fake_mega.code_requests == []
