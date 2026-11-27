@@ -23,7 +23,7 @@ import math
 import operator
 import re
 import reprlib
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from importlib.resources.abc import Traversable
@@ -1705,6 +1705,31 @@ class SdStatusSource(StrEnum):
     ignores the status."""
 
 
+class _StatusCodes(Mapping[int, int]):
+    """A read-only status -> group mapping that copies, pickles and hashes (a
+    ``MappingProxyType`` does none of these); equal to any mapping with the same items."""
+
+    __slots__ = ("_items",)
+
+    def __init__(self, codes: Mapping[int, int]) -> None:
+        self._items = dict(codes)
+
+    def __getitem__(self, status: int) -> int:
+        return self._items[status]
+
+    def __iter__(self) -> Iterator[int]:
+        return iter(self._items)
+
+    def __len__(self) -> int:
+        return len(self._items)
+
+    def __hash__(self) -> int:
+        return hash(frozenset(self._items.items()))
+
+    def __repr__(self) -> str:
+        return repr(self._items)
+
+
 @dataclass(frozen=True, slots=True)
 class SdStatusGroups:
     """How a model's handler groups an ``SDINFO_EX`` (``1144``) status **[declared]**
@@ -1721,6 +1746,10 @@ class SdStatusGroups:
     device lists it with a value; None when it groups the answer's status alone."""
     source: SdStatusSource = SdStatusSource.ANSWER
     """What the table is read from."""
+
+    def __post_init__(self) -> None:
+        # A copy the caller cannot change, which also copies and pickles with the state.
+        object.__setattr__(self, "codes", _StatusCodes(self.codes))
 
     def group(self, status: int, params: Mapping[int, str | None] | None = None) -> int:
         """The group of the answer's ``status``, or, where :attr:`param` is set and the
@@ -1897,8 +1926,7 @@ def _sd_status_of(raw: object) -> SdStatusGroups:
         raise ValueError(f"sd_status_groups param {param!r} is no parameter id")
     if param is not None and source is not SdStatusSource.ANSWER:
         raise ValueError(f"sd_status_groups param {param} on a table not read from the answer")
-    by_code = MappingProxyType({int(k): v for k, v in codes.items()})
-    return SdStatusGroups(by_code, default, param, source)
+    return SdStatusGroups({int(k): v for k, v in codes.items()}, default, param, source)
 
 
 def _battery_of(items: object) -> tuple[BatteryRead, ...]:

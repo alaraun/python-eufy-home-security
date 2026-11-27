@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import copy
 import dataclasses
 import functools
 import json
 import logging
 import math
+import pickle
 import threading
 import time
 from collections.abc import AsyncIterator, Callable, Coroutine, Iterator
@@ -1363,6 +1365,16 @@ def test_states_differing_only_in_the_storage_grouping_are_unequal() -> None:
     assert grouped != _storage_state(None)
     assert grouped != _storage_state(SdStatusGroups({0: 0, 30: 0}, 1))
     assert grouped == _storage_state(SdStatusGroups({0: 0}, 1))
+
+
+def test_a_state_with_a_storage_grouping_copies_pickles_and_converts() -> None:
+    groups = model_settings.sd_status_groups("T8115")  # as the loader builds it
+    assert groups is not None
+    state = _storage_state(groups)
+    for copied in (copy.deepcopy(state), pickle.loads(pickle.dumps(state))):  # noqa: S301
+        assert copied == state
+        assert copied.storage_ok is False
+    assert dataclasses.asdict(state)["storage_groups"]["codes"] == dict(groups.codes)
 
 
 def test_coverage_counts_the_power_and_storage_fields_as_parsed_state() -> None:

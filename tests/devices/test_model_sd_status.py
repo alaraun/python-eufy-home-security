@@ -3,7 +3,10 @@
 
 from __future__ import annotations
 
+import copy
+import dataclasses
 import json
+import pickle
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -54,6 +57,24 @@ def test_the_file_names_what_the_table_is_read_from(data_root: Path) -> None:
     _write(data_root, {**GROUPS, "from": "status_property"})
     groups = sd_status_groups("T0001")
     assert groups == SdStatusGroups({0: 0, 4: 2, -5: 3}, 1, None, SdStatusSource.STATUS_PROPERTY)
+
+
+def test_a_loaded_grouping_copies_pickles_and_converts(data_root: Path) -> None:
+    _write(data_root, {**GROUPS, "param": 1135})
+    groups = sd_status_groups("T0001")
+    assert groups is not None
+    for copied in (copy.deepcopy(groups), pickle.loads(pickle.dumps(groups))):  # noqa: S301
+        assert copied == groups
+        assert copied.group(4) == 2
+    assert dataclasses.asdict(groups)["codes"] == {0: 0, 4: 2, -5: 3}
+    assert hash(groups) == hash(SdStatusGroups({-5: 3, 4: 2, 0: 0}, 1, 1135))
+
+
+def test_a_grouping_keeps_its_codes_when_the_caller_s_dict_changes() -> None:
+    codes = {0: 0, 4: 2}
+    groups = SdStatusGroups(codes, 1)
+    codes[4] = 7
+    assert (groups.group(4), dict(groups.codes)) == (2, {0: 0, 4: 2})
 
 
 @pytest.mark.parametrize(("status", "group"), [(0, 0), (4, 2), (-5, 3), (30, 1), (5, 1)])
