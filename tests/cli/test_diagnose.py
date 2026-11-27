@@ -310,6 +310,8 @@ def test_the_summary_gives_the_probe_logins_timeout() -> None:
         (0, 0, None, ", no guard mode frame"),
         (1, 0, 1.25, ", sealed 1 opened / 0 unread, guard mode after 1.25 s"),
         (0, 2, None, ", sealed 0 opened / 2 unread, guard mode unknown"),
+        (1, 2, None, ", sealed 1 opened / 2 unread, guard mode unknown"),
+        (1, 0, None, ", sealed 1 opened / 0 unread, no guard mode frame"),
         (0, 2, 0.5, ", sealed 0 opened / 2 unread, guard mode after 0.5 s"),
     ],
 )

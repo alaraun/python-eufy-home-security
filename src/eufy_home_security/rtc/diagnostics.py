@@ -342,21 +342,16 @@ class RtcStationReport:
 
 
 def _json_ready(value: object) -> Any:
-    """A JSON-ready copy of ``value``: mappings as dicts with text keys, sequences as
-    lists, anything else not JSON as its text (as ``json.dumps(default=str)``)."""
+    """A JSON-ready copy of ``value``: mappings as dicts (their keys are text already:
+    parsed JSON or the run's own), sequences as lists, anything else not JSON as its text
+    (as ``json.dumps(default=str)``)."""
     if isinstance(value, Mapping):
-        return {_json_key(k): _json_ready(v) for k, v in value.items()}
+        return {str(k): _json_ready(v) for k, v in value.items()}
     if isinstance(value, list | tuple):
         return [_json_ready(v) for v in value]
     if value is None or isinstance(value, str | int | float):
         return value
     return str(value)
-
-
-def _json_key(key: object) -> str:
-    if isinstance(key, bool) or key is None:
-        return json.dumps(key)
-    return str(key)
 
 
 def _plain(value: object) -> Any:
