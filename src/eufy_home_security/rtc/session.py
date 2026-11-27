@@ -61,6 +61,9 @@ _LOGGER = logging.getLogger(__name__)
 DATA_CALL_CHANNEL: Final = 0
 #: How long the data channel's ICE may take once the answer is in (the eufy app's wait).
 ICE_TIMEOUT: Final = 20.0
+#: How long the first :meth:`RtcSession.start` waits for a connection, all steps and
+#: retries together; it covers a slow but working connect (a library bound).
+START_TIMEOUT: Final = 150.0
 #: How long the CALL waits for the device's answer.
 ANSWER_TIMEOUT: Final = 60.0
 #: After a loss: wait, close everything, wait, connect again (the eufy app's schedule).
@@ -250,8 +253,12 @@ class RtcSession:
         :data:`ICE_TIMEOUT`, :class:`~.exceptions.UnsupportedError` for a device that picks
         QUIC, :class:`~.exceptions.CommunicationError` when ICE fails, the signaling
         socket fails or :meth:`close` ran meanwhile; a socket error or a hang-up ends the
-        steps at once. A second start while running returns at once. A cancelled start
-        (cancelled again or not) returns only after the connect it cancelled has closed.
+        steps at once, and :class:`~.exceptions.DeviceTimeoutError` when no connection is up
+        within :data:`START_TIMEOUT` (without it, a quick login against a dead server alone
+        waits 7 to 9 minutes). After the first connection, reconnects keep the eufy app's
+        schedule without an end. A second start while running returns at once. A
+        cancelled start (cancelled again or not) returns only after the connect it
+        cancelled has closed.
         """
         if self._ice_factory is None:
             require_aioice()
@@ -266,8 +273,9 @@ class RtcSession:
             run = loop.create_task(self._run_loop(first))
             self._run = run
             try:
-                await asyncio.wait({first, run}, return_when=asyncio.FIRST_COMPLETED)
-            except asyncio.CancelledError:
+                async with asyncio.timeout(START_TIMEOUT):
+                    await asyncio.wait({first, run}, return_when=asyncio.FIRST_COMPLETED)
+            except (asyncio.CancelledError, TimeoutError) as exc:
                 run.cancel()
                 while not run.done():  # a second cancel still waits for the cleanup
                     with contextlib.suppress(asyncio.CancelledError):
@@ -276,6 +284,10 @@ class RtcSession:
                     first.exception()  # read: nobody else will
                 if self._run is run:
                     self._run = None
+                if isinstance(exc, TimeoutError):
+                    raise DeviceTimeoutError(
+                        f"the RTC session did not connect within {START_TIMEOUT:.0f} s"
+                    ) from exc
                 raise
             if first.done():
                 if first.exception() is not None and self._run is run:

@@ -23,6 +23,7 @@ from eufy_home_security.exceptions import (
     UnsupportedError,
 )
 from eufy_home_security.rtc import _ikcp
+from eufy_home_security.rtc import client as client_mod
 from eufy_home_security.rtc import session as session_mod
 from eufy_home_security.rtc.codec import MessageType
 from eufy_home_security.rtc.config import KCP_TYPE_MULTI, KCP_TYPE_SINGLE, QuickLogin, ServerInfo
@@ -37,6 +38,7 @@ from eufy_home_security.rtc.session import (
     reconnect_delay,
     select_transport,
 )
+from eufy_home_security.rtc.signaling import login_retry_delays
 from eufy_home_security.testing.rtc import (
     DEVICE_CANDIDATE,
     DEVICE_INFO,
@@ -175,6 +177,25 @@ def test_the_reconnect_wait_follows_the_app_then_backs_off() -> None:
 def test_the_reconnect_constants_are_the_apps() -> None:
     assert (session_mod.LOSS_DELAY, session_mod.REINIT_DELAY) == (1.0, 0.5)
     assert session_mod.ICE_TIMEOUT == 20.0
+
+
+class _Largest:
+    """An rng whose random choices are the largest allowed."""
+
+    def randint(self, _low: int, high: int) -> int:
+        return high
+
+
+def test_the_first_start_bound_covers_a_slow_but_working_connect() -> None:
+    """DISCOVER, the first LOGIN wait, the CALL's wake re-sends, the answer and ICE."""
+    steps = (
+        client_mod.DISCOVER_ATTEMPTS * client_mod.DISCOVER_TIMEOUT
+        + login_retry_delays(_Largest())[0]  # type: ignore[arg-type]
+        + client_mod.CALL_REPLY_TIMEOUT * client_mod.WAKE_ATTEMPTS
+        + session_mod.ANSWER_TIMEOUT
+        + session_mod.ICE_TIMEOUT
+    )
+    assert steps < session_mod.START_TIMEOUT == 150.0
 
 
 def test_candidates_are_resent_on_the_apps_schedule() -> None:
@@ -504,6 +525,23 @@ async def test_close_during_real_ice_checks_leaves_nothing_running(
         await session.close()
         await server.close()
         asyncio.get_running_loop().set_exception_handler(None)
+
+
+async def test_a_first_start_against_a_dead_server_gives_up_at_its_bound(
+    fake: FakeRtcServer, make_session: Callable[..., RtcSession], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The LOGIN waits alone would take minutes; start gives up at START_TIMEOUT."""
+    monkeypatch.setattr(session_mod, "START_TIMEOUT", 0.3)
+    fake.drop_logins = 99
+    session = make_session()
+    with pytest.raises(DeviceTimeoutError):
+        async with asyncio.timeout(3):
+            await session.start()
+    assert own_tasks(fake) == set()
+    assert not session.connected
+    fake.drop_logins = 0
+    await session.start()  # nothing of the given-up start is left in the way
+    assert session.connected
 
 
 async def test_start_without_the_extra_raises_before_any_socket(
