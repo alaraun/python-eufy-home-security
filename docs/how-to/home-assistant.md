@@ -1853,11 +1853,13 @@ another state than the lock's last status or parameter report, dated no later th
 shown, but the two may have come in either order: until the reading takes its next report
 (another push of the same kind leaves the order unknown too), a lock or unlock command is
 sent even when the reading already is the asked state, and such a push does not confirm a
-command waiting for its state. The lock's own status report is
-always taken; a parameter value is taken when it differs from the lock's last value (the
-last status report's code included), and also when it repeats but dates from after the
-push the state came from. So the next dump after a push replaces it, and `jammed`, which
-only a push reports, lasts until the lock's next report
+command waiting for its state. So on a lock whose clock runs behind and that sends no report
+of its own after a command, the command can end unconfirmed (`DeviceTimeoutError`) though
+the lock moved, as the push that would confirm it is dated before the lock's last report.
+The lock's own status report is always taken; a parameter value is taken when it differs
+from the lock's last value (the last status report's code included), and also when it
+repeats but dates from after the push the state came from. So the next dump after a push
+replaces it, and `jammed`, which only a push reports, lasts until the lock's next report
 ([events.md](../protocol/events.md#lock-pushes-declared-app)). A changed value from the
 device list's copy is taken unless the cloud dates it more than 30 s
 (`LOCK_REPORT_SLACK_SECONDS`) before the reading; a copy without an upload time never

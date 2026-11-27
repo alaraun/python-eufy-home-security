@@ -202,12 +202,15 @@ acknowledgement alone never counts. In order:
 4. **The state**: the asked state from any source (the lock's status report, `0x4A` in the
    1940 through data: a code byte, then `A1` the battery level and `A2` the lock-state code,
    a missing entry read as 0 as the app reads it; a parameter dump or notify; a push)
-   taken after the send returns it, also when it comes
-   before the lock's answer; `jammed` or
-   `intermediate` raises `LockNotMovedError` (`err.state`); a status report with a non-zero
-   code raises `CommandRejectedError`; another state keeps the wait, so a
-   stale dump does not end it. This last rule is the library's: the app ends on the first
-   status report with code 0, whatever state it names.
+   taken after the send returns it, also when it comes before the lock's answer; `jammed`
+   or `intermediate` raises `LockNotMovedError` (`err.state`); a status report with a
+   non-zero code raises `CommandRejectedError`; another state keeps the wait, so a stale
+   dump does not end it. Nor does an unsettled push: one of another state than the lock's
+   last status or parameter report, dated no later than it (on another clock its order
+   against that report is unknown, [events.md](events.md#lock-pushes-declared-app)); the
+   next report taken or a push dated after it does. This rule and the last are the
+   library's: the app ends on the first status report with code 0, whatever state it
+   names.
 
 From the lock's accepting answer until a report ends the wait, the lock reads `locking` or
 `unlocking` (`LockStateSource.COMMAND`). A call that fails after that (a timeout, a lost
