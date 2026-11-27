@@ -11,14 +11,16 @@
 4. **ice**: candidate types on each side, the selected pair, the time to connect;
 5. **data channel**: for ``seconds``, every message the station sends unasked: its link type
    and header length, and for an XZYH frame its type, length, subheader and channel;
-6. with ``probe_kinds``: one CALL of kinds 1, 3 and 4 each, their answer codes only.
+6. with ``probe_kinds``, after the session closed: a fresh login and one CALL of kinds 1,
+   3 and 4 each, their answer codes only.
 
 Nothing is sent on the data channel and no command, setting or mode is touched; on the
 wire go only DISCOVER, LOGIN, the MESSAGE ping and its answers, the CALLs with their ACK,
 INFO (ICE candidates) and HANGUP, ICE checks and KCP acknowledgements. A failed step is
 recorded and the steps that need it are skipped; the run never raises for a station's
-answer and is bounded by :func:`station_budget`. The session closes as soon as its link
-is lost, so a lost link is never connected again.
+answer and is bounded by :func:`station_budget`. The session closes when the watch ends,
+at once when its link is lost and always before the probes (which use a client of their
+own), so the data CALL is placed once per run.
 
 The report is redacted as it is built (:meth:`RtcStationReport.as_dict`): serials by
 :func:`~._logging.redact_serial`, addresses by their class (:func:`ip_class`), identifiers
@@ -570,12 +572,16 @@ class _Run:
     # session callbacks
 
     def on_step(self, step: ConnectStep, call: Call | None) -> None:
+        """Note a connect step; only the first connect counts (a step seen before, or an
+        answer after the first, is ignored)."""
         if step is ConnectStep.ANSWER:
-            self.call = call
-            if call is not None and call.answer is not None:
-                self.secrets["answer"] = dict(call.answer)
+            if self.call is None:
+                self.call = call
+                if call is not None and call.answer is not None:
+                    self.secrets["answer"] = dict(call.answer)
             return
-        self.begin(step.value)
+        if step.value not in self.started:
+            self.begin(step.value)
 
     def on_login(self, record: QuickLogin) -> None:
         self.quick_login = record
@@ -641,6 +647,8 @@ async def async_diagnose_station(
     try:
         async with asyncio.timeout(station_budget(seconds, probe_kinds)):
             await _connect_and_watch(run, seconds, ice_factory, signaling_port, tcp_ports)
+            if run.session is not None:  # closed before the probes: it never reconnects
+                await _close(run.session.close())
             if probe_kinds:
                 await _probe(run, signaling_port, tcp_ports)
     except TimeoutError:

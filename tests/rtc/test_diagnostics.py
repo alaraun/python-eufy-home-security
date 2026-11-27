@@ -28,7 +28,7 @@ from eufy_home_security.rtc.diagnostics import (
     placeholder,
     rtc_stations,
 )
-from eufy_home_security.rtc.session import RtcSession
+from eufy_home_security.rtc.session import ConnectStep, RtcSession
 from eufy_home_security.testing import SYNTHETIC
 from eufy_home_security.testing.rtc import (
     APP_ID,
@@ -467,6 +467,50 @@ async def test_the_whole_run_is_bounded(
     assert loop.time() - began < 2.0
     assert report.call.outcome.status is StepStatus.TIMEOUT
     assert report.ice.outcome.status is StepStatus.SKIPPED
+
+
+def all_outcomes(report: RtcStationReport) -> list[diag.StepOutcome]:
+    login, probes = report.login, report.probes
+    found = [report.inputs.outcome, login.discover, login.login, report.call.outcome]
+    found += [report.ice.outcome, report.data_channel.outcome, probes.login]
+    return found + [p.outcome for p in probes.kinds]
+
+
+async def test_a_loss_during_the_probes_never_reconnects(
+    fake: FakeRtcServer, run: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(diag, "PROBE_TIMEOUT", 2.0)
+    fake.kind_replies = {1: "silent"}
+
+    async def break_during_probe() -> None:
+        while 1 not in fake.call_kinds():
+            await asyncio.sleep(0.01)
+        await fake.break_link()
+        await asyncio.sleep(2.0)  # past the session's reconnect wait
+
+    task = asyncio.create_task(break_during_probe())
+    report = await run(seconds=0.2, probe_kinds=True)
+    await task
+    assert fake.call_kinds() == [CallKind.PRIV1, 1, 3, 4]
+    assert report.login.server_records == 1
+    assert report.data_channel.outcome.status is StepStatus.OK
+    assert all(o.seconds is None or o.seconds >= 0 for o in all_outcomes(report))
+
+
+def test_steps_reported_after_the_first_link_are_ignored() -> None:
+    loop = asyncio.new_event_loop()
+    try:
+        clock = iter([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+        loop.time = lambda: next(clock)  # type: ignore[method-assign]
+        state = diag._Run(rtc_config(), loop, {})
+        state.on_step(ConnectStep.DISCOVER, None)  # 1.0
+        state.on_step(ConnectStep.LOGIN, None)  # 2.0: discover ends
+        state.on_step(ConnectStep.CALL, None)  # 3.0: login ends
+        state.on_step(ConnectStep.LOGIN, None)  # a reconnect's login: ignored
+        assert state.outcome("login") == diag.StepOutcome(StepStatus.OK, 1.0)
+        assert state.current == "call"
+    finally:
+        loop.close()
 
 
 async def test_the_watch_is_capped(
