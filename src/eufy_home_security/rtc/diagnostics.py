@@ -796,8 +796,7 @@ async def _watch(run: _Run, session: RtcSession, seconds: float) -> DataChannelR
     watched = round(run.loop.time() - began, 3)
     if heads:
         run.secrets["frame_heads"] = heads
-    if ended is not None:
-        await _close(session.close())  # before the session's reconnect wait ends
+    if ended is not None:  # the caller closes the session before any further await
         run.fail(ended)
     else:
         run.finish()
