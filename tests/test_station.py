@@ -11,7 +11,7 @@ import math
 import pickle
 import threading
 import time
-from collections.abc import AsyncIterator, Callable, Coroutine, Iterator
+from collections.abc import AsyncIterator, Callable, Coroutine, Iterable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -4230,69 +4230,71 @@ def _twin_station(
     return Station(hub, session, sub_devices=[child])
 
 
+_LIVE_GRADE_CODES = sorted(set(MODELS) | set(LIVE_OPEN) | set(PTZ) | set(ROUTE_PROPERTIES))
+"""Every product with a model entry, a recorded open, pan/tilt actions or a routing rule."""
+
+
+@pytest.mark.parametrize("code", _LIVE_GRADE_CODES)
 async def test_every_live_grade_matches_its_open_and_every_preset_grade_its_capture(
-    monkeypatch: pytest.MonkeyPatch,
+    code: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """For every bundled product in every context: ``live_support`` is ``UNKNOWN`` with
+    """For a bundled product in every context: ``live_support`` is ``UNKNOWN`` with
     reason R exactly where the open raises ``UnsupportedError(R)`` before sending, and
     ``image_sources`` lists ``LIVE`` exactly where it is sent; ``preset_image_support``
     is ``UNKNOWN`` exactly where ``async_preset_image`` raises before the turn. The one
     exception both ways: a model without a recorded open, graded ``UNKNOWN`` and still
-    tried."""
-    codes = sorted(set(MODELS) | set(LIVE_OPEN) | set(PTZ) | set(ROUTE_PROPERTIES))
-    checked = refused = 0
-    for code in codes:
-        for context in _TWIN_CONTEXTS:
-            if context[0] == code:
-                continue
-            station = _twin_station(code, context)
-            serial = station.devices[-1].device_sn
-            opened: list[int] = []
-            turned: list[str] = []
+    tried. Every product is refused in some context (behind a station the app reaches
+    it through over WebRTC)."""
+    refused = 0
+    for context in _TWIN_CONTEXTS:
+        if context[0] == code:
+            continue
+        station = _twin_station(code, context)
+        serial = station.devices[-1].device_sn
+        opened: list[int] = []
+        turned: list[str] = []
 
-            async def open_live(channel: int, **_: Any) -> Any:
-                opened.append(channel)  # noqa: B023
-                raise CommunicationError("stub")
+        async def open_live(channel: int, **_: Any) -> Any:
+            opened.append(channel)  # noqa: B023
+            raise CommunicationError("stub")
 
-            async def recipe(r: Recipe, **_: Any) -> Any:
-                turned.append(r.identifier)  # noqa: B023
-                raise CommunicationError("stub")
+        async def recipe(r: Recipe, **_: Any) -> Any:
+            turned.append(r.identifier)  # noqa: B023
+            raise CommunicationError("stub")
 
-            async def no_read(_channel: int) -> None:
-                return None
+        async def no_read(_channel: int) -> None:
+            return None
 
-            monkeypatch.setattr(station.session, "async_open_live", open_live)
-            monkeypatch.setattr(station.session, "async_run_recipe", recipe)
-            monkeypatch.setattr(station, "_read_lens_params", no_read)
-            live = station.live_support(serial)
-            # A model without a recorded open the app does not route over WebRTC: graded
-            # UNKNOWN and still tried.
-            try_anyway = (
-                live.support is Support.UNKNOWN
-                and not station.app_uses_webrtc(serial)
-                and not has_live_open(code)
-            )
-            tried = live.support is not Support.UNKNOWN or try_anyway
-            where = f"{code} {context}"
-            refusal = await _refusal(station.async_open_live(serial))
-            if refusal is not None:
-                refused += 1
-            assert (refusal is None) is tried, where
-            assert refusal is None or refusal == live.source, where
-            assert (opened != []) is tried, where
-            assert (ImageSource.LIVE in station.image_sources(serial)) is tried, where
-            grade = station.preset_image_support(serial)
-            refusal = await _refusal(station.async_preset_image(serial, 1, settle=0))
-            if refusal is not None:
-                assert turned == [], where
-                assert grade.support is Support.UNKNOWN, where
-                assert refusal.endswith(grade.source), where
-            else:
-                assert turned, where
-                assert grade.support is not Support.UNKNOWN or (try_anyway and grade == live), where
-            checked += 1
-    assert checked > 1000
-    assert refused > 100
+        monkeypatch.setattr(station.session, "async_open_live", open_live)
+        monkeypatch.setattr(station.session, "async_run_recipe", recipe)
+        monkeypatch.setattr(station, "_read_lens_params", no_read)
+        live = station.live_support(serial)
+        # A model without a recorded open the app does not route over WebRTC: graded
+        # UNKNOWN and still tried.
+        try_anyway = (
+            live.support is Support.UNKNOWN
+            and not station.app_uses_webrtc(serial)
+            and not has_live_open(code)
+        )
+        tried = live.support is not Support.UNKNOWN or try_anyway
+        where = f"{code} {context}"
+        refusal = await _refusal(station.async_open_live(serial))
+        if refusal is not None:
+            refused += 1
+        assert (refusal is None) is tried, where
+        assert refusal is None or refusal == live.source, where
+        assert (opened != []) is tried, where
+        assert (ImageSource.LIVE in station.image_sources(serial)) is tried, where
+        grade = station.preset_image_support(serial)
+        refusal = await _refusal(station.async_preset_image(serial, 1, settle=0))
+        if refusal is not None:
+            assert turned == [], where
+            assert grade.support is Support.UNKNOWN, where
+            assert refusal.endswith(grade.source), where
+        else:
+            assert turned, where
+            assert grade.support is not Support.UNKNOWN or (try_anyway and grade == live), where
+    assert refused > 0
 
 
 async def _refusal(call: Coroutine[Any, Any, object]) -> str | None:
@@ -4358,42 +4360,43 @@ _PTZ_CALLS: tuple[
 """Each pan/tilt, preset and zoom call with the grade that gates it."""
 
 
-async def test_every_pan_tilt_grade_matches_its_calls(monkeypatch: pytest.MonkeyPatch) -> None:
-    """For every product with recorded pan/tilt actions, in every context and on both
-    sides of the T8170's serial condition: each call raises ``UnsupportedError`` ending
-    in its grade's reason, with nothing sent, exactly where that grade is ``UNKNOWN``."""
-    checked = refused = 0
-    for code in sorted(PTZ):
-        for context in _TWIN_CONTEXTS:
-            if context[0] == code:
-                continue
-            for seventh in ("1", "2"):
-                station = _twin_station(code, context, seventh=seventh)
-                serial = station.devices[-1].device_sn
-                sent: list[str] = []
+@pytest.mark.parametrize("code", sorted(PTZ))
+async def test_every_pan_tilt_grade_matches_its_calls(
+    code: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """For a product with recorded pan/tilt actions, in every context and on both sides
+    of the T8170's serial condition: each call raises ``UnsupportedError`` ending in its
+    grade's reason, with nothing sent, exactly where that grade is ``UNKNOWN``. Every
+    such product is refused in some context."""
+    refused = 0
+    for context in _TWIN_CONTEXTS:
+        if context[0] == code:
+            continue
+        for seventh in ("1", "2"):
+            station = _twin_station(code, context, seventh=seventh)
+            serial = station.devices[-1].device_sn
+            sent: list[str] = []
 
-                async def recipe(r: Recipe, **_: Any) -> Any:
-                    sent.append(r.identifier)  # noqa: B023
-                    raise CommunicationError("stub")
+            async def recipe(r: Recipe, **_: Any) -> Any:
+                sent.append(r.identifier)  # noqa: B023
+                raise CommunicationError("stub")
 
-                async def open_live(channel: int, **_: Any) -> Any:
-                    sent.append("live open")  # noqa: B023
-                    raise CommunicationError("stub")
+            async def open_live(channel: int, **_: Any) -> Any:
+                sent.append("live open")  # noqa: B023
+                raise CommunicationError("stub")
 
-                monkeypatch.setattr(station.session, "async_run_recipe", recipe)
-                monkeypatch.setattr(station.session, "async_open_live", open_live)
-                for call, grade_of in _PTZ_CALLS:
-                    grade = grade_of(station, serial)
-                    sent.clear()
-                    refusal = await _refusal(call(station, serial))
-                    where = f"{code} {context} {serial} {grade}"
-                    assert (refusal is not None) is (grade.support is Support.UNKNOWN), where
-                    assert (sent == []) is (refusal is not None), where
-                    assert refusal is None or refusal.endswith(grade.source), where
-                    refused += refusal is not None
-                    checked += 1
-    assert checked > 5000
-    assert refused > 1000
+            monkeypatch.setattr(station.session, "async_run_recipe", recipe)
+            monkeypatch.setattr(station.session, "async_open_live", open_live)
+            for call, grade_of in _PTZ_CALLS:
+                grade = grade_of(station, serial)
+                sent.clear()
+                refusal = await _refusal(call(station, serial))
+                where = f"{code} {context} {serial} {grade}"
+                assert (refusal is not None) is (grade.support is Support.UNKNOWN), where
+                assert (sent == []) is (refusal is not None), where
+                assert refusal is None or refusal.endswith(grade.source), where
+                refused += refusal is not None
+    assert refused > 0
 
 
 def test_a_routed_camera_declaring_one_preset_action_keeps_the_missing_ones_reason() -> None:
@@ -4973,24 +4976,43 @@ def _action_refuses(station: Station, serial: str, action: PtzAction) -> bool:
     return False
 
 
-def test_every_ptz_grade_is_unknown_exactly_where_its_method_refuses() -> None:
-    """Every product of the generated data, standalone and behind every parent kind:
+_PTZ_GRADE_CODES = sorted({*bundled_codes(), *PTZ})
+"""Every product with a bundled settings file or recorded pan/tilt actions."""
+
+
+@pytest.mark.parametrize("code", _PTZ_GRADE_CODES)
+def test_every_ptz_grade_is_unknown_exactly_where_its_method_refuses(code: str) -> None:
+    """A product of the generated data, standalone and behind every parent kind:
     ``ptz_action_support`` is ``UNKNOWN`` exactly where the action's gate refuses, and
     ``ptz_support`` exactly where the capability's gate or one of its actions' forms does."""
+    for parent in (None, *PARENT_CONNECT_TYPES):
+        station, serial = _placed(code, parent)
+        for capability in PTZ_ACTIONS:
+            support = station.ptz_support(serial, capability).support
+            refused = _ptz_refuses(station, serial, capability)
+            assert (support is Support.UNKNOWN) is refused, (code, parent, capability)
+        for action in PtzAction:
+            support = station.ptz_action_support(serial, action).support
+            refused = _action_refuses(station, serial, action)
+            assert (support is Support.UNKNOWN) is refused, (code, parent, action)
+
+
+def test_the_grade_sweeps_span_every_product_and_every_grade() -> None:
+    """The per-product sweeps cover more than a thousand placements each, and the products
+    with recorded pan/tilt actions, a part of the pan/tilt grade sweep, meet every grade."""
+
+    def placements(codes: Iterable[str]) -> int:
+        return sum(1 for code in codes for context in _TWIN_CONTEXTS if context[0] != code)
+
+    assert placements(_LIVE_GRADE_CODES) > 1000
+    assert placements(PTZ) * 2 * len(_PTZ_CALLS) > 5000
+    assert len(_PTZ_GRADE_CODES) * (1 + len(PARENT_CONNECT_TYPES)) > 1000
     grades: set[Support] = set()
-    for code in sorted({*bundled_codes(), *PTZ}):
+    for code in sorted(PTZ):
         for parent in (None, *PARENT_CONNECT_TYPES):
             station, serial = _placed(code, parent)
-            for capability in PTZ_ACTIONS:
-                support = station.ptz_support(serial, capability).support
-                refused = _ptz_refuses(station, serial, capability)
-                assert (support is Support.UNKNOWN) is refused, (code, parent, capability)
-                grades.add(support)
-            for action in PtzAction:
-                support = station.ptz_action_support(serial, action).support
-                refused = _action_refuses(station, serial, action)
-                assert (support is Support.UNKNOWN) is refused, (code, parent, action)
-                grades.add(support)
+            grades.update(station.ptz_support(serial, c).support for c in PTZ_ACTIONS)
+            grades.update(station.ptz_action_support(serial, a).support for a in PtzAction)
     assert grades == set(Support)
 
 
