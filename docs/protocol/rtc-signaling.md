@@ -10,7 +10,7 @@ channel's framing over KCP, RTP depacketizing, and the asyncio signaling client 
 session that bring a station's data channel up ([Client](#client), [Session](#session)).
 **No station uses them yet**, so these modules are internal and carry no public API;
 devices the app reaches only over WebRTC stay skipped (`webrtc_only`). ICE needs the
-optional `rtc` extra (`aioice`); everything else runs without it.
+optional `rtc` extra (`aioice` 0.15); everything else runs without it.
 
 Tags as in [README.md](README.md#verification-markers): **[verified]** for what ran
 against eufy's signaling server and a HomeBase 3 (T8030, fw 3.8.7.4), **[app]** for what
@@ -207,32 +207,34 @@ client has run only against the library's loopback fake (`eufy_home_security.tes
    TURN relay, at most 16 remote candidates), the candidates exchanged as above; the
    client's own are sent again after 0.3, 0.4, ... s (100 ms steps, 200 ms from the
    sixth) until the device acknowledges each. ICE must connect within 20 s, the eufy
-   app's wait;
+   app's wait. The device does not signal the end of its candidates, and aioice fails
+   ICE only after it, so a failed ICE ends at those 20 s as `DeviceTimeoutError`;
 5. the KCP data channel over the ICE connection, framed as the answer's byte 2 says (bit
    0: the 32-byte prefix).
 
 `start` returns once the data channel is up and otherwise raises the attempt's error
 with nothing left running: `MissingDependencyError` without the `rtc` extra (before any
 socket), the client's errors above, `DeviceTimeoutError` when ICE does not connect in
-time, `CommunicationError` when it fails. A signaling socket error or a hang-up of the
-data call during these steps ends them at once with that error (a socket error as
-`CommunicationError`). The first `start` gives up with `DeviceTimeoutError` when no
-connection is up within 180 s, all steps and retries together (the library's bound: it
-covers DISCOVER, a refused quick login and the key exchange, gathering, the CALL's wake
-re-sends and TCP connect, the 60 s answer wait and ICE, with a margin; without it a
-quick login against a dead server alone waits 7 to 9 minutes through the LOGIN retries).
-The cleanup after the bound runs outside it: closing a TURN allocation on an unreachable
-TURN server can take 30 s and more. The eufy app has no such bound on its first connect.
-After that the session reconnects by itself when the signaling socket fails, the device
-hangs up the call or the data channel stops: it waits 1 s, closes everything, waits 0.5
-s and connects again, as the eufy app does. A failed reconnect waits 1.5 s for its first
-three failures, then twice the previous wait, at most 64 s (the library's back-off);
-reconnects after a working connection go on until `close`, with no overall bound.
-`close` hangs up and closes every socket and task, the ICE connectivity checks of a
-connect still running included. One leftover is aioice's: with a TURN server in the
-call, a cancel while candidates are gathered, or a TURN allocation slower than aioice's
-5 s gathering bound (an unreachable TURN server, for one), leaves its TURN socket to the
-garbage collector. No command is sent over the channel yet.
+time, `CommunicationError` when it fails (aioice reports a failure only for an ICE
+without candidates). A signaling socket error or a hang-up of the data call during these
+steps ends them at once with that error (a socket error as `CommunicationError`). The
+first `start` gives up with `DeviceTimeoutError` when no connection is up within 180 s,
+all steps and retries together (the library's bound: it covers DISCOVER, a refused quick
+login and the key exchange, gathering, the CALL's wake re-sends and TCP connect, the 60
+s answer wait and ICE, with a margin; without it a quick login against a dead server
+alone waits 7 to 9 minutes through the LOGIN retries). The cleanup after the bound runs
+outside it: closing a TURN allocation on an unreachable TURN server can take 30 s and
+more. The eufy app has no such bound on its first connect. After that the session
+reconnects by itself when the signaling socket fails, the device hangs up the call or
+the data channel stops: it waits 1 s, closes everything, waits 0.5 s and connects again,
+as the eufy app does. A failed reconnect waits 1.5 s for its first three failures, then
+twice the previous wait, at most 64 s (the library's back-off); reconnects after a
+working connection go on until `close`, with no overall bound. `close` hangs up and
+closes every socket and task, the ICE connectivity checks of a connect still running
+included. One leftover is aioice's: with a TURN server in the call, a cancel or close
+while candidates are gathered leaves aioice's TURN allocation running until its request
+times out, or its socket open when the server answers after it. No command is sent over
+the channel yet.
 
 ## Media plane
 
