@@ -101,8 +101,8 @@ identity minted in one realm is refused by the other's cipher gateway **[verifie
 **Account check [declared (eufy app); not verified on an account that needs it].** Every
 login, the answer to an e-mailed code included, is preceded by `POST
 app-passport-{region}-pr.eufy.com/passport/validate_email`, body `{"email": "<e-mail>"}`,
-sent under the identity the login then uses (inside a pending login: its identity and
-pending token). An answer `data.enc_text` of exactly `"sha2"` means the login wraps the
+encrypted under the identity the login then uses (inside a pending login: its identity
+and pending token). An answer `data.enc_text` of exactly `"sha2"` means the login wraps the
 lower-case hex SHA-256 of the password's UTF-8 bytes, after the characters up to U+0020 at
 either end are removed, instead of the password; any other answer (no `enc_text`, another
 value) wraps the password as given. The check carries no password, so it cannot count

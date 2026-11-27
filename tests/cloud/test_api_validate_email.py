@@ -87,6 +87,7 @@ async def test_the_account_check_decides_what_the_login_wraps(
     assert _sent(fake_mega, "validate_email") == [{"email": SYNTHETIC.email}]
     check, login = fake_mega.headers["validate_email"][0], fake_mega.headers["login"][0]
     assert check["x-key-ident"] == login["x-key-ident"]  # under the login's own identity
+    assert check["x-encryption-info"] == "algo_ecdh"  # an encrypted body, as the app sends
     assert "x-auth-token" not in check
     assert cache.cloud_session("eu")["auth_token"]
     assert cache.password == SYNTHETIC.password
@@ -340,6 +341,75 @@ async def test_a_lapsed_key_on_an_extra_country_check_is_no_refusal(
     assert exc.value.code == rekey
     assert api.refused_regions() == []
     assert fake_mega.login_calls == 1
+
+
+async def _logged_in_by_region(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    """Sessions in both regions made with the region as ``ab`` (no country known)."""
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        await _api(http, cache, region=None).async_login()
+    assert cache.cloud_session("eu")["ab"] == "eu"
+    fake_mega.calls.clear()
+    fake_mega.region_calls.clear()
+
+
+@pytest.mark.parametrize(
+    "challenge",
+    [int(const.CloudCode.NEED_VERIFY_CODE), int(const.CloudCode.LOGIN_NEED_CAPTCHA)],
+    ids=["verify-code", "captcha"],
+)
+async def test_an_unattended_re_login_asks_for_nothing_when_the_check_is_challenged(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession, challenge: int
+) -> None:
+    """The one-time country re-login: a challenge on its account check e-mails no code,
+    fetches no captcha, records no challenge and keeps the session."""
+    await _logged_in_by_region(fake_mega, cache, http)
+    token = cache.cloud_session("eu")["auth_token"]
+    logins = fake_mega.login_calls
+    fake_mega.country_regions = {"DE": "eu"}
+    # A pending token in the answer: an interactive login would ask for the code with it.
+    pending = {"auth_token": FAKE_PENDING_TOKEN, "user_id": SYNTHETIC.account_id}
+    fake_mega.error_bodies["validate_email"] = [
+        (200, {"code": challenge, "msg": "x", "login_id": "lid-9", "data": pending})
+    ]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        api = _api(http, cache, country="DE", region=None)
+        await api.async_login()
+    assert len(_sent(fake_mega, "validate_email")) == 1
+    assert fake_mega.login_calls == logins
+    assert fake_mega.code_requests == []
+    assert [name for name, _ in fake_mega.region_calls if name == "captcha"] == []
+    assert api._challenge_region is None
+    assert not cache.section("cloud").get("challenges")
+    assert cache.cloud_session("eu")["auth_token"] == token
+    assert cache.cloud_session("eu")["ab_wanted"] == "DE"  # not asked again for DE
+
+
+async def test_an_unattended_re_login_of_an_extra_country_records_no_refusal(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    """A plain body code on the re-login's check keeps the extra scope's session and does
+    not skip the scope until a rescan."""
+    fake_mega.country_regions = {"DE": "eu", "FR": "eu"}
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        await _api(http, cache, country=("DE", "FR"), region=None).async_login()
+        session = cache.cloud_session("eu:FR")
+        session["ab"] = session["ab_wanted"] = "XX"  # made with another ab
+        token = session["auth_token"]
+        fake_mega.calls.clear()
+        logins = fake_mega.login_calls
+        fake_mega.error_bodies["validate_email"] = [(200, {"code": 26501, "msg": "x"})]
+        api = _api(http, cache, country=("DE", "FR"), region=None)
+        await api.async_login()
+    assert len(_sent(fake_mega, "validate_email")) == 1
+    assert fake_mega.login_calls == logins
+    assert api.refused_regions() == []
+    assert cache.cloud_session("eu:FR")["auth_token"] == token
+    assert cache.cloud_session("eu:FR")["ab_wanted"] == "FR"
 
 
 async def test_a_country_fallback_login_reuses_the_check(
