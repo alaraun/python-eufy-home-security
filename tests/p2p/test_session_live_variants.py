@@ -739,7 +739,7 @@ async def test_a_recording_refused_before_its_open_fetches_no_cloud_key(
         assert (history_query_verb(serial) == DB_QUERY_HISTORY) is (refusal == "dat")
         session = StationSession(
             serial,
-            session._credentials,
+            session._p2p._credentials,
             host="127.0.0.1",
             port=e2e_hb2.discovery_port,
             e2e_keys=keys,

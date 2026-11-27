@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 import eufy_home_security.p2p.session as session_module
+import eufy_home_security.p2p.session.link as link_module
 from eufy_home_security.exceptions import (
     CommunicationError,
     SessionReplacedError,
@@ -445,7 +446,7 @@ def test_which_peer_address_is_kept_as_the_station_host(
 ) -> None:
     """Only a LAN address, or one discovery already searches by unicast, is searched
     next: a station punching from a public address is not looked for there."""
-    assert session_module._learns_host(peer, searched) is learned
+    assert link_module._learns_host(peer, searched) is learned
 
 
 @pytest.mark.parametrize(
@@ -468,7 +469,7 @@ async def test_the_link_address_is_searched_next_only_when_it_may_be(
     attempts = Attempts(monkeypatch)
     attempts.reach = "127.0.0.1"
     session = _session(station, None, extra_hosts=extra)
-    session._host = session._search_host = searched
+    session._p2p._host = session._p2p._search_host = searched
     try:
         await session.async_connect()
     finally:
@@ -484,8 +485,8 @@ async def test_a_link_from_the_configured_host_is_searched_again_after_the_host_
     attempts = Attempts(monkeypatch)
     attempts.redirect = {"192.0.2.99": "127.0.0.1"}
     session = _session(station, None)
-    session._search_host = "127.0.0.1"
-    session._host = "192.0.2.99"
+    session._p2p._search_host = "127.0.0.1"
+    session._p2p._host = "192.0.2.99"
     try:
         await session.async_connect()
     finally:
