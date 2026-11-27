@@ -12,10 +12,12 @@ import eufy_home_security
 from eufy_home_security import exceptions as exceptions_module
 from eufy_home_security.exceptions import (
     AccountRejectedError,
+    CallRefusedError,
     CipherUnavailableError,
     CloudApiError,
     CommandNotAppliedError,
     CommandRejectedError,
+    CommunicationError,
     DeviceBusyError,
     DeviceTimeoutError,
     EmptyResponseError,
@@ -24,6 +26,7 @@ from eufy_home_security.exceptions import (
     RateLimitedError,
     RecordNotFoundError,
     RefreshCooldownError,
+    SignalingError,
     UnsupportedError,
 )
 from eufy_home_security.testing import SYNTHETIC
@@ -127,3 +130,13 @@ def _unnamed_sites() -> list[str]:
 
 def test_every_error_naming_a_device_carries_its_serial() -> None:
     assert _unnamed_sites() == []
+
+
+def test_a_signaling_refusal_is_a_communication_error_with_its_code() -> None:
+    err = CallRefusedError("busy", code=486, device_sn=SN)
+    assert isinstance(err, SignalingError)
+    assert isinstance(err, CommunicationError)
+    assert (err.code, err.device_sn) == (486, SN)
+    assert SignalingError("gone").code is None
+    assert eufy_home_security.CallRefusedError is CallRefusedError
+    assert eufy_home_security.SignalingError is SignalingError
