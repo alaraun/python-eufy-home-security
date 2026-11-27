@@ -130,8 +130,9 @@ sequence ([Client](#client)).
    **200** with its own `sdp_info`, the relay again, `srflx` and `port`, sometimes
    several times in a row **[verified]**; the client acknowledges each with **ACK** (the
    call body without attachment). 480 and 486 refuse the call (`call_event`). The answer
-   to a kind-5 call may carry `transport_caps` (an integer) or the same in a binary
-   `pbsdp` field **[app]** (see [Session](#session)).
+   to a kind-5 call may carry `transport_caps` (an integer) or `pbsdp`, base64 of a
+   protobuf message whose field 3, sub-field 16 (a varint) holds the same value
+   **[app]** (see [Session](#session)).
 5. **INFO** carries ICE candidates both ways, with `request_id` first when the device's
    200 carried one (`info_payload`). On a kind-5 call the device trickles
    `{"file_candidate": "a=candidate:…", "file_candidate_num": n}` and sends each again
@@ -196,7 +197,10 @@ client has run only against the library's loopback fake (`eufy_home_security.tes
    kcp_type is 2 and never bit 1. The eufy app also sets bit 1 when it offers QUIC; this
    client runs KCP only;
 3. the device's answer: its `sdp_info` (ICE username and password, content key, byte 2)
-   and `transport_caps`. The data channel runs QUIC when bit 1 is set in both the
+   and `transport_caps`, read as the eufy app reads it: from `pbsdp` when the answer
+   carries a non-empty one (0 when it does not decode or lacks field 3.16), and from the
+   JSON `transport_caps` key only when it does not (`rtc/sdp.py` `read_pbsdp`, a bounded
+   reader). The data channel runs QUIC when bit 1 is set in both the
    client's byte 2 and `transport_caps`, else KCP; with this client's byte it is always
    KCP (a device that picked QUIC would raise `UnsupportedError`);
 4. ICE as the controlled side over `aioice` (`rtc/ice.py`: UDP and IPv4 only, the call's
@@ -321,7 +325,8 @@ QUIC, chosen per call as [Session](#session) says **[app]**; only KCP is impleme
 
 - media from a device the station serves over WebRTC (ICE, SDES-SRTP, the in-frame
   encryption) and a successful live open;
-- the QUIC data channel, and the layout of the binary `pbsdp` answer field;
+- the QUIC data channel, and the fields of the `pbsdp` answer other than
+  `transport_caps`;
 - a command reply on the data channel;
 - the source of the command media key (the answer's `sdp_info` content key is inferred);
 - this client and session against hardware (only a probe client has run the sequence);
