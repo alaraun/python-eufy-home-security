@@ -2,12 +2,15 @@
 
 Commands the client sends the station (in an RTCP APP packet or over the data
 channel) and the notifications and replies the station sends back are AES-128-GCM
-with the AAD ``b"eufy security"`` under the call's media key: the first 16 bytes of
-the content key of the device's answer ``sdp_info``. A command is an XZYH frame whose
-body is replaced by ``tag | iv | counter | ciphertext``; a reply carries the same
-wrapper after its frame header, a notification ``tag | iv | ciphertext``.
+with the AAD ``b"eufy security"`` under the call's media key, the station's
+``crypto_key``. A command is an XZYH frame whose body is replaced by
+``tag | iv | counter | ciphertext``; a reply carries the same wrapper after its frame
+header, a notification ``tag | iv | ciphertext``.
 
-Declared (eufy app); not verified on hardware. See
+Declared (eufy app); not verified on hardware. Where the key comes from is inferred,
+not established: a HomeBase 3's CALL 200 carries no ``crypto_key``, only its
+``sdp_info``, so the first 16 bytes of that answer's content key are the likely key
+(:func:`media_key`). See
 ``docs/protocol/rtc-signaling.md`` § Command encryption.
 """
 
@@ -24,7 +27,7 @@ from ..exceptions import ProtocolError
 from ..p2p.crypto import GCM_AAD
 from ..p2p.xzyh import HEADER_LEN as FRAME_HEADER_LEN
 
-#: The media key is an AES-128 key: the first 16 bytes of the content key.
+#: The media key is an AES-128 key: the first 16 bytes of the key text.
 MEDIA_KEY_LEN: Final = 16
 _GCM_IV_LEN: Final = 12
 _GCM_TAG_LEN: Final = 16
@@ -41,8 +44,9 @@ def is_sealed(frame: bytes) -> bool:
 
 
 def media_key(content_key: str | bytes) -> bytes:
-    """The 16-byte media key of a content key. Raises
-    :class:`~.exceptions.ProtocolError` for a shorter one."""
+    """The 16-byte media key of a ``crypto_key`` or content key (the source is inferred;
+    see the module docstring). Raises :class:`~.exceptions.ProtocolError` for a shorter
+    one."""
     raw = content_key.encode() if isinstance(content_key, str) else bytes(content_key)
     if len(raw) < MEDIA_KEY_LEN:
         raise ProtocolError("RTC media key is shorter than 16 bytes")

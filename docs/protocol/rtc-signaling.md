@@ -171,8 +171,10 @@ are not part of the library yet.
 ## Command encryption
 
 `rtc/command.py` **[app]**. Commands and the station's replies and notifications are
-AES-128-GCM with the AAD `eufy security` under the call's media key, the first 16 bytes
-of the content key of the device's `sdp_info`. A command is the XZYH frame with header
+AES-128-GCM with the AAD `eufy security` under the call's media key, the station's
+`crypto_key`. Where that key comes from is **[open]**: a HomeBase 3's CALL 200 carries no
+`crypto_key`, only its `sdp_info`, so the first 16 bytes of that answer's content key
+are the inferred key (`media_key`). A command is the XZYH frame with header
 byte 0x0a set to 10, byte 0x0d to 1 and the length to the new body, the body replaced
 by `tag[16] | iv[12] | u32 counter | ciphertext`; the counter counts the call's commands
 and is not authenticated. A reply carries the same wrapper after its frame header, a
@@ -234,4 +236,5 @@ answer field picks QUIC is **[open]**.
   encryption) and a successful live open;
 - the QUIC data channel and the answer field that selects it;
 - a command reply on the data channel;
+- the source of the command media key (the answer's `sdp_info` content key is inferred);
 - the client that runs the sequence, and a station transport that uses it.
