@@ -888,13 +888,22 @@ async def cmd_diagnose(ctx: Context) -> int:
         "stations": stations,
     }
     await asyncio.to_thread(_write_json, out, document, private=False)
-    if ctx.args.secrets:
-        secret = out.with_name(f"{out.stem}.secrets.json")
-        raw = {"stations": [r.secrets_dict() for r in reports]}
-        await asyncio.to_thread(_write_json, secret, raw, private=True)
-        print(_SECRETS_WARNING.format(path=secret), file=sys.stderr)
     print(render.render_rtc_diagnose(stations))
     print(f"\nReport written to {out}; attach it to your GitHub issue.")
+    if not ctx.args.secrets:
+        return 0
+    secret = out.with_name(f"{out.stem}.secrets.json")
+    raw = {"stations": [r.secrets_dict() for r in reports]}
+    try:
+        await asyncio.to_thread(_write_json, secret, raw, private=True)
+    except OSError as exc:  # a symbolic link there (refused) or no write access
+        print(
+            f"{PROG}: error: secrets file {secret} not written: {exc.strerror or exc} "
+            "(the report above is complete)",
+            file=sys.stderr,
+        )
+        return EXIT_ERROR
+    print(_SECRETS_WARNING.format(path=secret), file=sys.stderr)
     return 0
 
 

@@ -17,7 +17,7 @@ from typing import Any
 import pytest
 
 from eufy_home_security.cli import app, commands
-from eufy_home_security.cli.config import EXIT_USAGE, parse_args
+from eufy_home_security.cli.config import EXIT_ERROR, EXIT_USAGE, parse_args
 from eufy_home_security.cli.render import render_rtc_diagnose
 from eufy_home_security.exceptions import MissingDependencyError
 from eufy_home_security.p2p.xzyh import encode_frame
@@ -156,6 +156,28 @@ async def test_secrets_go_to_a_separate_private_file_with_a_warning(
     assert raw["stations"][0]["p2p_did"] == SYNTHETIC.did
     assert SYNTHETIC.did not in out.read_text()
     assert "WARNING" in capsys.readouterr().err
+
+
+async def test_a_refused_secrets_file_comes_after_the_report_and_summary(
+    station: FakeRtcServer,
+    cloud: FakeCloud,
+    no_push: None,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    out = tmp_path / "report.json"
+    target = tmp_path / "elsewhere.json"
+    secret = tmp_path / "report.secrets.json"
+    secret.symlink_to(target)
+    code = await run("diagnose", "rtc", "--seconds", "0.2", "--secrets", "--out", str(out))
+    assert code == EXIT_ERROR
+    assert json.loads(out.read_text())["stations"][0]["station"] == "T8N00***2345"
+    assert not target.exists()
+    printed = capsys.readouterr()
+    assert "Report written to" in printed.out
+    assert "1 inputs" in printed.out
+    assert f"secrets file {secret} not written" in printed.err
+    assert "WARNING" not in printed.err
 
 
 async def test_a_named_station_runs_whatever_its_route(
