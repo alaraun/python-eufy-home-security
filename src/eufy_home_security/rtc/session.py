@@ -246,7 +246,8 @@ class RtcSession:
         :class:`~.exceptions.DeviceTimeoutError` for an unanswered step or ICE not up in
         :data:`ICE_TIMEOUT`, :class:`~.exceptions.UnsupportedError` for a device that picks
         QUIC, :class:`~.exceptions.CommunicationError` when ICE fails or :meth:`close`
-        ran meanwhile. A second start while running returns at once.
+        ran meanwhile. A second start while running returns at once. A cancelled start
+        (cancelled again or not) returns only after the connect it cancelled has closed.
         """
         if self._ice_factory is None:
             require_aioice()
@@ -264,7 +265,9 @@ class RtcSession:
                 await asyncio.wait({first, run}, return_when=asyncio.FIRST_COMPLETED)
             except asyncio.CancelledError:
                 run.cancel()
-                await asyncio.wait({run})
+                while not run.done():  # a second cancel still waits for the cleanup
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await asyncio.wait({run})
                 if first.done() and not first.cancelled():
                     first.exception()  # read: nobody else will
                 if self._run is run:

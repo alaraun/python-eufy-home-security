@@ -761,6 +761,27 @@ async def test_a_second_cancel_during_cleanup_still_closes_everything(
     assert own_tasks(fake) == set()
 
 
+async def test_a_start_cancelled_twice_cleans_up_and_starts_again(
+    fake: FakeRtcServer, make_session: Callable[..., RtcSession]
+) -> None:
+    """The second cancel lands while start waits for the cancelled connect to close."""
+    fake.ice_connects = False
+    session = make_session()
+    start = asyncio.create_task(session.start())
+    await until(lambda: fake.client_candidates)
+    start.cancel()
+    await asyncio.sleep(0)
+    start.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await start
+    assert own_tasks(fake) == set()
+    assert session._run is None
+    fake.ice_connects = True
+    async with asyncio.timeout(3):
+        await session.start()
+    assert session.connected
+
+
 async def test_close_during_a_reconnect_wait_stops_it(
     fake: FakeRtcServer, make_session: Callable[..., RtcSession], monkeypatch: pytest.MonkeyPatch
 ) -> None:
