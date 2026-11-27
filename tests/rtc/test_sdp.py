@@ -102,3 +102,10 @@ def test_the_field_cap_is_inclusive() -> None:
 @pytest.mark.parametrize("value", [None, "", 3, ["x"]])
 def test_an_absent_or_empty_pbsdp_is_none(value: object) -> None:
     assert read_pbsdp(value) is None
+
+
+def test_a_repeated_field_3_reads_the_last_caps_and_lists_the_last_fields() -> None:
+    unit = nested(3, uint(16, 1) + uint(6, 0)) + nested(3, uint(15, 2)) + nested(3, uint(16, 2))
+    reading = read_pbsdp(text(unit))
+    assert reading is not None
+    assert (reading.transport_caps, reading.fields, reading.sdp_fields) == (2, (3,), (16,))

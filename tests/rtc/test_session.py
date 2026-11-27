@@ -275,8 +275,8 @@ def _pb_varint(value: int) -> bytes:
 
 
 def pbsdp(caps: int | None, *, sdp_field: int = 3) -> str:
-    """A base64 ``PbMessageSdpUnit`` whose field ``sdp_field`` carries sub-field 16 =
-    ``caps`` (left out for None) next to an ICE username."""
+    """A base64 ``pbsdp`` message whose field ``sdp_field`` (the session description)
+    carries its field 16 = ``caps`` (left out for None) next to an ICE username."""
     inner = b"\x32\x04abcd"  # field 6, the ufrag
     if caps is not None:
         inner += _pb_varint(16 << 3) + _pb_varint(caps)

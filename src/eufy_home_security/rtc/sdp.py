@@ -10,11 +10,25 @@ SSRCs), not an SDP text offer; :meth:`SdpInfo.decode` reads it. Verified on a Ho
 offer (``ice-u``, ``asc``, ...) and the fixed media template. That is the event path,
 not the live CALL answer. Declared (eufy app), not verified.
 
-The answer may also carry ``pbsdp``: base64 of a protobuf ``PbMessageSdpUnit`` whose field
-3, sub-field 16 is the device's ``transport_caps``; the eufy app reads the JSON
-``transport_caps`` only when ``pbsdp`` is absent or empty, and takes 0 from a ``pbsdp``
-that does not decode or lacks the field (:func:`read_pbsdp`, a bounded reader of just
-what that needs). Declared (eufy app), not verified.
+The answer may also carry ``pbsdp``: base64 of a protobuf message whose field 3 (the
+answer's session description) carries the device's ``transport_caps`` in its field 16;
+the eufy app reads the JSON ``transport_caps`` only when ``pbsdp`` is absent or empty, and
+takes 0 from a ``pbsdp`` that does not decode or lacks the field (:func:`read_pbsdp`, a
+bounded reader of just what that needs). Declared (eufy app), not verified.
+
+:func:`read_pbsdp` is not a full decoder of that message, so for some malformed input its
+``transport_caps`` can differ from the app's strict decode, which reads 0 where it fails:
+
+- fields larger than the app's decoder holds (a long ICE username or password, many
+  candidates, a field 16 over 32 bits) are read here, not refused;
+- a field other than 3 and 16 with an unexpected wire type is skipped here, not refused;
+- a repeated field 3 is merged by the app; here field 16 of the last field 3 that has
+  one is read (the same value) and only that field 3's field numbers are listed;
+- base64 is read strictly here (no line breaks, padding required); the app's decoder
+  may accept such text.
+
+The transport choice is unaffected while the client offers KCP only (QUIC needs bit 1 in
+both the client's flag and ``transport_caps``).
 """
 
 from __future__ import annotations
@@ -275,7 +289,7 @@ def answer_attributes(sdp: str) -> str:
 #: one reads as undecodable.
 MAX_PBSDP_TEXT: Final = 4096
 MAX_PBSDP_FIELDS: Final = 64
-#: ``PbMessageSdpUnit`` field 3 (the answer's ``PbSdpInfo``), its field 16 the device's
+#: Field 3 of ``pbsdp`` (the answer's session description), and its field 16, the device's
 #: ``transport_caps``. Declared (eufy app).
 PBSDP_SDP_FIELD: Final = 3
 PBSDP_CAPS_FIELD: Final = 16
@@ -345,10 +359,10 @@ def _fields(data: bytes) -> list[tuple[int, int, int | bytes]] | None:
 
 
 def read_pbsdp(value: object) -> PbsdpReading | None:
-    """The ``pbsdp`` field of a CALL answer (base64 of a ``PbMessageSdpUnit``); None when
-    it is absent, not text or empty (the eufy app then reads the JSON
-    ``transport_caps``). Never raises: a malformed one reads as caps 0, not decoded, as
-    the app reads it."""
+    """The ``pbsdp`` field of a CALL answer (base64 of a protobuf message, see the module
+    docstring); None when it is absent, not text or empty (the eufy app then reads the
+    JSON ``transport_caps``). Never raises: a malformed one reads as caps 0, not decoded,
+    as the app reads it."""
     if not isinstance(value, str) or not value:
         return None
     failed = PbsdpReading(transport_caps=0, decoded=False)
