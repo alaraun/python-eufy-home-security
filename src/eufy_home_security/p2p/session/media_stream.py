@@ -413,6 +413,12 @@ class MediaStream:
             self._hold_for_key(frame_type, payload, camera, subheader)
             return "key_pending"
         variant = video_variant(subheader) if is_video and subheader else None
+        if variant is VideoVariant.ECC and subheader:
+            # A recording's version-9 record needs the user's PIN key, whatever was offered.
+            pin = self._decoder.e2e_refusal(subheader)
+            if pin is not None:
+                self._refuse_video(pin, variant)
+                return "undecodable"
         if variant is not None and not self._decoder.decodes(variant):
             self._undecodable_video(variant)
             return "undecodable"

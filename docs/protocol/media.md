@@ -775,7 +775,8 @@ reads the record's XZYH subheader, byte 0 the **media version** `v` and byte 3 t
 
 | condition | variant (`VideoVariant`) | header | body | library |
 |---|---|---|---|---|
-| `v` 8 or 9 | `ecc` | 179 B | AES-256-GCM ([media key](#media-key-rsa-or-ecc-verified)) | decoded on an ECC stream |
+| `v` 8; `v` 9 on a live stream | `ecc` | 179 B | AES-256-GCM ([media key](#media-key-rsa-or-ecc-verified)) | decoded on an ECC stream |
+| `v` 9 on a recording | `ecc` | 179 B | AES-256-GCM under the user's [PIN key](#end-to-end-encrypted-recordings-app), byte 3 its key id | refused (`PinProtectedKeyError`) whatever key the open offered |
 | `v` 4 or 5, `e` ≥ 2 | `e2e` | 151 B | AES-256-GCM, [end-to-end](#end-to-end-encrypted-recordings-app); the app plays it from recordings only | decoded from a recording under a cloud cipher; refused live and under the PIN key |
 | `v` ≥ 3, `e` = 1 | `rsa_v3` | 22 B | clear | decoded |
 | `v` ≠ 0, `e` ≠ 0 | `rsa_prefix` | 22 B + 129 B prefix | [keyframe decryption](#keyframe-decryption-verified) | decoded |
@@ -787,14 +788,17 @@ reads the record's XZYH subheader, byte 0 the **media version** `v` and byte 3 t
 - A clear record without the keyframe flag starts a picture group when its first NAL
   unit is an IDR picture or a parameter set (HEVC 0x26, 0x28, 0x2a, 0x40, 0x42, 0x44;
   H.264 0x65, 0x67, 0x68, 0x27), the app's keyframe test.
-- **Audio:** `v` 0 is dropped; subheader byte 5 = 3 marks floodlight audio (`v` 1
-  G.711 A-law, `v` 2 AAC); `v` 8/9 and `v` 4/5 with `e` ≥ 2 are encrypted as video;
-  otherwise version 1 is AAC-LC and a later version names its stream type in header
-  byte 5 (0 = AAC-LC). The library delivers AAC-LC only (`AudioVariant`).
+- **Audio:** `v` 0 is dropped; subheader byte 5 = 3 marks floodlight audio (`v` 1 G.711
+  A-law, `v` 2 AAC); `v` 8/9 and `v` 4/5 with `e` ≥ 2 are encrypted as video (a
+  recording's `v` 9 audio, under the PIN key, is dropped); otherwise version 1 is AAC-LC
+  and a later version names its stream type in header byte 5 (0 = AAC-LC). The library
+  delivers AAC-LC only (`AudioVariant`).
 - A stream whose video arrives in a variant its key does not decode (`ecc` on an RSA
   stream, `rsa_prefix` on an ECC one, `e2e` on a live stream) before its first keyframe
-  fails with `UnsupportedError` naming the variant. `SessionStats.media_frames_by_variant` counts
-  every media record received by `"video:<variant>"` / `"audio:<variant>"`.
+  fails with `UnsupportedError` naming the variant; a recording's `v` 9 record fails it
+  with `PinProtectedKeyError` instead, on an RSA stream too.
+  `SessionStats.media_frames_by_variant` counts every media record received by
+  `"video:<variant>"` / `"audio:<variant>"`.
 - **Diagnostics of a stream that plays no picture.** `SessionStats` also carries
   `media_video_codecs` (video records by the codec header byte 5 names; `"code:<n>"`
   for a code the library does not know, which a muxer takes as HEVC, logged once per
@@ -819,21 +823,25 @@ reads the record's XZYH subheader, byte 0 the **media version** `v` and byte 3 t
 ### End-to-end encrypted recordings **[app]**
 
 A station can store a camera's recordings end-to-end encrypted: subheader version `v` 4
-or 5 with byte 3 `e` ≥ 2 ([above](#media-protection-by-subheader-app)). Byte 3 is then
-the **key id**, and the record names one of two key types (`E2EKeyType`):
+or 5 with byte 3 `e` ≥ 2, or version 9 on a recording
+([above](#media-protection-by-subheader-app)). Byte 3 is then the **key id**, and the
+record names one of two key types (`E2EKeyType`):
 
 | `v` | `e` | key type | key | library |
 |---|---|---|---|---|
 | 4 | ≥ 10 | `PIN` (4) | the user's end-to-end key pair, protected by the PIN of the app's video encryption | `PinProtectedKeyError` |
 | 4 | 2–9 | `CIPHER` (5) | the station owner's cloud cipher `e` | decoded |
 | 5 | ≥ 2 | `CIPHER` (5) | the station owner's cloud cipher `e` | decoded |
+| 9 | any | `PIN` (4) | the same PIN-protected key pair, key id `e`; a record with `e` below 2 uses the key of the recording's latest `v` 9 record that names one | `PinProtectedKeyError` |
 
-- **Video record:** the 22-byte video header, the wrapped key (129 bytes), the 16-byte
-  GCM tag, then the AES-256-GCM ciphertext of the whole frame (AAD `b"eufy security"`).
-  The header's `datalen` counts tag and ciphertext. For a cloud cipher the first 128
-  bytes of the wrapped key are RSA-1024 (PKCS#1 v1.5) under the cipher's `private_key`
-  (`app/cipher/get_ciphers` with the cipher id, the station owner's account and the
-  station); for the PIN key all 129 are an ECIES wrap as the ECC media key's.
+- **Video record** (`v` 4 and 5; a `v` 9 record has the [ECC
+  record](#media-key-rsa-or-ecc-verified)'s layout): the 22-byte video header, the
+  wrapped key (129 bytes), the 16-byte GCM tag, then the AES-256-GCM ciphertext of the
+  whole frame (AAD `b"eufy security"`). The header's `datalen` counts tag and
+  ciphertext. For a cloud cipher the first 128 bytes of the wrapped key are RSA-1024
+  (PKCS#1 v1.5) under the cipher's `private_key` (`app/cipher/get_ciphers` with the
+  cipher id, the station owner's account and the station); for the PIN key all 129 are
+  an ECIES wrap as the ECC media key's.
 - The wrapped key decrypts to a **47-character key string**, ending at its first NUL
   byte: the AES-256 key is its first 32 bytes, the 16-byte IV its last 16 (byte 31
   belongs to both). A string of another length does not decode.
@@ -841,7 +849,8 @@ the **key id**, and the record names one of two key types (`E2EKeyType`):
   ciphertext under the key string of the recording's latest video record. Before the
   first video record, audio is dropped.
 - **History rows:** the row's `cipher_id` names the same key: above `0xFFFFFF`, its top
-  byte is the key type and its low byte the key id (`HistoryRecord.cipher_id`,
+  byte is the key type (4 or 9 the PIN key, 5 a cloud cipher; another type names no
+  end-to-end key) and its low byte the key id (`HistoryRecord.cipher_id`,
   `HistoryRecord.e2e_key`, `E2EKey.from_cipher_id`). As the app's player does, a
   recording played or downloaded from its row (`Station.async_play_recording`,
   `async_download_recording`; the session methods' `e2e_key`) has the key before

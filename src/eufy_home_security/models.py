@@ -142,16 +142,20 @@ class E2EKey:
 
     @classmethod
     def from_cipher_id(cls, cipher_id: int | None) -> E2EKey | None:
-        """The key a history row's ``cipher_id`` names: type in the top byte, key id in
-        the low byte; None for a row that is not end-to-end encrypted (no type byte) or
-        names a type the library does not know."""
+        """The key a history row's ``cipher_id`` names: type in the top byte (4 or 9 the
+        PIN key, 5 a cloud cipher), key id in the low byte; None for a row that is not
+        end-to-end encrypted (no type byte) or names another type."""
         if cipher_id is None:
             return None
-        try:
-            key_type = E2EKeyType(cipher_id >> 24)
-        except ValueError:
+        key_type = _ROW_KEY_TYPES.get(cipher_id >> 24)
+        if key_type is None:
             return None
         return cls(key_type, cipher_id & 0xFF)
+
+
+#: History-row key types (``cipher_id`` top byte) per :class:`E2EKeyType` (declared,
+#: eufy app): type 9 names the PIN key of the recording's version-9 records.
+_ROW_KEY_TYPES = {4: E2EKeyType.PIN, 9: E2EKeyType.PIN, 5: E2EKeyType.CIPHER}
 
 
 class ValueSource(StrEnum):
