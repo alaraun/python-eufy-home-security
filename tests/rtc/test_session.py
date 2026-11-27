@@ -20,9 +20,10 @@ from eufy_home_security.exceptions import (
     SignalingError,
     UnsupportedError,
 )
+from eufy_home_security.rtc import _ikcp
 from eufy_home_security.rtc import session as session_mod
 from eufy_home_security.rtc.codec import MessageType
-from eufy_home_security.rtc.config import KCP_TYPE_MULTI, KCP_TYPE_SINGLE, QuickLogin
+from eufy_home_security.rtc.config import KCP_TYPE_MULTI, KCP_TYPE_SINGLE, QuickLogin, ServerInfo
 from eufy_home_security.rtc.data_channel import DataMsgType
 from eufy_home_security.rtc.session import (
     CallAnswer,
@@ -168,8 +169,10 @@ async def test_start_brings_the_data_channel_up(
     fake: FakeRtcServer, make_session: Callable[..., RtcSession]
 ) -> None:
     records: list[QuickLogin] = []
-    session = make_session(on_login=records.append)
+    servers: list[ServerInfo] = []
+    session = make_session(on_login=records.append, on_server_info=servers.append)
     await session.start()
+    assert [s.ip for s in servers] == ["127.0.0.1"]
     assert session.connected
     assert session.link_generation == 1
     assert session.answer is not None
@@ -204,7 +207,9 @@ async def test_the_device_candidate_reaches_ice_once(
     session = make_session(ice_factory=factory)
     await session.start()
     await until(lambda: 0 in fake.device_acks)
-    await asyncio.sleep(0.5)  # the station's re-sends of the acknowledged candidate
+    acks = len(fake.of_type(MessageType.INFO))
+    fake.send_candidate(0)  # a re-send whose acknowledgement was lost
+    await until(lambda: len(fake.of_type(MessageType.INFO)) >= acks + 2)  # 200 and the ack
     assert pipes[0].remote_candidates == [DEVICE_CANDIDATE]
 
 
@@ -218,7 +223,7 @@ async def test_unacknowledged_candidates_are_sent_again_until_acked(
     fake.ack_candidates = True
     await until(lambda: len(fake.client_candidates) >= 4)
     count = len(fake.client_candidates)
-    await asyncio.sleep(1.0)
+    await asyncio.sleep(0.7)
     assert len(fake.client_candidates) == count
 
 
@@ -337,6 +342,54 @@ async def test_a_single_kcp_station_sends_no_framing_bit(
     assert not fake.call_info.data_channel
 
 
+async def test_the_framing_follows_the_devices_answer(
+    fake: FakeRtcServer, make_session: Callable[..., RtcSession]
+) -> None:
+    """The device answers byte 2 = 0: bare KCP segments both ways, whatever the client sent."""
+    fake.device_info = dataclasses.replace(DEVICE_INFO, data_channel=False)
+    session = make_session()
+    await session.start()
+    assert fake.call_info is not None
+    assert fake.call_info.data_channel  # the client asked for the prefix
+    channel = session.data_channel
+    assert channel is not None
+    await channel.send_message(b"bare")
+    async with asyncio.timeout(3):
+        assert (await channel.recv_message()).payload == b"bare"
+
+
+async def test_candidate_resends_stop_at_their_bound(
+    fake: FakeRtcServer, make_session: Callable[..., RtcSession], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(session_mod, "CANDIDATE_RESENDS", 2)
+    monkeypatch.setattr(session_mod, "candidate_resend_delay", lambda _n: 0.02)
+    fake.ack_candidates = False
+    session = make_session()
+    await session.start()
+    await asyncio.sleep(0.3)
+    assert len(fake.client_candidates) == 3  # the first send and two resends
+
+
+async def test_an_acknowledged_candidate_is_not_sent_again(
+    fake: FakeRtcServer, make_session: Callable[..., RtcSession], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(session_mod, "candidate_resend_delay", lambda _n: 0.05)
+    fake.ack_only = {0}
+    two = ["candidate:1 1 udp 1 127.0.0.1 7 typ host", "candidate:2 1 udp 1 127.0.0.1 8 typ host"]
+
+    def factory() -> PipeIce:
+        pipe = fake.ice_factory()
+        pipe.lines = two
+        return pipe
+
+    session = make_session(ice_factory=factory)
+    await session.start()
+    await asyncio.sleep(0.4)
+    numbers = [c["file_candidate_num"] for c in fake.client_candidates]
+    assert numbers.count(0) == 1
+    assert numbers.count(1) > 2
+
+
 async def test_start_without_the_extra_raises_before_any_socket(
     fake: FakeRtcServer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -384,6 +437,29 @@ async def test_a_broken_data_channel_reconnects(
     await session.start()
     await fake.break_link()
     await until(lambda: session.link_generation == 2 and session.connected)
+    assert isinstance(session.last_error, CommunicationError)
+
+
+async def test_a_peer_that_stops_acknowledging_reconnects(
+    fake: FakeRtcServer,
+    make_session: Callable[..., RtcSession],
+    quick: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_ikcp, "IKCP_DEADLINK", 2)
+    pipes: list[PipeIce] = []
+
+    def factory() -> PipeIce:
+        pipes.append(fake.ice_factory())
+        return pipes[-1]
+
+    session = make_session(ice_factory=factory)
+    await session.start()
+    channel = session.data_channel
+    assert channel is not None
+    pipes[0].drop_outbound = True
+    await channel.send_message(b"lost")
+    await until(lambda: session.link_generation == 2 and session.connected, timeout=10)
     assert isinstance(session.last_error, CommunicationError)
 
 
@@ -529,6 +605,40 @@ async def test_a_cancelled_close_still_finishes(
     await until(lambda: fake.of_type(MessageType.HANGUP))
 
 
+async def test_a_failing_consumer_callback_is_logged_and_the_session_runs(
+    fake: FakeRtcServer,
+    make_session: Callable[..., RtcSession],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def broken(_record: object) -> None:
+        raise RuntimeError("cache full")
+
+    session = make_session(on_login=broken, on_server_info=broken)
+    await session.start()
+    assert session.connected
+    assert session.quick_login is not None
+    failures = [
+        r
+        for r in caplog.records
+        if r.name == session_mod.__name__ and "callback failed" in r.getMessage()
+    ]
+    assert [r.levelno for r in failures] == [logging.WARNING]
+
+
+async def test_a_start_right_after_a_cancelled_close_runs_once(
+    fake: FakeRtcServer, make_session: Callable[..., RtcSession]
+) -> None:
+    session = make_session()
+    await session.start()
+    with pytest.raises(TimeoutError):
+        async with asyncio.timeout(0):
+            await session.close()
+    await session.start()
+    assert session.connected
+    runs = [t for t in asyncio.all_tasks() if "_run_loop" in repr(t.get_coro())]
+    assert len(runs) == 1
+
+
 async def test_a_closed_session_starts_again(
     fake: FakeRtcServer, make_session: Callable[..., RtcSession]
 ) -> None:
@@ -538,6 +648,36 @@ async def test_a_closed_session_starts_again(
     await session.start()
     assert session.connected
     assert session.link_generation == 2
+
+
+async def test_a_reconnect_waits_after_closing_the_lost_link(
+    fake: FakeRtcServer, make_session: Callable[..., RtcSession], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(session_mod, "LOSS_DELAY", 0.01)
+    monkeypatch.setattr(session_mod, "REINIT_DELAY", 0.4)
+    session = make_session()
+    await session.start()
+    fake.received.clear()
+    await fake.break_link()
+    await until(lambda: fake.of_type(MessageType.HANGUP))
+    await asyncio.sleep(0.2)
+    assert fake.of_type(MessageType.LOGIN) == []  # still within the wait
+    await until(lambda: session.link_generation == 2)
+
+
+async def test_a_second_cancel_during_cleanup_still_closes_everything(
+    fake: FakeRtcServer, make_session: Callable[..., RtcSession]
+) -> None:
+    """A loop shutdown cancels the run again while it closes the link."""
+    session = make_session()
+    await session.start()
+    run = session._run
+    assert run is not None
+    run.cancel()
+    await asyncio.sleep(0)
+    run.cancel()
+    await asyncio.wait({run})
+    assert own_tasks(fake) == set()
 
 
 async def test_close_during_a_reconnect_wait_stops_it(

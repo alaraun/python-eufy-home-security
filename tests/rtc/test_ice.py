@@ -54,6 +54,11 @@ async def test_the_controlled_client_connects_to_a_controlling_peer(
             client.add_remote_candidate(f"a=candidate:{candidate.to_sdp()}")  # before gather
         lines = await client.gather(local_ufrag="abcd", local_pwd="p" * 22, turn=None)
         assert lines
+        connection = client._connection
+        assert connection is not None
+        assert connection.ice_controlling is False  # the device controls
+        assert connection._use_ipv6 is False
+        assert (connection.local_username, connection.local_password) == ("abcd", "p" * 22)
         assert all(line.startswith("candidate:") for line in lines)
         for line in lines:
             await device.add_remote_candidate(aioice.Candidate.from_sdp(line[len("candidate:") :]))

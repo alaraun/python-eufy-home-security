@@ -391,6 +391,23 @@ def test_records_of_other_types_do_not_count_toward_the_limit() -> None:
     assert len(merge_server_info(stored, [_server("192.0.2.100")], 0)) == SERVER_INFO_LIMIT + 1
 
 
+def test_records_of_another_protocol_do_not_count_toward_the_limit() -> None:
+    stored = tuple(
+        _server(f"192.0.2.{n}", rtt=n, protocol=1) for n in range(1, SERVER_INFO_LIMIT + 1)
+    )
+    assert len(merge_server_info(stored, [_server("192.0.2.100")], 0)) == SERVER_INFO_LIMIT + 1
+
+
+def test_only_a_record_of_the_reported_type_is_dropped() -> None:
+    stored = (
+        _server("192.0.2.50", rtt=99, server_type=1),
+        *(_server(f"192.0.2.{n}", rtt=n) for n in range(1, SERVER_INFO_LIMIT + 1)),
+    )
+    merged = merge_server_info(stored, [_server("192.0.2.100", rtt=1)], 0)
+    assert stored[0] in merged
+    assert _server(f"192.0.2.{SERVER_INFO_LIMIT}", rtt=SERVER_INFO_LIMIT) not in merged
+
+
 def test_the_list_is_filtered_to_the_station_domain_in_any_case() -> None:
     mine = _server("192.0.2.1")
     other = ServerInfo(

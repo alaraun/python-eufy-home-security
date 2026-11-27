@@ -119,6 +119,22 @@ async def test_a_quick_login_takes_one_request(
     assert [r.header.body_type for r in logins] == [codec.BodyType.CONTACT]
 
 
+async def test_a_quick_login_seals_its_identity_with_the_packet_id(
+    fake: FakeRtcServer, make_client: Callable[..., SignalingClient]
+) -> None:
+    """A clock that moves between the seal and the header must not split them."""
+    first = await logged_in(make_client)
+    record = first.quick_login()
+    await first.close()
+    fake.received.clear()
+    ticks = iter(range(1_000_000, 2_000_000))
+    second = make_client(config=rtc_config(quick_login=record), clock=lambda: float(next(ticks)))
+    await second.open()
+    await second.login()
+    logins = fake.of_type(MessageType.LOGIN)
+    assert [r.header.body_type for r in logins] == [codec.BodyType.CONTACT]
+
+
 async def test_a_refused_quick_login_falls_back_to_the_key_exchange(
     fake: FakeRtcServer, make_client: Callable[..., SignalingClient]
 ) -> None:
@@ -212,11 +228,24 @@ async def test_an_unanswered_discover_times_out_after_its_attempts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(client_mod, "DISCOVER_TIMEOUT", 0.05)
-    fake.transport.close()  # type: ignore[union-attr]
+    fake.drop_discovers = 99
     client = make_client()
     await client.open()
     with pytest.raises(DeviceTimeoutError):
         await client.discover()
+    assert len(fake.of_type(MessageType.DISCOVER)) == client_mod.DISCOVER_ATTEMPTS == 3
+
+
+async def test_a_discover_answered_on_its_last_attempt_succeeds(
+    fake: FakeRtcServer,
+    make_client: Callable[..., SignalingClient],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(client_mod, "DISCOVER_TIMEOUT", 0.05)
+    fake.drop_discovers = 2
+    client = make_client()
+    await client.open()
+    assert await client.discover() == "127.0.0.1"
 
 
 def test_a_host_name_as_signaling_host_is_refused() -> None:

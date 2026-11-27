@@ -100,10 +100,8 @@ def client_flag(kcp_type: int) -> int:
 
 def reconnect_delay(failures: int) -> float:
     """The wait before the next connect after ``failures`` failed ones in a row."""
-    base = LOSS_DELAY + REINIT_DELAY
-    if failures <= RECONNECT_STEADY_FAILURES:
-        return base
-    return min(base * 2.0 ** (failures - RECONNECT_STEADY_FAILURES), RECONNECT_MAX)
+    doublings = max(0, failures - RECONNECT_STEADY_FAILURES)
+    return min((LOSS_DELAY + REINIT_DELAY) * 2.0**doublings, RECONNECT_MAX)
 
 
 def candidate_resend_delay(count: int) -> float:
@@ -168,8 +166,9 @@ class RtcSession:
     ``ice_factory`` builds the ICE connection of each attempt (default
     :class:`~.ice.IceTransport`, which needs the ``rtc`` extra). ``on_login`` receives
     every login record for the consumer's quick-login cache, ``on_server_info`` the record
-    of every login server (:func:`~.config.merge_server_info` keeps a list of them).
-    ``crypto``, ``clock`` and ``rng`` exist for tests.
+    of every login server (:func:`~.config.merge_server_info` keeps a list of them); a
+    callback that raises is logged and does not stop the session. ``crypto``, ``clock`` and
+    ``rng`` exist for tests.
     """
 
     def __init__(
@@ -335,15 +334,27 @@ class RtcSession:
             clock=self._clock,
             rng=self._rng,
             on_login=self._logged_in,
-            on_server_info=self._on_server_info,
+            on_server_info=self._server_used,
             on_lost=lost,
             **extra,
         )
 
     def _logged_in(self, record: QuickLogin) -> None:
         self._quick_login = record
-        if self._on_login is not None:
-            self._on_login(record)
+        self._notify(self._on_login, record)
+
+    def _server_used(self, record: ServerInfo) -> None:
+        self._notify(self._on_server_info, record)
+
+    def _notify(self, callback: Callable[[Any], None] | None, record: object) -> None:
+        """Hand ``record`` to a consumer's callback; its failure is logged, not raised."""
+        if callback is None:
+            return
+        try:
+            callback(record)
+        except Exception:  # the consumer's code: any failure
+            level = logging.WARNING if self._warned.should_log("callback") else logging.DEBUG
+            _LOGGER.log(level, "%s: RTC login callback failed", self._log_name, exc_info=True)
 
     async def _connect_once(self) -> _Attempt:
         lost: asyncio.Future[Exception] = asyncio.get_running_loop().create_future()
@@ -434,12 +445,10 @@ class RtcSession:
                 with contextlib.suppress(SignalingError, OSError):
                     self._send_candidates(attempt, call)
                 continue
-            if event.kind in (CallEventKind.HANGUP, CallEventKind.REFUSED):
-                attempt.lose(SignalingError("the station hung up the RTC data call", code=None))
-                return
             if event.kind is CallEventKind.INFO:
                 self._device_info(attempt, call, ice, event.payload)
-        attempt.lose(SignalingError("the RTC data call ended"))
+        # A hang-up or an error code ends the call (``call.ended``).
+        attempt.lose(SignalingError("the station ended the RTC data call"))
 
     def _device_info(
         self, attempt: _Attempt, call: Call, ice: IceAgent, payload: Mapping[str, Any]

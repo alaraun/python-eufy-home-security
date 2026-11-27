@@ -16,8 +16,10 @@ every message (:attr:`FakeRtcServer.device_channels`).
 
 Scripts: ``call_reply`` (``answer``, ``trying``, ``busy``, ``hangup``, ``silent``),
 ``udp_calls`` False (only a CALL over TCP is answered: a sleeping device),
-``refuse_login``, ``drop_logins``, ``answer_repeats``, ``ice_connects`` False, and
-:meth:`~FakeRtcServer.hang_up`, :meth:`~FakeRtcServer.break_link` mid-session.
+``refuse_login``, ``drop_logins``, ``drop_discovers``, ``answer_repeats``,
+``ice_connects`` False, ``ack_candidates``/``ack_only``, and
+:meth:`~FakeRtcServer.hang_up`, :meth:`~FakeRtcServer.break_link`,
+:meth:`~FakeRtcServer.send_candidate` mid-session.
 Synthetic identities only (:data:`~.synthetic.SYNTHETIC`).
 """
 
@@ -85,7 +87,7 @@ CANDIDATE_RESEND: Final = 0.2
 @functools.cache
 def server_key() -> rsa.RSAPrivateKey:
     """The fake server's RSA-1024 key, made once per process."""
-    return rsa.generate_private_key(public_exponent=0x10001, key_size=1024)  # noqa: S505 - the protocol's
+    return rsa.generate_private_key(public_exponent=0x10001, key_size=1024)  # noqa: S505 - protocol
 
 
 def rtc_config(host: str = "127.0.0.1", **kwargs: Any) -> RtcConfig:
@@ -123,13 +125,15 @@ class PipeIce:
         self.remote_candidates: list[str] = []
         self.closed = False
         self.drop_outbound = False
+        self.lines = ["candidate:1 1 udp 2130706431 127.0.0.1 7 typ host"]
+        """The candidate lines :meth:`gather` returns."""
         """True: every datagram sent is lost (a peer that went away)."""
 
     async def gather(
         self, *, local_ufrag: str, local_pwd: str, turn: TurnServer | None
     ) -> list[str]:
         self.credentials = (local_ufrag, local_pwd)
-        return ["candidate:1 1 udp 2130706431 127.0.0.1 7 typ host"]
+        return list(self.lines)
 
     def add_remote_candidate(self, candidate: str) -> None:
         self.remote_candidates.append(candidate)
@@ -179,6 +183,7 @@ class FakeRtcServer(asyncio.DatagramProtocol):
     udp_calls: bool = True
     refuse_login: bool = False
     drop_logins: int = 0
+    drop_discovers: int = 0
     answer_repeats: int = 1
     request_id: str | None = None
     """The 200's ``request_id``; None leaves it out (as a HomeBase 3 does)."""
@@ -188,6 +193,8 @@ class FakeRtcServer(asyncio.DatagramProtocol):
     ice_connects: bool = True
     ack_candidates: bool = True
     """False: the client's candidates are never acknowledged."""
+    ack_only: set[int] | None = None
+    """The candidate numbers acknowledged; None: all."""
     server_addr: str = "self"
     """The DISCOVER answer's ``server_addr``."""
     received: list[Received] = field(default_factory=list)
@@ -283,6 +290,13 @@ class FakeRtcServer(asyncio.DatagramProtocol):
         for pipe in self._pipes:
             await pipe.close()
 
+    def send_candidate(self, number: int = 0, line: str = DEVICE_CANDIDATE) -> None:
+        """The station sends a candidate INFO on the last call (again, for a seen number)."""
+        body, _, addr = self._calls[-1]
+        self._device_packet(
+            MessageType.INFO, body, {"file_candidate": line, "file_candidate_num": number}, addr
+        )
+
     def device_message(self, addr: tuple[str, int], *, flags: int = 0) -> None:
         """A MESSAGE request (the device's ping) to the client at ``addr``."""
         key = self.sessions[CONTACT]
@@ -354,6 +368,9 @@ class FakeRtcServer(asyncio.DatagramProtocol):
         if header.is_response:
             return
         if mtype == MessageType.DISCOVER:
+            if self.drop_discovers > 0:
+                self.drop_discovers -= 1
+                return
             answer = {"server_addr": self.server_addr, "timestamp": 1, "saddrs": []}
             reply(header.response(200, body_type=BodyType.JSON), json.dumps(answer).encode())
         elif mtype == MessageType.LOGIN:
@@ -467,7 +484,7 @@ class FakeRtcServer(asyncio.DatagramProtocol):
         if isinstance(number, int) and "file_candidate" in payload:
             self.client_candidates.append(payload)
             self.client_candidate.set()
-            if self.ack_candidates:
+            if self.ack_candidates and (self.ack_only is None or number in self.ack_only):
                 self._device_packet(
                     MessageType.INFO, call, {"file_candidate_ack": number}, item.addr
                 )
