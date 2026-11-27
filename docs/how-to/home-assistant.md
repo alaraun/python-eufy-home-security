@@ -1349,11 +1349,13 @@ A closed session (`async_close`) never reconnects on its own — build a new
     standalone device): True while a firmware update is being installed, the flag the
     eufy app's device card shows as upgrading (*declared*). The `update` entity's
     `in_progress`, not an entity of its own.
-  - Station: `storage_status` (param 1135, raw) with `storage_ok` (the codes the app
-    shows as normal), a diagnostic problem sensor; `subsystem_firmware` (5006-5012,
-    version strings by param id, the subsystems unnamed): attributes on the station's
-    `update` entity at most. `sd_info` (1102) is an undecoded integer: do not build
-    an entity from it; disk figures come from `async_get_storage`.
+  - Station: `storage_status` (param 1135, raw) with `storage_ok` (the code grouped as
+    the station model's handler groups it, the same grouping as the storage record's
+    `status_group`; normal is the app's group 0), a diagnostic problem sensor;
+    `subsystem_firmware` (5006-5012, version strings by param id, the subsystems
+    unnamed): attributes on the station's `update` entity at most. `sd_info` (1102) is
+    an undecoded integer: do not build an entity from it; disk figures come from
+    `async_get_storage`.
   - **Availability** comes from three things, in this order: the coordinator's success,
     whether the device's block is in the dump at all, and **`SubDeviceState.online`**.
     Never from battery or signal, which a dead device keeps reporting unchanged.

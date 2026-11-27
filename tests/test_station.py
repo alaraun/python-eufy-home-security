@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import copy
 import dataclasses
 import functools
 import json
 import logging
 import math
+import pickle
+import threading
 import time
 from collections.abc import AsyncIterator, Callable, Coroutine, Iterator
 from datetime import UTC, datetime, timedelta
@@ -1315,6 +1318,63 @@ def test_station_storage_status_and_subsystem_firmware(raw: str, ok: bool | None
     assert state.storage_ok is ok
     assert state.sd_info == 9752
     assert state.subsystem_firmware == {5006: "0.0.6.0", 5010: "0.0.5.7"}
+
+
+@pytest.mark.parametrize(
+    ("groups", "status", "ok"),
+    [
+        (SdStatusGroups({0: 0, 30: 1}, 1), 0, True),
+        (SdStatusGroups({0: 0, 30: 1}, 1), 30, False),  # the model's table, not 0/25/30
+        (SdStatusGroups({0: 0, 7: 0}, 1), 7, True),
+        (SdStatusGroups({4: 2}, 0), 99, True),  # an unlisted status takes the default group
+        (SdStatusGroups({0: 0, 4: 2}, 1, 1135), 4, False),
+        (None, 30, True),  # no grouping: the library's table
+        (None, 7, False),
+    ],
+)
+def test_storage_ok_groups_the_status_by_the_station_model_s_table(
+    groups: SdStatusGroups | None, status: int, ok: bool
+) -> None:
+    state = StationState(
+        serial=SYNTHETIC.station_sn,
+        guard_mode=None,
+        firmware=None,
+        devices={},
+        params={},
+        storage_status=status,
+        storage_groups=groups,
+    )
+    assert state.storage_ok is ok
+
+
+def _storage_state(groups: SdStatusGroups | None) -> StationState:
+    return StationState(
+        serial=SYNTHETIC.station_sn,
+        guard_mode=None,
+        firmware=None,
+        devices={},
+        params={},
+        storage_status=30,
+        storage_groups=groups,
+    )
+
+
+def test_states_differing_only_in_the_storage_grouping_are_unequal() -> None:
+    """``storage_ok`` reads the grouping, so a state with another one is a new state."""
+    grouped = _storage_state(SdStatusGroups({0: 0}, 1))
+    assert grouped != _storage_state(None)
+    assert grouped != _storage_state(SdStatusGroups({0: 0, 30: 0}, 1))
+    assert grouped == _storage_state(SdStatusGroups({0: 0}, 1))
+
+
+def test_a_state_with_a_storage_grouping_copies_pickles_and_converts() -> None:
+    groups = model_settings.sd_status_groups("T8115")  # as the loader builds it
+    assert groups is not None
+    state = _storage_state(groups)
+    for copied in (copy.deepcopy(state), pickle.loads(pickle.dumps(state))):  # noqa: S301
+        assert copied == state
+        assert copied.storage_ok is False
+    assert dataclasses.asdict(state)["storage_groups"]["codes"] == dict(groups.codes)
 
 
 def test_coverage_counts_the_power_and_storage_fields_as_parsed_state() -> None:
@@ -6192,6 +6252,50 @@ async def test_a_standalone_camera_groups_the_status_as_its_model_does(
     assert info.emmc.usable is (state is MediumState.NORMAL)
 
 
+@pytest.mark.parametrize(
+    ("serial", "ok"),
+    [("T8170P2000054321", True), ("T8115P2000054321", False)],  # T8115 leaves 30 out
+)
+async def test_a_station_s_storage_ok_follows_its_model_s_grouping_once_loaded(
+    fake: FakeStation, monkeypatch: pytest.MonkeyPatch, serial: str, ok: bool
+) -> None:
+    """Status 1135 = 30: the library's table until the settings are loaded, then the
+    model's own grouping, looked up once, off the event loop."""
+    on_loop: list[bool] = []
+
+    def lookup(code: str | None) -> SdStatusGroups | None:
+        on_loop.append(threading.current_thread() is threading.main_thread())
+        return model_settings.sd_status_groups(code)
+
+    monkeypatch.setattr(station_mod, "sd_status_groups", lookup)
+    fake.params.setdefault(STATION_CHANNEL, {})[1135] = "30"
+    station = await _standalone(fake, serial)
+    try:
+        before = station.state
+        await station.async_load_settings()
+        after = await station.async_update()
+    finally:
+        await station.async_close()
+    assert before is not None
+    assert before.storage_ok is True
+    assert (after.storage_status, after.storage_ok) == (30, ok)
+    assert on_loop == [False]
+
+
+async def test_a_grouping_loaded_after_the_first_state_emits_a_new_state(fake: FakeStation) -> None:
+    """The same dump after the grouping loads is a new snapshot: 30 is not normal on a T8115."""
+    fake.params.setdefault(STATION_CHANNEL, {})[1135] = "30"
+    station = await _standalone(fake, "T8115P2000054321")
+    events: list[Event] = []
+    station.subscribe(events.append)
+    try:
+        await station.async_load_settings()
+        await station.async_update()
+    finally:
+        await station.async_close()
+    assert [s.storage_ok for s in _snapshots(events)] == [False]
+
+
 async def test_a_model_without_a_grouping_groups_with_the_library_table(
     fake: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -6291,7 +6395,7 @@ async def test_a_malformed_grouping_file_still_gives_the_storage_record(
             True,
         )
     assert malformed_t8115.asked == ["T8115"]
-    warned = [r for r in caplog.records if "SDINFO_EX grouping" in r.getMessage()]
+    warned = [r for r in caplog.records if "storage status grouping" in r.getMessage()]
     assert len(warned) == 1
     assert "T8115.json" in warned[0].getMessage()
 
@@ -6308,7 +6412,7 @@ async def test_concurrent_reads_of_a_malformed_grouping_log_it_once(
         await station.async_close()
     assert malformed_t8115.asked == ["T8115", "T8115"]  # both began before either finished
     assert [g(30) for g in groups] == [0, 0]
-    assert len([r for r in caplog.records if "SDINFO_EX grouping" in r.getMessage()]) == 1
+    assert len([r for r in caplog.records if "storage status grouping" in r.getMessage()]) == 1
 
 
 @pytest.mark.parametrize(

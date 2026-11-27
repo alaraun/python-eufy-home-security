@@ -443,7 +443,7 @@ chunks:
 | 1072 | 255 | cross-camera tracking camera selection: base64 JSON list of camera serials; absent = all the station's cameras, unknown serials are ignored **[declared]**. Not the paired-device list |
 | 1073 | 255 | cross-camera tracking groups, base64 JSON **[declared]** |
 | 1102 `SDINFO`, 1190 eMMC % | 255 | storage. 1189 (app enum `GET_HB_HD_PERSENT`) stays 0 with an internal SSD attached and 6 % used — it does not track that disk; use the storage record ([Storage](#storage-1307-verified)). 1102 is one integer no handler decodes (`StationState.sd_info`) |
-| 1135 `GET_TFCARD_STATUS` | 255 | storage status code; the handlers show 0, 25 and 30 as normal (`StationState.storage_ok`) |
+| 1135 `GET_TFCARD_STATUS` | 255 | storage status code; `StationState.storage_ok` when the station model's grouping puts it in group 0, the group the app shows as normal ([SD card or eMMC](#a-devices-sd-card-or-emmc-1144-get_sd_info_ext-verified)) |
 | 5006–5012 | 255 | subsystem version strings; no vendor code names the subsystems |
 | 14000 | 255 | ISO country code |
 | 1101 `BATTERY_VALUE` (app enum `GET_BATTERY`), 1138 battery temp | sub-device | battery; 1138 in °C by its range. Some models read the level from other parameters (6001 too) or read some raw values as no level (0 and 255): the model's settings file names them (`battery`, [models-schema.md](../reference/models-schema.md#top-level)) **[declared]**. A model whose thing description declares no `battery_value` (a siren, a keypad, most stations) has no level, whatever its block reports: the eufy app shows none **[declared]** |
@@ -727,6 +727,10 @@ model's handler into its settings file (`sd_status_groups`,
 - **No table** (no settings file, or a handler that reads no status anywhere, e.g. a
   smart lock): the library's own table (`sd_status_group`, `SD_STATUS_GROUPS`), the
   union of the products' tables, below; the library's choice.
+
+`StationState.storage_ok` groups the station's status parameter (`1135`) by the same
+table of the station's model (loaded with its settings, `Station.async_load_settings`;
+the library's table until then): normal is group 0.
 
 The library's table:
 

@@ -166,7 +166,6 @@ from ..models import (
     SIREN_ACTION_PARAMS,
     SOLAR_SOURCES,
     STATION_CHANNEL,
-    STORAGE_STATUS_NORMAL,
     SUBSYSTEM_FIRMWARE_PARAMS,
     GuardMode,
     ValueSource,
@@ -200,6 +199,8 @@ from ..p2p.session.stats import SessionStats
 from ..p2p.station_config_codecs import Schedule
 from ..p2p.storage_info import (
     CMD_STORAGE,
+    MEDIUM_STATE_BY_GROUP,
+    MediumState,
     StorageInfo,
     StorageQuery,
     sd_status_group,
@@ -647,6 +648,12 @@ class StationState:
     """Internal eMMC storage used, 0-100 (param 1190; 0 is a real value)."""
     storage_status: int | None = None
     """The raw storage status code (param 1135, ``GET_TFCARD_STATUS``)."""
+    storage_groups: SdStatusGroups | None = field(default=None, repr=False)
+    """How the station's model groups :attr:`storage_status`
+    (:func:`~..devices.model_settings.sd_status_groups`, loaded by
+    :meth:`Station.async_load_settings`); None: the library's table
+    (:func:`~..p2p.storage_info.sd_status_group`). Part of equality: :attr:`storage_ok`
+    reads it."""
     upgrading: bool | None = None
     """Whether the station is installing a firmware update: the first of
     :data:`UPGRADE_PARAMS` it reports (P2P dump, else the cloud's copy), the flag the eufy
@@ -689,11 +696,16 @@ class StationState:
 
     @property
     def storage_ok(self) -> bool | None:
-        """Whether :attr:`storage_status` is a code the handlers show as normal
-        (0, 25, 30); None unreported."""
+        """Whether :attr:`storage_status` falls in the group the eufy app shows as normal,
+        grouped by :attr:`storage_groups` (the station model's handler table), else by the
+        library's table (0, 25 and 30); None unreported."""
         if self.storage_status is None:
             return None
-        return self.storage_status in STORAGE_STATUS_NORMAL
+        if self.storage_groups is None:
+            group = sd_status_group(self.storage_status)
+        else:
+            group = self.storage_groups.group(self.storage_status)
+        return MEDIUM_STATE_BY_GROUP.get(group) is MediumState.NORMAL
 
     def coverage(self) -> tuple[SettingsCoverage, ...]:
         """How this dump lines up with the model settings, station first, then each channel.
@@ -1534,10 +1546,12 @@ class Station:
         return found
 
     async def async_load_settings(self) -> None:
-        """Load the settings file of the station's and every paired device's model off
-        the event loop, so :meth:`settings_for` and the state never read package data."""
+        """Load the settings file of the station's and every paired device's model, and
+        the station model's storage status grouping, off the event loop, so
+        :meth:`settings_for` and the state never read package data."""
         codes = {self._product_code(d.device_sn) for d in (self.device, *self.sub_devices)}
         await asyncio.to_thread(_load_settings, {c for c in codes if c is not None})
+        await self._sd_status_groups()
 
     def _product_code(self, serial: str) -> str | None:
         """``serial``'s product code (:func:`~..devices.model_settings.product_code_of`):
@@ -2037,6 +2051,7 @@ class Station:
             or self.device.sec_sw_version,
             emmc_used_percent=_percent_or_none(station.get(PARAM_EMMC_USED_PERCENT)),
             storage_status=_count_or_none(station.get(PARAM_STORAGE_STATUS)),
+            storage_groups=self._sd_groups_memo.get(product_code),
             sd_info=_int_or_none(station.get(PARAM_SD_INFO)),
             upgrading=next(
                 (_flag_or_none(setting_params[p]) for p in UPGRADE_PARAMS if p in setting_params),
@@ -3822,11 +3837,20 @@ class Station:
 
     async def _sd_status_group(self) -> Callable[[int], int]:
         """How the station's model groups an ``SDINFO_EX`` status
-        (:func:`~..devices.model_settings.sd_status_groups`, with the device's parameters
-        as last reported for a model that groups its status parameter); for a model
-        without one, or whose file is malformed (logged once), the library's table
-        (:func:`~..p2p.storage_info.sd_status_group`), the library's choice. Read off the
-        event loop and memoised per product code."""
+        (:meth:`_sd_status_groups`, with the device's parameters as last reported for a
+        model that groups its status parameter); for a model without one, or whose file
+        is malformed, the library's table (:func:`~..p2p.storage_info.sd_status_group`),
+        the library's choice."""
+        groups = await self._sd_status_groups()
+        if groups is None:
+            return sd_status_group
+        return lambda status: groups.group(status, self._reported_params(self.device))
+
+    async def _sd_status_groups(self) -> SdStatusGroups | None:
+        """The station model's storage status grouping
+        (:func:`~..devices.model_settings.sd_status_groups`); None for a model without
+        one, or whose file is malformed (logged once). Read off the event loop and
+        memoised per product code."""
         code = self._product_code(self.serial)
         if code not in self._sd_groups_memo:
             try:
@@ -3835,17 +3859,14 @@ class Station:
                 found = None
                 if self._throttle.should_log(("sd status groups", code)):
                     _LOGGER.warning(
-                        "%s: the SDINFO_EX grouping of model %s is unreadable (%s); "
+                        "%s: the storage status grouping of model %s is unreadable (%s); "
                         "grouping by the library's table",
                         self._log_name,
                         code,
                         err,
                     )
             self._sd_groups_memo[code] = found
-        groups = self._sd_groups_memo[code]
-        if groups is None:
-            return sd_status_group
-        return lambda status: groups.group(status, self._reported_params(self.device))
+        return self._sd_groups_memo[code]
 
     # ── station actions: restart, sound and stop the alarm ───────────────────
 
