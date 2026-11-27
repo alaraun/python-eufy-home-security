@@ -82,7 +82,8 @@ PROBE_KINDS: Final = (CallKind.COMMAND, CallKind.CHANNEL_P2P, CallKind.FILE)
 PROBE_TIMEOUT: Final = 8.0
 #: Unasked frames kept per run; later ones are only counted.
 MAX_FRAMES: Final = 200
-#: The longest watch of the data channel, in seconds.
+#: How long step 5 listens by default, and at most, in seconds.
+DEFAULT_WATCH: Final = 60.0
 MAX_WATCH: Final = 600.0
 #: Bytes of each frame kept in the secrets (never in the report).
 SECRET_FRAME_BYTES: Final = 64
@@ -602,7 +603,7 @@ async def async_diagnose_station(
     *,
     user_id: str,
     app_id: str,
-    seconds: float = 60.0,
+    seconds: float = DEFAULT_WATCH,
     probe_kinds: bool = False,
     reason: str = "asked",
     ice_factory: Callable[[], IceAgent] | None = None,
@@ -933,6 +934,8 @@ def _sdp_report(text: object) -> SdpReport | None:
 
 __all__ = [
     "ANSWER_VALUE_KEYS",
+    "DEFAULT_WATCH",
+    "MAX_WATCH",
     "CallReport",
     "DataChannelReport",
     "DeviceRoute",

@@ -1210,3 +1210,61 @@ def event_json(event: Event) -> dict[str, Any]:
         for name in ("scope", "alarm_phase", "arming_source", "dedupe_key"):
             data[name] = _jsonable(getattr(event, name))
     return data
+
+
+def _step(outcome: Mapping[str, Any]) -> str:
+    """A ``diagnose rtc`` step outcome: ``ok (0.12 s)``, ``failed: Error 486``,
+    ``skipped: call failed``."""
+    status = str(outcome["status"])
+    if status == "ok":
+        seconds = outcome.get("seconds")
+        return f"ok ({seconds:.2f} s)" if isinstance(seconds, float | int) else "ok"
+    if status == "skipped":
+        return f"skipped: {outcome.get('reason') or '-'}"
+    error = " ".join(str(p) for p in (outcome.get("error"), outcome.get("code")) if p is not None)
+    return f"{status}: {error}" if error else status
+
+
+def render_rtc_diagnose(stations: Sequence[Mapping[str, Any]]) -> str:
+    """The text summary of a ``diagnose rtc`` report: per station, each step's outcome and
+    the facts a maintainer reads first."""
+    lines: list[str] = []
+    for entry in stations:
+        inputs, login, call = entry["inputs"], entry["login"], entry["call"]
+        ice, channel, probes = entry["ice"], entry["data_channel"], entry["probes"]
+        if lines:
+            lines.append("")
+        lines.append(f"{entry['station']} ({entry['reason']})")
+        facts = (
+            f"missing {', '.join(inputs['missing'])}"
+            if inputs["missing"]
+            else f"sdk {inputs['webrtc_sdk_version'] or '?'}, kcp_type {inputs['kcp_type']}"
+        )
+        lines.append(f"  1 inputs        {_step(inputs['outcome'])}, {facts}")
+        lines.append(
+            f"  2 login         discover {_step(login['discover'])}, login {_step(login['login'])}"
+        )
+        answer = ""
+        if call["transport"] is not None:
+            answer = (
+                f", transport_caps {call['transport_caps']}, pbsdp {call['pbsdp_len']}, "
+                f"{call['transport']}"
+            )
+        lines.append(f"  3 call          {_step(call['outcome'])}{answer}")
+        pair = "/".join(ice["selected"]) if ice["selected"] else "-"
+        lines.append(f"  4 ice           {_step(ice['outcome'])}, pair {pair}")
+        lines.append(
+            f"  5 data channel  {_step(channel['outcome'])}, {channel['messages']} messages "
+            f"({channel['heartbeats']} heartbeats, {len(channel['frames'])} frames) "
+            f"in {channel['watched']:g} s"
+        )
+        if probes["kinds"]:
+            kinds = ", ".join(
+                f"kind {p['kind']}: "
+                + (" ".join(str(c) for c in p["codes"]) or str(p["outcome"]["status"]))
+                for p in probes["kinds"]
+            )
+            lines.append(f"  6 probes        {kinds}")
+        else:
+            lines.append(f"  6 probes        {_step(probes['login'])}")
+    return "\n".join(lines)

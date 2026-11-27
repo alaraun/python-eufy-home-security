@@ -340,6 +340,37 @@ def build_parser() -> argparse.ArgumentParser:
     )
     snapshot.add_argument("--out", required=True, type=Path, help="file to write (.hevc or .h264)")
 
+    diagnose = command(
+        "diagnose",
+        "read-only report for testers: `rtc` probes the station's WebRTC link (needs the rtc extra)",
+    )
+    diagnose.add_argument("kind", choices=("rtc",), help="what to diagnose")
+    diagnose.add_argument(
+        "serial",
+        nargs="?",
+        metavar="SERIAL",
+        help="one station's serial, whatever its route "
+        "(default: every station the eufy app reaches over WebRTC)",
+    )
+    diagnose.add_argument(
+        "--seconds",
+        type=float,
+        default=None,
+        help="how long to record what the station sends unasked (default 60)",
+    )
+    diagnose.add_argument(
+        "--probe-kinds",
+        action="store_true",
+        help="also place one call of each older kind (1, 3, 4), recording only the answer codes",
+    )
+    diagnose.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="the JSON report to write (default eufy-rtc-diagnose-<unix time>.json); with "
+        "--secrets the raw values go to <name>.secrets.json next to it",
+    )
+
     monitor = command("monitor", "print events as they arrive, until Ctrl+C")
     monitor.add_argument("--no-push", action="store_true", help="skip cloud push (FCM)")
     monitor.add_argument("--no-p2p", action="store_true", help="skip local station sessions")
