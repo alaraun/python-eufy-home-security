@@ -453,12 +453,20 @@ async def test_corrupt_cache_file_is_moved_aside(tmp_path: Path, content: bytes)
     assert not path.exists()
 
 
+def _assert_names_the_file_once(err: StorageError, path: Path) -> None:
+    """The error names the cache file once, then the OS's reason; the OSError is its cause."""
+    cause = err.__cause__
+    assert isinstance(cause, OSError)
+    assert str(err).count(str(path)) == 1
+    assert str(err).endswith(f": {cause.strerror}")
+
+
 async def test_a_cache_file_that_cannot_be_read_is_a_storage_error(tmp_path: Path) -> None:
     path = tmp_path / "cache.json"
     path.mkdir()  # reading it fails as a permission or disk error would
     with pytest.raises(StorageError, match="could not be read") as caught:
         await JsonFileStore(path).async_load()
-    assert isinstance(caught.value.__cause__, OSError)
+    _assert_names_the_file_once(caught.value, path)
 
 
 async def test_a_damaged_cache_file_that_cannot_be_moved_aside_is_a_storage_error(
@@ -470,7 +478,7 @@ async def test_a_damaged_cache_file_that_cannot_be_moved_aside_is_a_storage_erro
     (tmp_path / "cache.json.corrupt" / "x").write_text("")  # a target os.replace refuses
     with pytest.raises(StorageError, match="could not be moved aside") as caught:
         await JsonFileStore(path).async_load()
-    assert isinstance(caught.value.__cause__, OSError)
+    _assert_names_the_file_once(caught.value, path)
     assert path.read_text() == "{"
 
 
@@ -496,7 +504,7 @@ async def test_a_cache_file_that_cannot_be_written_is_a_storage_error(
     path = _unwritable(tmp_path, where)
     with pytest.raises(StorageError, match="could not be written") as caught:
         await JsonFileStore(path).async_save({"a": 1})
-    assert isinstance(caught.value.__cause__, OSError)
+    _assert_names_the_file_once(caught.value, path)
     assert _temp_files(tmp_path) == []
 
 

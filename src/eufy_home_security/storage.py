@@ -156,7 +156,7 @@ class JsonFileStore:
         except FileNotFoundError:
             return None
         except OSError as err:
-            raise StorageError(f"cache file {self.path} could not be read: {err}") from err
+            raise StorageError(f"cache file {self.path} could not be read: {_reason(err)}") from err
         try:
             doc = parse_json(content)
         except ValueError:  # not UTF-8, not JSON, or nested past the depth bound
@@ -167,7 +167,7 @@ class JsonFileStore:
                 os.replace(self.path, aside)
             except OSError as err:
                 raise StorageError(
-                    f"damaged cache file {self.path} could not be moved aside: {err}"
+                    f"damaged cache file {self.path} could not be moved aside: {_reason(err)}"
                 ) from err
             _LOGGER.warning("cache file was not valid JSON; moved it to %s", aside)
             return None
@@ -177,7 +177,9 @@ class JsonFileStore:
         try:
             self._write(data)
         except OSError as err:
-            raise StorageError(f"cache file {self.path} could not be written: {err}") from err
+            raise StorageError(
+                f"cache file {self.path} could not be written: {_reason(err)}"
+            ) from err
 
     def _write(self, data: dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -192,6 +194,11 @@ class JsonFileStore:
         except BaseException:
             Path(tmp).unlink(missing_ok=True)
             raise
+
+
+def _reason(err: OSError) -> str:
+    """The OS's reason for ``err`` without the paths it names (the message names the file)."""
+    return err.strerror or str(err)
 
 
 async def async_cached_account(store: Store) -> str | None:
