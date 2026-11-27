@@ -23,7 +23,7 @@ Scripts: ``call_reply`` (``answer``, ``trying``, ``busy``, ``hangup``, ``silent`
 ``refuse_login``, ``drop_logins``, ``drop_discovers``, ``answer_repeats``,
 ``ice_connects`` False, ``ack_candidates``/``ack_only``, and
 :meth:`~FakeRtcServer.hang_up`, :meth:`~FakeRtcServer.break_link`,
-:meth:`~FakeRtcServer.send_candidate` mid-session.
+:meth:`~FakeRtcServer.send_candidate`, :meth:`~FakeRtcServer.send_info` mid-session.
 Synthetic identities only (:data:`~.synthetic.SYNTHETIC`).
 """
 
@@ -300,10 +300,12 @@ class FakeRtcServer(asyncio.DatagramProtocol):
 
     def send_candidate(self, number: int = 0, line: str = DEVICE_CANDIDATE) -> None:
         """The station sends a candidate INFO on the last call (again, for a seen number)."""
+        self.send_info({"file_candidate": line, "file_candidate_num": number})
+
+    def send_info(self, payload: dict[str, Any]) -> None:
+        """The station sends an INFO with ``payload`` on the last call."""
         body, _, addr = self._calls[-1]
-        self._device_packet(
-            MessageType.INFO, body, {"file_candidate": line, "file_candidate_num": number}, addr
-        )
+        self._device_packet(MessageType.INFO, body, payload, addr)
 
     def device_message(self, addr: tuple[str, int], *, flags: int = 0) -> None:
         """A MESSAGE request (the device's ping) to the client at ``addr``."""

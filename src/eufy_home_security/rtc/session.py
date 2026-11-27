@@ -71,6 +71,8 @@ RECONNECT_STEADY_FAILURES: Final = 3
 RECONNECT_MAX: Final = 64.0
 #: Candidate re-sends per call; the device acknowledges within the first few.
 CANDIDATE_RESENDS: Final = 50
+#: Device candidate numbers taken per connection; more are acknowledged and dropped.
+MAX_DEVICE_CANDIDATES: Final = 16
 #: ``sdp_info`` byte 2 / ``transport_caps`` bits: bit 0 the kcp_type-2 framing, bit 1 QUIC.
 FLAG_KCP_MULTI: Final = 0x01
 FLAG_QUIC: Final = 0x02
@@ -433,7 +435,7 @@ class RtcSession:
         own until acknowledged, and report a hang-up as a loss."""
         resends = 0
         while not call.ended:
-            pending = attempt.candidates and len(attempt.acked) < len(attempt.candidates)
+            pending = any(n not in attempt.acked for n in range(len(attempt.candidates)))
             wait = (
                 candidate_resend_delay(resends + 1)
                 if pending and resends < CANDIDATE_RESENDS
@@ -457,7 +459,8 @@ class RtcSession:
     ) -> None:
         ack = payload.get("file_candidate_ack")
         if isinstance(ack, int) and not isinstance(ack, bool):
-            attempt.acked.add(ack)
+            if 0 <= ack < len(attempt.candidates):
+                attempt.acked.add(ack)
             return
         line = payload.get("file_candidate")
         number = payload.get("file_candidate_num")
@@ -466,7 +469,7 @@ class RtcSession:
         if isinstance(number, int) and not isinstance(number, bool):
             with contextlib.suppress(SignalingError, OSError):
                 attempt.signaling.send_info(call, {"file_candidate_ack": number})
-            if number in attempt.seen:
+            if number in attempt.seen or len(attempt.seen) >= MAX_DEVICE_CANDIDATES:
                 return
             attempt.seen.add(number)
         try:

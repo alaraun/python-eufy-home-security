@@ -413,6 +413,40 @@ async def test_candidate_resends_stop_at_their_bound(
     assert len(fake.client_candidates) == 3  # the first send and two resends
 
 
+async def test_acks_of_numbers_the_client_never_sent_do_not_stop_its_resends(
+    fake: FakeRtcServer, make_session: Callable[..., RtcSession], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(session_mod, "candidate_resend_delay", lambda _n: 0.05)
+    fake.ack_candidates = False
+    session = make_session()
+    await session.start()
+    await until(lambda: fake.client_candidates)
+    fake.send_info({"file_candidate_ack": 5})
+    fake.send_info({"file_candidate_ack": 6})
+    sent = len(fake.client_candidates)
+    await until(lambda: len(fake.client_candidates) >= sent + 2)
+    assert session._attempt is not None
+    assert session._attempt.acked == set()  # foreign numbers are not kept
+
+
+async def test_device_candidates_are_capped_per_connection(
+    fake: FakeRtcServer, make_session: Callable[..., RtcSession]
+) -> None:
+    pipes: list[PipeIce] = []
+
+    def factory() -> PipeIce:
+        pipes.append(fake.ice_factory())
+        return pipes[-1]
+
+    session = make_session(ice_factory=factory)
+    await session.start()
+    limit = session_mod.MAX_DEVICE_CANDIDATES
+    for number in range(1, limit + 5):
+        fake.send_candidate(number, f"a=candidate:{number} 1 udp 1 127.0.0.1 {number} typ host")
+    await until(lambda: set(range(1, limit + 5)) <= fake.device_acks)  # every one acknowledged
+    assert len(pipes[0].remote_candidates) == limit
+
+
 async def test_an_acknowledged_candidate_is_not_sent_again(
     fake: FakeRtcServer, make_session: Callable[..., RtcSession], monkeypatch: pytest.MonkeyPatch
 ) -> None:
