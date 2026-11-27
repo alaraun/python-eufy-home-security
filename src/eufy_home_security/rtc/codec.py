@@ -168,7 +168,7 @@ FLAG_REDISCOVER: Final = 0x01
 def ascii_decimal(text: str, max_digits: int) -> int | None:
     """``text`` as an int when it is 1 to ``max_digits`` ASCII digits, else None (peer
     and cloud text: no sign, space, other scripts' digits or unbounded length)."""
-    if 0 < len(text) <= max_digits and text.isascii() and text.isdecimal():
+    if len(text) <= max_digits and text.isascii() and text.isdecimal():
         return int(text)
     return None
 

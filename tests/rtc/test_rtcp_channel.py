@@ -398,3 +398,5 @@ async def test_send_data_after_close_raises_and_sends_nothing() -> None:
         await channel.send_data(b"late")
     assert send.sent == []
     assert channel._acks == {}
+    channel.start()  # no heartbeat after close
+    assert channel._tasks == set()

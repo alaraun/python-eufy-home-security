@@ -315,3 +315,8 @@ def test_a_ten_digit_ssrc_is_read() -> None:
     offer = CompactOffer.from_json({"ice-u": "u", "ice-p": "p", "asc": "4294967295", "sgc": "7"})
     assert offer.audio_ssrc == 4294967295
     assert "a=ssrc-group:FEC-FR 0 7\r\n" in expand_offer(offer)
+
+
+def test_a_boolean_ssrc_is_not_a_number() -> None:
+    offer = CompactOffer.from_json({"asc": True, "vsc": 7})
+    assert (offer.audio_ssrc, offer.video_ssrc) == (None, 7)

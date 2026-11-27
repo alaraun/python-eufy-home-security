@@ -146,7 +146,7 @@ class RtcpChannel:
     def start(self) -> None:
         """Start the heartbeat unless it runs (none when its interval is not positive, or
         after :meth:`close`); a heartbeat that ended is started again."""
-        if self._heartbeat_interval <= 0 or self._closed:
+        if self._heartbeat_interval <= 0:
             return
         if self._heartbeat is None or self._heartbeat.done():
             self._heartbeat = self._spawn(self._heartbeat_loop())
