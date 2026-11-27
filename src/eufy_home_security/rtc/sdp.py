@@ -138,7 +138,7 @@ class SdpInfo:
         rng: random.Random | None = None,
     ) -> SdpInfo:
         """Fresh SSRCs and ICE credentials; the content key and IV come from the
-        signaling crypto (:meth:`~.crypto.RtcCrypto.new_media_secret`)."""
+        signaling crypto (:meth:`~.crypto.RtcSignalingCrypto.new_media_secret`)."""
         rand = rng or random.SystemRandom()
         return cls(
             audio_ssrc=rand.getrandbits(32),
