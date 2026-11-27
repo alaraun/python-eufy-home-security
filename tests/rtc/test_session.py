@@ -1066,3 +1066,36 @@ async def test_close_during_a_reconnect_wait_stops_it(
     calls = len(fake.of_type(MessageType.CALL))
     await asyncio.sleep(0.1)
     assert len(fake.of_type(MessageType.CALL)) == calls
+
+
+async def test_a_cancel_during_finish_reads_an_inner_task_s_own_error() -> None:
+    """A cancel delivered while waiting for a task that then fails leaves no unread error."""
+    loop = asyncio.get_running_loop()
+    seen: list[dict[str, Any]] = []
+    loop.set_exception_handler(lambda _loop, ctx: seen.append(ctx))
+    try:
+        release = asyncio.Event()
+
+        async def fails_on_its_way_out() -> None:
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                await release.wait()
+                raise RuntimeError("cleanup failed") from None
+
+        inner = asyncio.create_task(fails_on_its_way_out())
+        await asyncio.sleep(0)
+        inner.cancel()
+        outer = asyncio.create_task(session_mod._finish(inner))
+        await asyncio.sleep(0)
+        outer.cancel()
+        await asyncio.sleep(0)
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await outer
+        del inner
+        gc.collect()
+        await asyncio.sleep(0)
+    finally:
+        loop.set_exception_handler(None)
+    assert seen == []

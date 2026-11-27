@@ -126,6 +126,8 @@ async def _finish(task: asyncio.Task[Any]) -> None:
         except asyncio.CancelledError:
             cancelled = True
     if cancelled:
+        if not task.cancelled():
+            task.exception()  # read: the cancel wins over the task's own error
         raise asyncio.CancelledError
 
 
