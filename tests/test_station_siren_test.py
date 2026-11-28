@@ -335,6 +335,74 @@ async def test_shutdown_interrupts_before_disconnect(
     assert len(sent(fake)) == 2
 
 
+async def test_shutdown_waits_for_pending_test_receipt(
+    rig: Rig,
+) -> None:
+    station, fake, transitions = rig
+
+    fake.unanswered_commands.add(1826)
+
+    async with asyncio.TaskGroup() as group:
+        sound_test = group.create_task(station.async_test_siren(SIREN_SN))
+
+        await wait_for(lambda: sent(fake) == [(1826, 36)])
+
+        closing = group.create_task(station.async_close())
+
+        await wait_for(lambda: station._alarms._siren_closing)
+
+        assert not sound_test.done()
+        assert not closing.done()
+        assert bool(station.session.connected)
+        assert station.session._op_lock.locked()
+
+        fake.send_receipt(FrameType.CMD_TRANSFER, 0)
+
+    assert sound_test.result() is CommandOutcome.DELIVERED
+    assert sent(fake) == [(1826, 36), (1871, 36)]
+    assert not station.session.connected
+    assert transitions == []
+
+
+async def test_off_supersedes_start_queued_behind_test(
+    rig: Rig,
+) -> None:
+    station, fake, transitions = rig
+
+    fake.unanswered_commands.add(1826)
+
+    async def superseded_start() -> None:
+        with pytest.raises(DeviceBusyError):
+            await station.async_trigger_device_alarm(SIREN_SN)
+
+    async with asyncio.TaskGroup() as group:
+        sound_test = group.create_task(station.async_test_siren(SIREN_SN))
+
+        await wait_for(lambda: sent(fake) == [(1826, 36)])
+
+        lock = station._alarms._siren_locks[SIREN_SN]
+        controller = station._alarms._siren_loops[SIREN_SN]
+
+        group.create_task(superseded_start())
+
+        await wait_for(lambda: has_waiters(lock))
+
+        off = group.create_task(station.async_stop_device_alarm(SIREN_SN))
+
+        await wait_for(controller._stop_requested.is_set)
+
+        assert not sound_test.done()
+        assert not off.done()
+
+        fake.send_receipt(FrameType.CMD_TRANSFER, 0)
+
+    assert sound_test.result() is CommandOutcome.DELIVERED
+    assert off.result() is CommandOutcome.DELIVERED
+    assert sent(fake) == [(1826, 36), (1871, 36)]
+    assert transitions == []
+    assert station.device_alarm_operation_active(SIREN_SN) is False
+
+
 async def test_two_sirens_are_independent(
     rig: Rig,
     monkeypatch: pytest.MonkeyPatch,

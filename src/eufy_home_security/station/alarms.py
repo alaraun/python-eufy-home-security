@@ -14,6 +14,7 @@ from .._logging import redact_serial
 from ..cloud.models import CloudDevice
 from ..devices.device_alarm import (
     T8970_ALARMS,
+    AlarmRequest,
     DeviceAlarm,
     DeviceAlarms,
 )
@@ -278,6 +279,25 @@ class StationAlarms:
                 and self._alarm_channel(device_sn) == channel
             )
 
+        async def submit(
+            request: AlarmRequest,
+            before_send: Callable[[], None],
+        ) -> CommandOutcome:
+            return await session.async_send_command(
+                request.command,
+                channel=channel,
+                value3=0,
+                payload={
+                    **render_alarm(request.params, channel=channel),
+                    "transaction": str(time.time_ns() // 1_000_000),
+                },
+                timeout=timeout,
+                resend=False,
+                receipt_only=True,
+                expected_link_generation=generation,
+                before_send=before_send,
+            )
+
         async def pulse(
             can_send: Callable[[], bool],
         ) -> PulseResult:
@@ -286,7 +306,7 @@ class StationAlarms:
             def before_send() -> None:
                 nonlocal sent_at
 
-                if self._siren_closing or not is_current() or not can_send():
+                if self._siren_closing or not can_send():
                     raise _SirenPulseSkippedError()
 
                 sent_at = asyncio.get_running_loop().time()
@@ -294,20 +314,7 @@ class StationAlarms:
             request = T8970_ALARMS.start[DeviceAlarm.SOUND]
 
             try:
-                outcome = await session.async_send_command(
-                    request.command,
-                    channel=channel,
-                    value3=0,
-                    payload={
-                        **render_alarm(request.params, channel=channel),
-                        "transaction": str(time.time_ns() // 1_000_000),
-                    },
-                    timeout=timeout,
-                    resend=False,
-                    receipt_only=True,
-                    expected_link_generation=generation,
-                    before_send=before_send,
-                )
+                outcome = await submit(request, before_send)
             except _SirenPulseSkippedError:
                 return None
 
@@ -323,20 +330,7 @@ class StationAlarms:
 
             request = T8970_ALARMS.stop[DeviceAlarm.SOUND]
 
-            return await session.async_send_command(
-                request.command,
-                channel=channel,
-                value3=0,
-                payload={
-                    **render_alarm(request.params, channel=channel),
-                    "transaction": str(time.time_ns() // 1_000_000),
-                },
-                timeout=timeout,
-                resend=False,
-                receipt_only=True,
-                expected_link_generation=generation,
-                before_send=before_send,
-            )
+            return await submit(request, before_send)
 
         def active_changed(active: bool) -> None:
             self._station._bus.emit(

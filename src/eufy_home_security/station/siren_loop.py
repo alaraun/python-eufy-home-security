@@ -38,6 +38,10 @@ class SirenLoop:
     Both command callbacks must use the original connection generation
     without automatically reconnecting.
 
+    StationAlarms serializes test, start and stop per device.
+    Shutdown drains outstanding requests before stopping active loops.
+    request_stop remains callable while a request is in progress.
+
     Running describes a library operation, not confirmed ringing.
     """
 
@@ -56,7 +60,6 @@ class SirenLoop:
         self._log_name = log_name
         self._on_active_changed = on_active_changed
         self._active = False
-        self._lock = asyncio.Lock()
         self._stop_requested = asyncio.Event()
         self._task: asyncio.Task[CommandOutcome | None] | None = None
         self._first: asyncio.Future[CommandOutcome] | None = None
@@ -111,49 +114,47 @@ class SirenLoop:
 
     async def test(self) -> CommandOutcome:
         """Submit one sound-test pulse without starting repetition."""
-        async with self._lock:
-            self._require_current()
+        self._require_current()
 
-            if self.running:
-                raise DeviceBusyError("dedicated siren alarm is already active")
+        if self.running:
+            raise DeviceBusyError("dedicated siren alarm is already active")
 
-            deadline = asyncio.get_running_loop().time() + SIREN_REPEAT_INTERVAL
+        deadline = asyncio.get_running_loop().time() + SIREN_REPEAT_INTERVAL
 
-            result = await self._pulse(lambda: self._can_send(deadline))
+        result = await self._pulse(lambda: self._can_send(deadline))
 
-            if result is None:
-                raise DeviceTimeoutError("siren test was not submitted")
+        if result is None:
+            raise DeviceTimeoutError("siren test was not submitted")
 
-            outcome, _ = result
-            return outcome
+        outcome, _ = result
+        return outcome
 
     async def start(self) -> CommandOutcome:
         """Start one bounded operation without extending duplicate starts."""
-        async with self._lock:
-            self._require_current()
+        self._require_current()
 
-            if self.running:
-                if self._stop_requested.is_set():
-                    raise DeviceBusyError("dedicated siren is stopping")
-                if self._first is None:
-                    raise RuntimeError("active siren operation has no initial outcome")
+        if self.running:
+            if self._stop_requested.is_set():
+                raise DeviceBusyError("dedicated siren is stopping")
+            if self._first is None:
+                raise RuntimeError("active siren operation has no initial outcome")
 
-                first = self._first
-            else:
-                loop = asyncio.get_running_loop()
+            first = self._first
+        else:
+            loop = asyncio.get_running_loop()
 
-                self._stop_requested = asyncio.Event()
+            self._stop_requested = asyncio.Event()
 
-                first = loop.create_future()
-                first.add_done_callback(self._observe_first)
-                self._first = first
+            first = loop.create_future()
+            first.add_done_callback(self._observe_first)
+            self._first = first
 
-                self._task = loop.create_task(
-                    self._run_operation(first),
-                    name="dedicated-siren-loop",
-                )
+            self._task = loop.create_task(
+                self._run_operation(first),
+                name="dedicated-siren-loop",
+            )
 
-                self._task.add_done_callback(self._observe_task)
+            self._task.add_done_callback(self._observe_task)
 
         # Cancellation of the API caller must not abandon
         # the command's outstanding receipt.
@@ -275,23 +276,22 @@ class SirenLoop:
 
     async def stop(self) -> CommandOutcome:
         """Prevent further activations and send the native stop."""
-        async with self._lock:
-            self._stop_requested.set()
+        self._stop_requested.set()
 
-            task = self._task
+        task = self._task
 
-            if task is not None and not task.done():
-                # Preserve any outstanding receipt wait.
-                outcome = await asyncio.shield(task)
+        if task is not None and not task.done():
+            # Preserve any outstanding receipt wait.
+            outcome = await asyncio.shield(task)
 
-                if outcome is None:
-                    raise StationUnreachableError("siren interruption could not be submitted")
+            if outcome is None:
+                raise StationUnreachableError("siren interruption could not be submitted")
 
-                return outcome
+            return outcome
 
-            # Explicit OFF also works when no loop is active.
-            self._require_current()
-            return await self._interrupt()
+        # Explicit OFF also works when no loop is active.
+        self._require_current()
+        return await self._interrupt()
 
     def request_stop(self) -> None:
         """Prevent further pulses without cancelling a pending receipt."""
