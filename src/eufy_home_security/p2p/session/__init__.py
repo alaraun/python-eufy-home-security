@@ -1345,9 +1345,11 @@ class StationSession:
 
     def _require_command_generation(
         self,
-        expected_link_generation: int,
+        expected_link_generation: int | None,
     ) -> None:
-        """Require an open session on the original connection generation."""
+        """Require the original connection generation when specified."""
+        if expected_link_generation is None:
+            return
         self._raise_if_closed()
 
         if not self.connected or self.link_generation != expected_link_generation:
@@ -1457,17 +1459,14 @@ class StationSession:
                 if code != RECEIPT_TAKEN:
                     raise _receipt_error(command, code)
                 return None
-            if receipt_only:
-                return None
-            code = self._command_code(inbound, command)
+            code = None if receipt_only else self._command_code(inbound, command)
             if code is None:
                 return None
             _raise_for_code(command, code)
             return True
 
         async with self._op("command"):
-            if expected_link_generation is not None:
-                self._require_command_generation(expected_link_generation)
+            self._require_command_generation(expected_link_generation)
 
             _LOGGER.debug(
                 "%s: cmd %d ch%d value3=%d / %s",
@@ -1493,19 +1492,56 @@ class StationSession:
 
                 indices = [self._send_secure(body, dev_type=header)]
                 started = time.monotonic()
-                await self._wait_command_reply(
-                    command=command,
-                    channel=channel,
-                    body=body,
-                    header=header,
-                    waiter=waiter,
-                    receipt=receipt,
-                    indices=indices,
-                    started=started,
-                    timeout=timeout,
-                    resend=resend,
-                    receipt_only=receipt_only,
-                )
+                clock, label = _StallClock(), f"cmd {command}"
+                if receipt_only:
+                    await self._wait_until(
+                        waiter.future,
+                        started + max(timeout, COMMAND_RECEIPT_TIMEOUT),
+                        label,
+                        clock=clock,
+                        event=receipt,
+                    )
+                else:
+                    await self._wait_until(
+                        waiter.future,
+                        started + min(COMMAND_RESEND_AFTER, timeout),
+                        label,
+                        clock=clock,
+                        event=receipt,
+                    )
+                    if (
+                        resend
+                        and not waiter.future.done()
+                        and not receipt.is_set()
+                        and not self._link.acked(indices)
+                    ):
+                        _LOGGER.debug(
+                            "%s: cmd %d (%s): no receipt or ACK after %.1fs; resending",
+                            self._log_name,
+                            command,
+                            self._param(command, channel).label,
+                            COMMAND_RESEND_AFTER,
+                        )
+                        indices.append(self._send_secure(body, dev_type=header))
+                    await self._wait_until(waiter.future, started + timeout, label, clock=clock)
+                    if (
+                        not waiter.future.done()
+                        and not receipt.is_set()
+                        and self._link.acked(indices)
+                    ):
+                        _LOGGER.debug(
+                            "%s: cmd %d (%s) acknowledged without a receipt; waiting for it",
+                            self._log_name,
+                            command,
+                            self._param(command, channel).label,
+                        )
+                        await self._wait_until(
+                            waiter.future,
+                            started + COMMAND_RECEIPT_TIMEOUT,
+                            label,
+                            clock=clock,
+                            event=receipt,
+                        )
             finally:
                 if confirmed is not None:
                     confirmed.remove_done_callback(settle)
@@ -1528,69 +1564,6 @@ class StationSession:
             )
             return CommandOutcome.DELIVERED
         raise DeviceTimeoutError(f"no reply from the station within {timeout:.0f}s")
-
-    async def _wait_command_reply(
-        self,
-        *,
-        command: int,
-        channel: int,
-        body: bytes,
-        header: int,
-        waiter: _Waiter,
-        receipt: asyncio.Event,
-        indices: list[int],
-        started: float,
-        timeout: float,
-        resend: bool,
-        receipt_only: bool,
-    ) -> None:
-        """Wait for a command's receipt and result under the command lock."""
-        clock, label = _StallClock(), f"cmd {command}"
-        if receipt_only:
-            await self._wait_until(
-                waiter.future,
-                started + max(timeout, COMMAND_RECEIPT_TIMEOUT),
-                label,
-                clock=clock,
-                event=receipt,
-            )
-        else:
-            await self._wait_until(
-                waiter.future,
-                started + min(COMMAND_RESEND_AFTER, timeout),
-                label,
-                clock=clock,
-                event=receipt,
-            )
-            if (
-                resend
-                and not waiter.future.done()
-                and not receipt.is_set()
-                and not self._link.acked(indices)
-            ):
-                _LOGGER.debug(
-                    "%s: cmd %d (%s): no receipt or ACK after %.1fs; resending",
-                    self._log_name,
-                    command,
-                    self._param(command, channel).label,
-                    COMMAND_RESEND_AFTER,
-                )
-                indices.append(self._send_secure(body, dev_type=header))
-            await self._wait_until(waiter.future, started + timeout, label, clock=clock)
-            if not waiter.future.done() and not receipt.is_set() and self._link.acked(indices):
-                _LOGGER.debug(
-                    "%s: cmd %d (%s) acknowledged without a receipt; waiting for it",
-                    self._log_name,
-                    command,
-                    self._param(command, channel).label,
-                )
-                await self._wait_until(
-                    waiter.future,
-                    started + COMMAND_RECEIPT_TIMEOUT,
-                    label,
-                    clock=clock,
-                    event=receipt,
-                )
 
     async def async_set_mode_table(
         self, table: ModeTable, *, verify: bool = True, timeout: float | None = None
