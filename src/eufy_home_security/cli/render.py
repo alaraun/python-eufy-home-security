@@ -27,6 +27,7 @@ from ..events import (
     CredentialsRefreshed,
     DetectedEventsCounted,
     DeviceAlarmChanged,
+    DeviceAlarmOperationChanged,
     DevicesChanged,
     Event,
     GarageDoorChanged,
@@ -1160,6 +1161,19 @@ def _device_alarm_line(event: DeviceAlarmChanged, show: bool) -> str:
     state = "alarm on" if event.on else "alarm off"
     kind = "" if event.alarm is None else f" ({event.alarm.name.lower()})"
     return _on_serial(event.device_sn, show, f"{state}{kind}")
+
+
+@_renders(DeviceAlarmOperationChanged)
+def _device_alarm_operation_line(
+    event: DeviceAlarmOperationChanged,
+    show: bool,
+) -> str:
+    state = "active" if event.active else "ended"
+    return _on_serial(
+        event.device_sn,
+        show,
+        f"alarm operation {state}",
+    )
 
 
 @_renders(ZoomChanged)

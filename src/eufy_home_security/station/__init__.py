@@ -1667,7 +1667,8 @@ class Station:
         :class:`~..events.StationStateChanged`, :class:`~..events.StationConfigChanged`,
         :class:`~..events.CameraBusyChanged`,
         :class:`~..events.PresetsChanged`, :class:`~..events.ZoomChanged`,
-        :class:`~..events.DeviceAlarmChanged`, :class:`~..events.LockStateChanged`,
+        :class:`~..events.DeviceAlarmChanged`,
+        :class:`~..events.DeviceAlarmOperationChanged`, :class:`~..events.LockStateChanged`,
         :class:`~..events.GarageDoorChanged`,
         :class:`~..events.DetectedEventsCounted` and :class:`~..events.RecordedEventsCounted`);
         returns the unsubscribe callable."""
@@ -1695,6 +1696,7 @@ class Station:
             removed=tuple(sorted(old.keys() - new.keys())),
             moved=tuple(sorted(sn for sn in new.keys() & old.keys() if new[sn] != old[sn])),
         )
+        self._alarms.devices_changed((*event.removed, *event.moved))
         self._refresh_doors()
         if not (event.added or event.removed or event.moved):
             return None
@@ -1714,6 +1716,7 @@ class Station:
             self._garage.on_param(event)
         # Preserve activity baselines on idle closes; reset PTZ on any disconnect.
         if isinstance(event, ConnectionChanged) and not event.connected:
+            self._alarms.connection_lost()
             if event.cause is not DisconnectCause.IDLE:
                 self._activity.reopen()
             for device_sn in list(self._ptz.zooms):
@@ -1742,7 +1745,10 @@ class Station:
         """Close the session; forget the device-siren states and cancel their expiry and
         the held garage doors' and locks' expiry."""
         try:
-            await self.session.async_close()
+            try:
+                await self._alarms.close()
+            finally:
+                await self.session.async_close()
         finally:
             await self._activity.close()
             self._garage.close()
@@ -3954,8 +3960,16 @@ class Station:
         verified on hardware). Empty when the app offers the device none, or when
         ``device_sn`` is neither this station nor paired to it.
 
+        Hardware-verified momentary accessories also offer their own sound choice
+        even when absent from the generated app alarm recipes.
+
         A HomeBase's own serial offers sound, light and sound and light as the app does,
-        each sending the station siren request of :meth:`async_trigger_alarm`."""
+        each sending the station siren request of :meth:`async_trigger_alarm`.
+
+        The T8970 dedicated siren paired to a compatible HomeBase
+        additionally offers a sound-only alarm, implemented by repeating its
+        native sound-test command. Hardware verified on HomeBase 2;
+        other compatible station families remain unverified."""
         return self._alarms.device_alarms(device_sn)
 
     def device_alarm_default(self, device_sn: str) -> DeviceAlarm | None:
@@ -3981,6 +3995,55 @@ class Station:
         end frame lost, or sent while the session was down)."""
         return self._alarms.device_alarm_on(device_sn)
 
+    def device_alarm_operation_active(
+        self,
+        device_sn: str,
+    ) -> bool | None:
+        """Whether a library-managed sustained alarm is active.
+
+        True after the first accepted activation receipt until the
+        managed operation finishes, including its interruption attempt.
+        False when no accepted operation is active; None for devices
+        without this managed capability.
+
+        Transitions emit DeviceAlarmOperationChanged. This state
+        is independent of device_alarm_on(), which describes
+        hardware alarm reports. A single-pulse test does not set
+        this operation state.
+        """
+        return self._alarms.device_alarm_operation_active(device_sn)
+
+    def supports_siren_test(self, device_sn: str) -> bool:
+        """Whether a paired device supports the native sound-test operation.
+
+        Available for T8970 dedicated sirens paired with HomeBase 2,
+        HomeBase 3, HomeBase Mini or HomeBase Professional S1.
+        The command recipe is hardware verified on HomeBase 2 only.
+        """
+        return self._alarms.supports_siren_test(device_sn)
+
+    async def async_test_siren(
+        self,
+        device_sn: str,
+        *,
+        timeout: float | None = None,
+    ) -> CommandOutcome:
+        """Play one native dedicated siren sound test. Alarm-affecting.
+
+        Submits the sound-test command once, without starting the
+        sustained alarm operation or automatically repeating it.
+
+        Returns DELIVERED when the station accepts the command.
+        Receipt acceptance does not confirm physical sounding.
+
+        Raises UnsupportedError for an unsupported device and
+        DeviceBusyError while a sustained alarm operation is active.
+        """
+        return await self._alarms.test_siren(
+            device_sn,
+            timeout=timeout,
+        )
+
     async def async_trigger_device_alarm(
         self,
         device_sn: str,
@@ -4005,6 +4068,13 @@ class Station:
         :class:`DeviceAlarm` too), :class:`CommandRejectedError` for a non-zero result,
         :class:`CommandNotAppliedError` when the station acknowledged it but no
         confirmation came, and :class:`DeviceTimeoutError` without even an ACK.
+
+        Dedicated sirens (:meth:`supports_siren_test`) use
+        library-managed repetition of their hardware-verified sound-test
+        command for up to 30 seconds. The first accepted receipt returns
+        DELIVERED; no physical ringing state is inferred from delivery.
+        Acoustic gaps and delayed accessory execution are possible.
+        Duplicate starts do not extend the active operation.
         """
         return await self._alarms.trigger_device_alarm(device_sn, alarm, timeout=timeout)
 
@@ -4018,7 +4088,12 @@ class Station:
         """Stop ``device_sn``'s own alarm with the stop request of ``alarm`` (default the
         app's preselected choice); confirmed by the frame of the command sent showing it
         off. **Alarm-affecting.** Refuses, returns and raises as
-        :meth:`async_trigger_device_alarm`."""
+        :meth:`async_trigger_device_alarm`.
+
+        Dedicated sirens end the managed operation, use their verified
+        manual-stop command and may
+        return DELIVERED without confirmation of physical interruption.
+        """
         return await self._alarms.stop_device_alarm(device_sn, alarm, timeout=timeout)
 
     @property

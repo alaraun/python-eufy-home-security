@@ -26,6 +26,7 @@ from eufy_home_security.events import (
     CredentialsRefreshed,
     DetectedEventsCounted,
     DeviceAlarmChanged,
+    DeviceAlarmOperationChanged,
     DevicesChanged,
     Event,
     EventSource,
@@ -926,6 +927,43 @@ def test_device_alarm_changed_renders_and_serialises() -> None:
     assert render.render_event(off, now=NOW, show_serials=False).endswith("alarm off")
     data = json.loads(json.dumps(render.event_json(on), default=str))
     assert (data["type"], data["on"], data["alarm"]) == ("DeviceAlarmChanged", True, 2)
+
+
+@pytest.mark.parametrize("active", [True, False])
+def test_device_alarm_operation_changed_renders_and_serialises(
+    active: bool,
+) -> None:
+    event = DeviceAlarmOperationChanged(
+        station_sn=SYNTHETIC.station_sn,
+        device_sn=SYNTHETIC.camera_sn,
+        active=active,
+    )
+
+    state = "active" if active else "ended"
+
+    hidden = render.render_event(
+        event,
+        now=NOW,
+        show_serials=False,
+    )
+
+    visible = render.render_event(
+        event,
+        now=NOW,
+        show_serials=True,
+    )
+
+    assert hidden.endswith(f"alarm operation {state}")
+    assert visible.endswith(f"alarm operation {state}")
+
+    assert SYNTHETIC.camera_sn not in hidden
+    assert SYNTHETIC.camera_sn in visible
+
+    data = json.loads(json.dumps(render.event_json(event)))
+
+    assert data["type"] == "DeviceAlarmOperationChanged"
+    assert data["active"] is active
+    assert data["device_sn"] == SYNTHETIC.camera_sn
 
 
 def test_an_object_setting_value_shows_as_its_json_text() -> None:

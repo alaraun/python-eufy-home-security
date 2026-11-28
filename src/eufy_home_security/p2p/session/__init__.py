@@ -1343,6 +1343,18 @@ class StationSession:
             return _scalar_result(inbound, CMD_SET_ARMING)
         return self._command_code(inbound, CMD_SET_ARMING)
 
+    def _require_command_generation(
+        self,
+        expected_link_generation: int | None,
+    ) -> None:
+        """Require the original connection generation when specified."""
+        if expected_link_generation is None:
+            return
+        self._raise_if_closed()
+
+        if not self.connected or self.link_generation != expected_link_generation:
+            raise StationUnreachableError("command connection is no longer current")
+
     async def async_send_command(
         self,
         command: int,
@@ -1353,6 +1365,10 @@ class StationSession:
         timeout: float | None = None,
         confirm: Callable[[], asyncio.Future[Any]] | None = None,
         head: Mapping[str, Any] | None = None,
+        resend: bool = True,
+        receipt_only: bool = False,
+        expected_link_generation: int | None = None,
+        before_send: Callable[[], None] | None = None,
     ) -> CommandOutcome:
         """Send a GCM ``DeviceMsgBean`` command and report how far it got.
 
@@ -1386,9 +1402,44 @@ class StationSession:
         as the result once done (``APPLIED``), ending the wait like a 0x0547 reply.
         ``head`` holds fields the bean carries before ``account_id``
         (:func:`~..messages.device_msg`).
+
+        With ``receipt_only=True`` and ``resend=False``, wait
+        for the command receipt rather than an application
+        result. A successful receipt returns ``DELIVERED``
+        immediately. A rejected receipt raises. A transport
+        ACK alone is insufficient.
+
+        Hold the command lock through the normal late-receipt
+        window if no receipt arrives. This mode is intended
+        for commands whose effect cannot be confirmed by an
+        application result, such as momentary siren pulses.
+
+        Receipt acceptance does not establish physical execution.
+        ``confirm`` cannot be combined with this mode.
+
+        ``expected_link_generation`` restricts the operation to
+        an existing connection and prevents automatic reconnection.
+        The generation is checked again under the command lock.
+
+        ``before_send`` is a synchronous pre-transmission guard
+        called under the command lock immediately before sending.
+        If it raises, the command is not transmitted.
+
+        Both guards require ``resend=False``.
         """
+        if receipt_only and (resend or confirm is not None):
+            raise ValueError("receipt_only requires resend=False and confirm=None")
+
+        if resend and (expected_link_generation is not None or before_send is not None):
+            raise ValueError("command transmission guards require resend=False")
+
         timeout = _or(timeout, COMMAND_TIMEOUT)
-        await self.async_connect()
+
+        if expected_link_generation is None:
+            await self.async_connect()
+        else:
+            self._require_command_generation(expected_link_generation)
+
         creds = self._require_creds()
         body = device_msg(
             creds.account_id,
@@ -1408,13 +1459,15 @@ class StationSession:
                 if code != RECEIPT_TAKEN:
                     raise _receipt_error(command, code)
                 return None
-            code = self._command_code(inbound, command)
+            code = None if receipt_only else self._command_code(inbound, command)
             if code is None:
                 return None
             _raise_for_code(command, code)
             return True
 
         async with self._op("command"):
+            self._require_command_generation(expected_link_generation)
+
             _LOGGER.debug(
                 "%s: cmd %d ch%d value3=%d / %s",
                 self._log_name,
@@ -1434,49 +1487,71 @@ class StationSession:
                 if confirm is not None:
                     confirmed = confirm()
                     confirmed.add_done_callback(settle)
+                if before_send is not None:
+                    before_send()
+
                 indices = [self._send_secure(body, dev_type=header)]
                 started = time.monotonic()
                 clock, label = _StallClock(), f"cmd {command}"
-                await self._wait_until(
-                    waiter.future,
-                    started + min(COMMAND_RESEND_AFTER, timeout),
-                    label,
-                    clock=clock,
-                    event=receipt,
-                )
-                if (
-                    not waiter.future.done()
-                    and not receipt.is_set()
-                    and not self._link.acked(indices)
-                ):
-                    _LOGGER.debug(
-                        "%s: cmd %d (%s): no receipt or ACK after %.1fs; resending",
-                        self._log_name,
-                        command,
-                        self._param(command, channel).label,
-                        COMMAND_RESEND_AFTER,
-                    )
-                    indices.append(self._send_secure(body, dev_type=header))
-                await self._wait_until(waiter.future, started + timeout, label, clock=clock)
-                if not waiter.future.done() and not receipt.is_set() and self._link.acked(indices):
-                    _LOGGER.debug(
-                        "%s: cmd %d (%s) acknowledged without a receipt; waiting for it",
-                        self._log_name,
-                        command,
-                        self._param(command, channel).label,
-                    )
+                if receipt_only:
                     await self._wait_until(
                         waiter.future,
-                        started + COMMAND_RECEIPT_TIMEOUT,
+                        started + max(timeout, COMMAND_RECEIPT_TIMEOUT),
                         label,
                         clock=clock,
                         event=receipt,
                     )
+                else:
+                    await self._wait_until(
+                        waiter.future,
+                        started + min(COMMAND_RESEND_AFTER, timeout),
+                        label,
+                        clock=clock,
+                        event=receipt,
+                    )
+                    if (
+                        resend
+                        and not waiter.future.done()
+                        and not receipt.is_set()
+                        and not self._link.acked(indices)
+                    ):
+                        _LOGGER.debug(
+                            "%s: cmd %d (%s): no receipt or ACK after %.1fs; resending",
+                            self._log_name,
+                            command,
+                            self._param(command, channel).label,
+                            COMMAND_RESEND_AFTER,
+                        )
+                        indices.append(self._send_secure(body, dev_type=header))
+                    await self._wait_until(waiter.future, started + timeout, label, clock=clock)
+                    if (
+                        not waiter.future.done()
+                        and not receipt.is_set()
+                        and self._link.acked(indices)
+                    ):
+                        _LOGGER.debug(
+                            "%s: cmd %d (%s) acknowledged without a receipt; waiting for it",
+                            self._log_name,
+                            command,
+                            self._param(command, channel).label,
+                        )
+                        await self._wait_until(
+                            waiter.future,
+                            started + COMMAND_RECEIPT_TIMEOUT,
+                            label,
+                            clock=clock,
+                            event=receipt,
+                        )
             finally:
                 if confirmed is not None:
                     confirmed.remove_done_callback(settle)
                 self._remove_waiter(waiter)
         _raise_waiter_error(waiter)  # the session was lost, or the station rejected it
+        if receipt_only:
+            if receipt.is_set():
+                return CommandOutcome.DELIVERED
+            raise DeviceTimeoutError(f"command {command} received no command receipt")
+
         if waiter.future.done() and not waiter.future.cancelled():
             return CommandOutcome.APPLIED
         if receipt.is_set() or self._link.acked(indices):
