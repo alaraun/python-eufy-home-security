@@ -4,6 +4,20 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.22](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.21...v0.4.22) (2026-11-28)
+
+
+### Features
+
+* **cli:** read-only `eufy-security diagnose rtc` report for stations the eufy app reaches over WebRTC ([#251](https://github.com/alaraun/python-eufy-home-security/issues/251)) ([81569aa](https://github.com/alaraun/python-eufy-home-security/commit/81569aa1eec0041dc3dbd80e50954e6de013429f))
+* **cloud:** account check before each login; SHA-256 password when the account asks for it ([#253](https://github.com/alaraun/python-eufy-home-security/issues/253)) ([03b1152](https://github.com/alaraun/python-eufy-home-security/commit/03b1152826155fa945fa2f8fb393e31aa2c31f93))
+* **rtc:** WebRTC signaling client and session up to the data channel's ICE (internal, rtc extra) ([#249](https://github.com/alaraun/python-eufy-home-security/issues/249)) ([47e1943](https://github.com/alaraun/python-eufy-home-security/commit/47e19433016e0eb350440d3df0c0781a2aea6e83))
+
+
+### Bug Fixes
+
+* **logging:** treat a key ending in a coordinate word as a location key ([#252](https://github.com/alaraun/python-eufy-home-security/issues/252)) ([f14f4e1](https://github.com/alaraun/python-eufy-home-security/commit/f14f4e1eb646702079978b757f2cef9cb4f13bb4))
+
 ## [0.4.21](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.20...v0.4.21) (2026-11-27)
 
 
