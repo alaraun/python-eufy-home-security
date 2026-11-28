@@ -1195,6 +1195,23 @@ class DeviceAlarmChanged:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class DeviceAlarmOperationChanged:
+    """A library-managed sustained device alarm became active or ended.
+
+    Emitted when the first activation receipt is accepted and when
+    the operation finishes, including its interruption attempt.
+
+    The state is already set when subscribers receive this event.
+    It describes the library operation, not physical ringing.
+    Single-pulse sound tests do not emit this event.
+    """
+
+    station_sn: str
+    device_sn: str
+    active: bool
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ParamChanged:
     """One station/sub-device parameter changed.
 
@@ -1912,6 +1929,7 @@ type Event = (
     | AlarmChanged
     | AlarmDelayChanged
     | DeviceAlarmChanged
+    | DeviceAlarmOperationChanged
     | ParamChanged
     | ConnectionChanged
     | CloudProblem

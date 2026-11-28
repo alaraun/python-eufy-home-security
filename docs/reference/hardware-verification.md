@@ -32,6 +32,23 @@ before), **restore** (written back to the start value and read back), **app disp
 | HomeBase 2 native download frame count (1024) | ✓ | T8010, firmware 3.4.2.6h; Library: three complete native downloads, comparing history `frame_num` with both received and MPEG-TS-muxed video frames: 77 vs 82, 109 vs 109, and 687 vs 687. All three streams ended normally, the muxer retained the received video frames, and `MediaClip.complete` was true. `frame_num` is not always the exact delivered video-frame count. |
 | T8910 sensitivity (param 1609), app display and independent dump | ✓ | Four paired T8910 motion sensors. All five app levels checked against independent HomeBase parameter dumps: level 1 = 80, 2 = 53, 3 = 37, 4 = 18, 5 = 8. The tested sensor was restored to its original level and the final raw values across all four sensors matched the initial baseline. This verifies app-controlled changes and the readback values, not the library's current write recipe. |
 
+
+## HomeBase 2 (T8010), firmware 3.4.2.6h, with T8970 sirens (fw 2.0.6.2)
+
+| area | verified | notes |
+|---|---|---|
+| T8970 installation sound test (1826) | ✓ | Native single-pulse command verified on hardware using the released library and subsequently through `Station.async_test_siren()` in the development library. One audible pulse, successful command receipt, no managed alarm operation. No native configurable alarm duration established. |
+| T8970 manual stop (1871) | ✓ | Native stop tested against an active siren. Earlier comparative trials demonstrated shorter audible duration with interruption than with natural termination. The managed alarm also accepted manual OFF successfully. |
+| T8970 managed alarm | ✓ | Public `Station.async_trigger_device_alarm()` and `Station.async_stop_device_alarm()` verified on a paired T8970. Default refresh interval 1.5 s, bounded 30 s operation. Manual interruption after 10 s: seven activation submissions, all with successful receipts. Automatic cutoff: twenty activation submissions, all with successful receipts; native OFF submitted at 30.001 s. No subsequent activation observed during the post-stop observation periods. |
+| T8970 parameter dump | ✓ | Both paired sirens reported identical sets of 40 parameter IDs. Parameters 1825, 1828 and 61008 were exclusive to these sirens in the observed station dump. |
+| T8970 physical ringing state (61008) | – | No transition to 1 captured. OFF notifications observed, but physical ringing feedback remains unverified. Managed operation state is distinct from acoustic output. |
+
+The managed alarm emulates a timed alarm through repeated installation sound tests, rather than a verified native sustained-alarm command. Audible cycles may contain variable gaps; uninterrupted sound is not guaranteed. The integrated 30 s test measured refresh intervals of 1.501–1.503 s, but acoustic timing varied despite consistent command submission.
+
+Successful command receipts establish acceptance at the station, not independently confirmed acoustic execution of every activation. The 30 s limit governs refresh scheduling; delivery of the stop command may be delayed by transport contention or connection failure.
+
+Physical managed-alarm validation covers one T8970 on the above HomeBase 2 firmware combination. Other station families, firmware combinations and simultaneous physical activation of multiple sirens remain unverified.
+
 ## HomeBase 3 (T8030), main firmware 3.8.7.4, with eufyCam 3 (T8160) fw 3.4.3.0 and a T8910
 
 | area | verified | notes |

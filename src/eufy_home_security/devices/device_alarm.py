@@ -76,6 +76,8 @@ class DeviceAlarms:
     """The choice the app preselects (the thing description's default)."""
     start: Mapping[DeviceAlarm, AlarmRequest]
     stop: Mapping[DeviceAlarm, AlarmRequest]
+    momentary: bool = False
+    """Whether activation is a self-terminating sound test rather than a timed alarm."""
 
     @property
     def choices(self) -> tuple[DeviceAlarm, ...]:
@@ -96,6 +98,23 @@ class DeviceAlarms:
             return None
         found = [c for c, r in self.start.items() if r.params.get("type") == event_type]
         return found[0] if len(found) == 1 else None
+
+
+# Hardware-verified accessory commands, not generated app recipes.
+T8970_HB2_ALARMS: Final = DeviceAlarms(
+    default=DeviceAlarm.SOUND,
+    start=MappingProxyType(
+        {
+            DeviceAlarm.SOUND: AlarmRequest(1826, MappingProxyType({})),
+        }
+    ),
+    stop=MappingProxyType(
+        {
+            DeviceAlarm.SOUND: AlarmRequest(1871, MappingProxyType({})),
+        }
+    ),
+    momentary=True,
+)
 
 
 def _request(raw: Any) -> AlarmRequest:

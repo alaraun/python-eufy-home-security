@@ -1241,6 +1241,77 @@ async def test_a_command_names_its_device_channel_in_the_subheader(
     assert station.received_header_channels == [header]
 
 
+@pytest.mark.parametrize(
+    ("resend", "expected_sends"),
+    [(False, 1), (True, 2)],
+)
+async def test_command_resend_can_be_disabled(
+    station: FakeStation,
+    monkeypatch: pytest.MonkeyPatch,
+    resend: bool,
+    expected_sends: int,
+) -> None:
+    """A momentary action must not be submitted twice after a lost ACK."""
+    station.unanswered_commands.add(1826)
+    monkeypatch.setattr(session_module, "COMMAND_RESEND_AFTER", 0.1)
+
+    session = make_session(station, Provider(station))
+
+    try:
+        await session.async_connect()
+
+        # Hide transport acknowledgements to exercise the lost-ACK path.
+        monkeypatch.setattr(session._link, "acked", lambda *args: False)
+
+        with pytest.raises(DeviceTimeoutError):
+            await session.async_send_command(
+                1826,
+                channel=36,
+                payload={"transaction": "1234567890000"},
+                timeout=0.5,
+                resend=resend,
+            )
+
+        commands = [obj for obj in station.received if obj["cmd"] == 1826]
+
+        assert len(commands) == expected_sends
+        assert all(obj["mChannel"] == 36 for obj in commands)
+        assert not session._op_lock.locked()
+
+    finally:
+        await session.async_close()
+
+
+async def test_command_without_resend_preserves_delivery_outcome(
+    station: FakeStation,
+) -> None:
+    """A receipt without an execution result is DELIVERED, not APPLIED."""
+    station.reply_to_settings = False
+
+    session = make_session(station, Provider(station))
+
+    try:
+        outcome = await session.async_send_command(
+            1826,
+            channel=36,
+            payload={"transaction": "1234567890000"},
+            timeout=0.5,
+            resend=False,
+        )
+
+        assert outcome is CommandOutcome.DELIVERED
+
+        commands = [obj for obj in station.received if obj["cmd"] == 1826]
+
+        assert len(commands) == 1
+        assert commands[0]["mChannel"] == 36
+        assert commands[0]["mValue3"] == 0
+        assert commands[0]["payload"] == {"transaction": "1234567890000"}
+
+    finally:
+        await session.async_close()
+
+
 async def test_a_late_not_handled_receipt_is_awaited_and_raised(
     station: FakeStation, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
