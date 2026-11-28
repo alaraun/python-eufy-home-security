@@ -62,7 +62,10 @@ async def test_warm_start_needs_no_cloud() -> None:
   `cipher_keys` between steps. `cipher_ids_held` limits the cipher ids the cloud holds
   a key for (None: any); a request for another id gets the empty answer, which the
   library raises as `CipherUnavailableError`. Set `login_error` to the error a password login meets,
-  and `call_errors` to the errors the next other requests meet, in order.
+  and `call_errors` to the errors the next other requests meet, in order. `enc_text` is
+  what the account check every login sends first answers (`"sha2"`: the login wraps the
+  password's SHA-256; None: the password as given); the checks are counted in
+  `account_checks`, are not listed in `calls` and take no `call_errors` entry.
 - **Cloud refusals.** `FakeCloud.refusal(status, code, message, retry_after=)` is an HTTP
   answer: served from `call_errors` or `login_error`, it runs through the library's own
   answer handling, so a 401 with the takeover code latches the session, another 401 costs

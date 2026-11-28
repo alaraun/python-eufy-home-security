@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 from collections.abc import Callable
 
 import pytest
@@ -83,6 +84,35 @@ def test_a_rewrapped_password_matches_the_first_wrap() -> None:
 def test_login_password_repr_hides_the_ciphertext() -> None:
     out = crypto.encrypt_login_password("hunter2hunter2")
     assert out.encrypted not in repr(out)
+
+
+@pytest.mark.parametrize(
+    ("password", "hashed"),
+    [
+        ("hunter2", "hunter2"),
+        (" \t hunter2\r\n\x00", "hunter2"),  # Java's trim: every char up to U+0020
+        ("\u00a0hunter 2\u00a0", "\u00a0hunter 2\u00a0"),  # U+00A0 and inner spaces stay
+        ("pässwörd", "pässwörd"),  # UTF-8
+    ],
+)
+def test_the_sha256_form_hashes_the_trimmed_utf8_password(password: str, hashed: str) -> None:
+    expected = hashlib.sha256(hashed.encode("utf-8")).hexdigest()
+    assert crypto.login_password_text(password, sha256_first=True) == expected
+    assert crypto.login_password_text(password) == password
+
+
+def test_the_sha256_form_survives_a_rewrap() -> None:
+    first = crypto.encrypt_login_password("hunter2hunter2", sha256_first=True)
+    again = crypto.rewrap_login_password(
+        "hunter2hunter2", first.client_public_key, first.secret, sha256_first=True
+    )
+    plain = crypto.rewrap_login_password("hunter2hunter2", first.client_public_key, first.secret)
+    hashed = crypto.rewrap_login_password(
+        hashlib.sha256(b"hunter2hunter2").hexdigest(), first.client_public_key, first.secret
+    )
+    assert (first.sha256_first, again.sha256_first, plain.sha256_first) == (True, True, False)
+    assert again.encrypted == first.encrypted == hashed.encrypted
+    assert plain.encrypted != first.encrypted
 
 
 def _sealed(code: str, text: bytes, *, rounds: int = 100_000) -> str:

@@ -109,6 +109,11 @@ LOGIN_SERVER_PUBLIC_KEY: Final = (
 KEY_EXCHANGE_PATH: Final = "/openapi/oauth/key/exchange"
 SECURITY_KEY_EXCHANGE_PATH: Final = "/v3/openapi/oauth/key/exchange"
 LOGIN_PATH: Final = "/passport/login"
+VALIDATE_EMAIL_PATH: Final = "/passport/validate_email"
+"""The account check sent before every login, body ``{email}`` on the login's passport host;
+``data.enc_text`` ``"sha2"`` means the login wraps the password's SHA-256."""
+ENC_TEXT_SHA256: Final = "sha2"
+"""``enc_text`` of an account whose login wraps the password's SHA-256 (exact match)."""
 ESTIMATE_DOMAIN_PATH: Final = "/passport/estimate_domain"
 """A country's cluster: plaintext body ``{"ab": <country>, "mode": 1}`` on a ``mega-`` host,
 no identity; ``data.domain`` is the cluster's ``mega-`` domain."""
@@ -317,6 +322,9 @@ class CloudCode(IntEnum):
     VERIFY_CODE_MAX = 26053
     VERIFY_CODE_NONE_MATCH = 26054
     VERIFY_PASSWORD_ERROR = 26055
+    # The account is served by another cluster domain: the app looks the login country's
+    # domain up again and repeats the account check once.
+    DOMAIN_MISMATCH = 26502
     EMAIL_UNACTIVATED = 26105
     MEGA_EMAIL_OR_PASSWORD_ERROR = 26108
     API_REQUEST_LIMIT = 26145

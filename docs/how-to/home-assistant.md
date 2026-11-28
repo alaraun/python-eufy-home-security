@@ -133,7 +133,10 @@ it logs in with `ab` = the region. A cached session made with another `ab` (a se
 cached without an `ab`, or one made before the HA country changed) logs in again once per
 region, inside the login budget; when that login is refused, the old session stays in
 use and is not asked again for the same country. See
-[cloud.md § Login country](../protocol/cloud.md#login-country).
+[cloud.md § Login country](../protocol/cloud.md#login-country). Every login, a code
+answer included, first sends eufy's account check, which can ask for the password's
+SHA-256 instead of the password; its refusals raise the same errors as a login's
+([cloud.md § Login](../protocol/cloud.md#login)).
 
 **The country is the user's choice.** eufy lists a device only to a login with the
 country it is held under: an account whose own devices sit under one country (`AA`) and
@@ -161,7 +164,7 @@ provides where it lives.
 |---|---|---|
 | `openudid` | this install's eufy device identity, minted once | never; kept, with `cloud.install_ids`, when the account changes |
 | `password` | the account password of the last successful login | on every successful login; dropped as soon as the cloud rejects it |
-| `cloud.sessions.<region>` | per cloud region, and per extra country as `<region>:<country>`: key ident, shared key, auth token, user id, expiry, the `ab` the login sent and the one it asked for (`ab_wanted`), the login answer's `mega_domain` and `country_code` | on a login to that region: a miss, an expiry, or a session-expired answer. A re-key answer (HTTP 463) replaces only the key ident and shared key, by a key exchange, no login. A kick-out (26084) drops that region's session |
+| `cloud.sessions.<region>` | per cloud region, and per extra country as `<region>:<country>`: key ident, shared key, auth token, user id, expiry, the `ab` the login sent and the one it asked for (`ab_wanted`), the login answer's `mega_domain` (before it, the domain an account check's 26502 named on the same cluster) and `country_code` | on a login to that region: a miss, an expiry, or a session-expired answer. A re-key answer (HTTP 463) replaces only the key ident and shared key, by a key exchange, no login. A kick-out (26084) drops that region's session |
 | `cloud.country` | the login country (`code`, `source` `option` or `ip`, `home_region`) | on the first login of a process when the country or its home region changed |
 | `cloud.extra_countries` | each extra country's home region | when a login or a device list first needs an extra country not looked up |
 | `cloud.install_ids` | the install id (`openudid`) of each extra country's login scope | minted on that scope's first key exchange, then kept wherever `openudid` is |
