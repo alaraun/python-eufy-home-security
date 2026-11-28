@@ -49,6 +49,20 @@ Successful command receipts establish acceptance at the station, not independent
 
 Physical managed-alarm validation covers one T8970 on the above HomeBase 2 firmware combination.
 
+Home Assistant end-to-end acceptance (Core 2026.11.1) was subsequently
+completed with two T8970 sirens on the same HomeBase 2. Both devices'
+controls were confirmed operational. The detailed acceptance sequence
+on one siren passed: one native sound-test pulse without setting the
+managed siren entity on, managed alarm activation, manual interruption,
+automatic cutoff with the entity returning off, and no unintended
+activation of the second siren.
+
+These are operator-confirmed physical observations. They validate the
+reconciled development library at commit
+`5973d8f6c4b9e534c0cd78c4ec6ce29ec6136886` through the Home Assistant
+integration, not a published library release. They do not establish
+physical ringing feedback or verification of other HomeBase families.
+
 The implementation also permits T8970 operation through HomeBase 3 (T8030), HomeBase Mini (T8025) and HomeBase Professional S1 (T9000), based on eufy's published accessory compatibility lists. Reuse of the command recipe on these station families is an assumption, not hardware or app-handler verification. Other firmware combinations and simultaneous physical activation of multiple sirens remain unverified.
 
 ## HomeBase 3 (T8030), main firmware 3.8.7.4, with eufyCam 3 (T8160) fw 3.4.3.0 and a T8910
