@@ -622,7 +622,7 @@ async def test_credentials_come_from_the_owner() -> None:
         eufy = account(http, cloud)  # both are cached
         await eufy.async_login()
         await eufy.async_discover()
-        provider = eufy.stations[SYNTHETIC.station_sn].session._credentials
+        provider = eufy.stations[SYNTHETIC.station_sn].session._p2p._credentials
         creds = await provider(refresh=True, cipher_id=None)
     assert creds.account_id == OWNER_ID
     assert creds.ecc_private_key == key
@@ -1572,7 +1572,7 @@ async def test_a_connected_station_is_not_probed_and_reports_its_links_path(
         assert choices[fake.serial].rendezvous is None
 
         # A link that came through the servers says so.
-        eufy.stations[fake.serial].session._connect_path = ConnectPath.RENDEZVOUS
+        eufy.stations[fake.serial].session._p2p._connect_path = ConnectPath.RENDEZVOUS
         choices = {c.serial: c for c in await eufy.async_station_choices()}
         assert punches.probed == [OTHER_DID] * 2
         assert choices[fake.serial].rendezvous is True
@@ -1599,7 +1599,7 @@ async def test_a_built_station_that_is_down_reports_its_last_link_unprobed(
         await eufy.async_discover()
         home = eufy.stations[SYNTHETIC.station_sn]
         assert not home.session.connected
-        home.session._connect_path = last_link
+        home.session._p2p._connect_path = last_link
         choices = {c.serial: c for c in await eufy.async_station_choices()}
         await eufy.async_close()
 
@@ -3116,8 +3116,8 @@ async def test_every_station_gets_the_rendezvous_and_its_reported_address(
         stations = {s.serial: s for s in await eufy.async_discover()}
         home, other = stations[SYNTHETIC.station_sn], stations[OTHER_STATION_SN]
         assert not home.connects_on_demand
-        assert home.session._wake_provider is not None
-        assert other.session._wake_provider is not None
+        assert home.session._p2p._wake_provider is not None
+        assert other.session._p2p._wake_provider is not None
         assert (home.session.extra_hosts, other.session.extra_hosts) == ((), ("192.0.2.77",))
         assert other.lan_path.host_source is HostSource.DEVICE
         assert home.lan_path.host_source is HostSource.CLOUD
@@ -3174,7 +3174,7 @@ async def test_a_station_session_starts_from_the_cached_link_path() -> None:
         eufy = account(http, cloud, store=store)
         stations = {s.serial: s for s in await eufy.async_discover()}
         assert stations[SYNTHETIC.station_sn].session.connect_path is ConnectPath.RENDEZVOUS
-        assert stations[SYNTHETIC.station_sn].session._rendezvous_on(1)
+        assert stations[SYNTHETIC.station_sn].session._p2p._rendezvous_on(1)
         assert stations[OTHER_STATION_SN].session.connect_path is None  # none stored
         await eufy.async_close()
 
@@ -3216,12 +3216,12 @@ async def test_the_link_path_is_saved_only_when_it_changes(
         up = ConnectionChanged(station_sn=SYNTHETIC.station_sn, connected=True)
         eufy._on_station_event(up)  # still lan
         assert saves == []
-        session._connect_path = ConnectPath.RENDEZVOUS
+        session._p2p._connect_path = ConnectPath.RENDEZVOUS
         eufy._on_station_event(up)
         eufy._on_station_event(up)
         assert len(saves) == 1
         assert eufy.cache.link_path(SYNTHETIC.station_sn) is ConnectPath.RENDEZVOUS
-        session._connect_path = ConnectPath.LAN
+        session._p2p._connect_path = ConnectPath.LAN
         eufy._on_station_event(ConnectionChanged(station_sn=SYNTHETIC.station_sn, connected=False))
         eufy._on_station_event(  # a link of a station this client did not build
             ConnectionChanged(station_sn="T8030P2000099999", connected=True)

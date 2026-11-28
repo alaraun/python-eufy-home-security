@@ -18,6 +18,7 @@ import pytest
 
 import eufy_home_security.p2p.session as session_mod
 import eufy_home_security.p2p.session as session_module
+import eufy_home_security.p2p.session.link as link_module
 import eufy_home_security.p2p.session.media_stream as media_stream_module
 from eufy_home_security._logging import set_secret_logging, set_wire_logging
 from eufy_home_security.devices.recipes import (
@@ -857,7 +858,7 @@ async def test_unusable_did_is_not_a_handshake_failure(station: FakeStation) -> 
     try:
         with pytest.raises(ProtocolError, match="static key") as info:
             await session.async_connect()
-        assert session._transport is None  # before close: the failed link was not kept
+        assert session._p2p._transport is None  # before close: the failed link was not kept
     finally:
         await session.async_close()
     assert not isinstance(info.value, HandshakeError)
@@ -929,7 +930,7 @@ async def test_cancelled_connect_leaves_no_open_link(station: FakeStation) -> No
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
-    assert session._transport is None
+    assert session._p2p._transport is None
     await session.async_close()
 
 
@@ -2499,14 +2500,14 @@ async def test_station_off_at_start_is_reported_once_per_outage_and_picked_up_la
     events: list[Event] = []
     session.subscribe(events.append)
     attempts = 0
-    establish = session._establish
+    establish = session._p2p._establish
 
     async def counted(creds: P2PCredentials | None) -> P2PCredentials:
         nonlocal attempts
         attempts += 1
         return await establish(creds)
 
-    monkeypatch.setattr(session, "_establish", counted)
+    monkeypatch.setattr(session._p2p, "_establish", counted)
 
     def changes() -> list[tuple[bool, DisconnectCause | None]]:
         return [(e.connected, e.cause) for e in events if isinstance(e, ConnectionChanged)]
@@ -4324,7 +4325,7 @@ async def test_a_session_loads_the_key_of_the_cipher_the_station_names() -> None
     try:
         await session.async_get_params()
         assert calls == [(False, 98)]  # asked after CONN_INIT: never for a guessed id
-        assert session._key_refresh.retry_blocked_for() == 0
+        assert session._p2p._key_refresh.retry_blocked_for() == 0
         calls.clear()
 
         # a reconnect
@@ -4367,8 +4368,8 @@ async def test_a_cloud_error_for_the_named_cipher_ends_the_attempt() -> None:
         assert info.value is error
         assert (station.conn_inits, calls) == (1, [98])
         assert not session.connected
-        assert session._transport is None
-        assert session._key_refresh.retry_blocked_for() == 0  # not a rejected key
+        assert session._p2p._transport is None
+        assert session._p2p._key_refresh.retry_blocked_for() == 0  # not a rejected key
     finally:
         await session.async_close()
         station.stop()
@@ -5649,8 +5650,8 @@ def _result_frame(encryption: int, payload: bytes, *, ftype: int = FrameType.CMD
 def _sent(session: StationSession, ftype: int, *, ago: float = 0.0) -> None:
     """Mark a send of ``ftype`` awaiting its result, ``ago`` seconds back."""
     due = time.monotonic() - ago + session_module.RSA_RESULT_WINDOW
-    session._result_slot += 1
-    session._results_due.setdefault(ftype, []).append((due, session._result_slot))
+    session._p2p._result_slot += 1
+    session._p2p._results_due.setdefault(ftype, []).append((due, session._p2p._result_slot))
 
 
 _NOT_HANDLED = struct.pack("<i", RECEIPT_NOT_HANDLED)
@@ -6299,7 +6300,7 @@ async def test_an_rsa_conn_init_without_an_rsa_key_runs_under_the_static_key(
     fallback is logged once."""
     caplog.set_level(logging.DEBUG, logger=session_module.__name__)
     if expired:
-        monkeypatch.setattr(session_module, "FORCED_REFRESH_COOLDOWN", 0.0)
+        monkeypatch.setattr(link_module, "FORCED_REFRESH_COOLDOWN", 0.0)
     station.cipher_id = 1
     station.static_key_session = True
     provider = RsaProvider(station, rsa_key=False, cooldown=cooldown)
@@ -6379,9 +6380,9 @@ async def test_credentials_are_keys_optional_only_after_an_rsa_conn_init(
     session = StationSession(
         SYNTHETIC.station_sn, provider, host="127.0.0.1", port=station.discovery_port
     )
-    session._conn_init_version = version
+    session._p2p._conn_init_version = version
     try:
-        await session._load_credentials(refresh=False)
+        await session._p2p._load_credentials(refresh=False)
     finally:
         await session.async_close()
     assert provider.options == [options]

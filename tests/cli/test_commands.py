@@ -158,7 +158,7 @@ def _bound_client(port: int) -> type[client_module.EufySecurity]:
         ) -> list[Station]:
             stations = await super().async_discover(refresh=refresh, rescan_regions=rescan_regions)
             for st in stations:
-                st.session._port = port
+                st.session._p2p._port = port
             return stations
 
     return Bound

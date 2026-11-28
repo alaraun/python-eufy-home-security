@@ -82,7 +82,7 @@ class Inbound:
 
     def result_slot(self) -> int | None:
         """On an RSA session, the slot of the send whose result this frame is
-        (:meth:`StationSession._send_request`); None on a GCM session or for no result."""
+        (:meth:`~.link.P2PLink._send_request`); None on a GCM session or for no result."""
         self.receipt()
         return self._result_slot
 
