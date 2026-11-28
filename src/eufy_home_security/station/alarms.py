@@ -13,7 +13,7 @@ from typing import Protocol
 from .._logging import redact_serial
 from ..cloud.models import CloudDevice
 from ..devices.device_alarm import (
-    T8970_HB2_ALARMS,
+    T8970_ALARMS,
     DeviceAlarm,
     DeviceAlarms,
 )
@@ -105,7 +105,7 @@ class StationAlarms:
         """The pending off of each channel whose siren is on (:data:`~.SIREN_EXPIRY_MARGIN_S`)."""
 
     def _supports_momentary_siren(self, device_sn: str) -> bool:
-        """Whether a paired device has a hardware-verified sound-test command."""
+        """Whether a paired device is eligible for the T8970 sound-test recipe."""
         return any(
             device.device_sn == device_sn
             and device.model_id == "T8970"
@@ -113,7 +113,13 @@ class StationAlarms:
             and device.channel is not None
             and 0 <= device.channel < 255
             and device.station_sn == self._station.serial
-            and self._station._connect_type_of(device_sn) is ConnectType.HB2
+            and self._station._connect_type_of(device_sn)
+            in (
+                ConnectType.HB2,
+                ConnectType.HB3,
+                ConnectType.M8025,
+                ConnectType.T9000,
+            )
             for device in self._station.sub_devices
         )
 
@@ -129,7 +135,7 @@ class StationAlarms:
 
     def _device_alarms_of(self, device_sn: str) -> DeviceAlarms | None:
         if self._supports_momentary_siren(device_sn):
-            return T8970_HB2_ALARMS
+            return T8970_ALARMS
         if all(
             d.device_sn != device_sn for d in (self._station.device, *self._station.sub_devices)
         ):
@@ -285,7 +291,7 @@ class StationAlarms:
 
                 sent_at = asyncio.get_running_loop().time()
 
-            request = T8970_HB2_ALARMS.start[DeviceAlarm.SOUND]
+            request = T8970_ALARMS.start[DeviceAlarm.SOUND]
 
             try:
                 outcome = await session.async_send_command(
@@ -315,7 +321,7 @@ class StationAlarms:
                 if not is_current():
                     raise StationUnreachableError("dedicated siren binding is no longer current")
 
-            request = T8970_HB2_ALARMS.stop[DeviceAlarm.SOUND]
+            request = T8970_ALARMS.stop[DeviceAlarm.SOUND]
 
             return await session.async_send_command(
                 request.command,

@@ -1,4 +1,4 @@
-"""Dedicated T8970 siren operations through a synthetic HomeBase 2."""
+"""Dedicated T8970 siren operations through synthetic HomeBases."""
 
 from __future__ import annotations
 
@@ -665,16 +665,16 @@ async def test_unpaired_siren_is_refused_without_sending(
     assert transitions == []
 
 
-async def test_unverified_homebase_topology_is_refused() -> None:
-    hb3 = replace(
+async def test_incompatible_homebase_topology_is_refused() -> None:
+    hub = replace(
         HB,
-        device_sn="T8030" + HB_SN[5:],
-        device_type=18,
+        device_sn="T8001" + HB_SN[5:],
+        device_type=0,
     )
 
     siren = replace(
         SIREN,
-        station_sn=hb3.device_sn,
+        station_sn=hub.device_sn,
     )
 
     async def credentials(
@@ -685,13 +685,13 @@ async def test_unverified_homebase_topology_is_refused() -> None:
         raise AssertionError("Unsupported topology must not request credentials")
 
     session = StationSession(
-        hb3.device_sn,
+        hub.device_sn,
         credentials,
         host="127.0.0.1",
     )
 
     station = Station(
-        hb3,
+        hub,
         session,
         sub_devices=(siren,),
     )
@@ -707,3 +707,69 @@ async def test_unverified_homebase_topology_is_refused() -> None:
 
     finally:
         await station.async_close()
+
+
+@pytest.mark.parametrize(
+    ("model", "device_type"),
+    [("T8030", 18), ("T8025", 0), ("T9000", 0)],
+)
+async def test_compatible_homebase_siren_operations(
+    model: str,
+    device_type: int,
+) -> None:
+    hub = replace(
+        HB,
+        device_sn=model + HB_SN[5:],
+        device_type=device_type,
+        name="Synthetic compatible HomeBase",
+    )
+    siren = replace(SIREN, station_sn=hub.device_sn)
+
+    fake = FakeStation(serial=hub.device_sn)
+    await fake.start()
+
+    async def credentials(
+        *,
+        refresh: bool,
+        cipher_id: int | None = None,
+    ) -> P2PCredentials:
+        return P2PCredentials(
+            SYNTHETIC.account_id,
+            "synthetic-user",
+            fake.ecc_private_key_hex,
+        )
+
+    session = StationSession(
+        hub.device_sn,
+        credentials,
+        host="127.0.0.1",
+        port=fake.discovery_port,
+    )
+    station = Station(hub, session, sub_devices=(siren,))
+
+    try:
+        assert station.supports_siren_test(SIREN_SN)
+        assert station.device_alarms(SIREN_SN) == (DeviceAlarm.SOUND,)
+        assert station.device_alarm_default(SIREN_SN) == DeviceAlarm.SOUND
+        assert station.device_alarm_operation_active(SIREN_SN) is False
+
+        assert await station.async_test_siren(SIREN_SN, timeout=1.0) is CommandOutcome.DELIVERED
+        assert station.device_alarm_operation_active(SIREN_SN) is False
+
+        assert (
+            await station.async_trigger_device_alarm(SIREN_SN, timeout=1.0)
+            is CommandOutcome.DELIVERED
+        )
+        assert station.device_alarm_operation_active(SIREN_SN) is True
+
+        assert (
+            await station.async_stop_device_alarm(SIREN_SN, timeout=1.0) is CommandOutcome.DELIVERED
+        )
+        assert station.device_alarm_operation_active(SIREN_SN) is False
+        assert for_channel(fake, 36) == [1826, 1826, 1871]
+
+    finally:
+        try:
+            await station.async_close()
+        finally:
+            fake.stop()

@@ -3966,9 +3966,10 @@ class Station:
         A HomeBase's own serial offers sound, light and sound and light as the app does,
         each sending the station siren request of :meth:`async_trigger_alarm`.
 
-        The hardware-verified T8970 dedicated siren paired to a HomeBase 2
+        The T8970 dedicated siren paired to a compatible HomeBase
         additionally offers a sound-only alarm, implemented by repeating its
-        native sound-test command."""
+        native sound-test command. Hardware verified on HomeBase 2;
+        other compatible station families remain unverified."""
         return self._alarms.device_alarms(device_sn)
 
     def device_alarm_default(self, device_sn: str) -> DeviceAlarm | None:
@@ -4013,10 +4014,11 @@ class Station:
         return self._alarms.device_alarm_operation_active(device_sn)
 
     def supports_siren_test(self, device_sn: str) -> bool:
-        """Whether a paired device has a verified native sound test.
+        """Whether a paired device supports the native sound-test operation.
 
-        Currently supported for the T8970 dedicated siren paired
-        with a HomeBase 2.
+        Available for T8970 dedicated sirens paired with HomeBase 2,
+        HomeBase 3, HomeBase Mini or HomeBase Professional S1.
+        The command recipe is hardware verified on HomeBase 2 only.
         """
         return self._alarms.supports_siren_test(device_sn)
 

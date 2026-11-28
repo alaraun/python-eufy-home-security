@@ -101,7 +101,7 @@ class DeviceAlarms:
 
 
 # Hardware-verified accessory commands, not generated app recipes.
-T8970_HB2_ALARMS: Final = DeviceAlarms(
+T8970_ALARMS: Final = DeviceAlarms(
     default=DeviceAlarm.SOUND,
     start=MappingProxyType(
         {
